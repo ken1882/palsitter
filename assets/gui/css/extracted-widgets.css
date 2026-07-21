@@ -26,3 +26,14 @@
 #pywebio-scope-backup_title_row > div,
 #pywebio-scope-mods_lua_title_row > div,
 #pywebio-scope-mods_pak_title_row > div { align-items: center; }
+#pywebio-scope-scheduler_title_row > div { align-items: end; }
+#pywebio-scope-scheduler_title_row .panel-title { margin-bottom: 0; }
+#pywebio-scope-scheduler_title_row .backup-icon-button {
+  width: 1.5rem;
+  min-width: 1.5rem;
+  height: 1.5rem;
+  margin: 0 0 0 .5rem;
+  padding: .05rem;
+  font-size: 1rem;
+}
+#pywebio-scope-add_import_panel > div { align-items: end; }

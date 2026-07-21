@@ -10,11 +10,10 @@ Opened from the `Add` item in the [Left Sidebar](./left-sidebar.md).
 - The source selector lists `template` followed only by profiles for the selected game.
   Changing games resets the source to `template`; cross-game cloning is rejected again
   when confirming.
-- A game adapter that advertises save import may add `New instance` and `Import dedicated
-  save` creation modes. Palworld import replaces the source-profile selector with a file
-  browser button for `Level.sav`; Satisfactory exposes no import mode or fields.
-- The Palworld file browser shows folders and only the exact `Level.sav` file. Selecting
-  `Level.sav` identifies its containing world folder for the dedicated-save import.
+- Palworld adds an optional file browser for `Level.sav`; leaving it empty creates a new
+  instance, while selecting a valid save automatically imports its containing world folder.
+  Satisfactory exposes no import fields.
+- The Palworld file browser shows folders and only the exact `Level.sav` file.
 - If the selected world contains only
   `Players/00000000000000000000000000000001.sav`, Palworld import opens an unsupported
   single-player-world modal and leaves the Add Instance modal open.

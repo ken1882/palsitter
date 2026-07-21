@@ -146,7 +146,7 @@ class UE4SSService:
         if not self.platform_supported:
             reason = (
                 "UE4SS Lua/C++ management is not supported for native Linux Palworld "
-                "servers. Pak mods can still be listed, enabled, disabled, and deleted."
+                "servers."
             )
             reason_key = "mods.native_linux_unsupported"
         elif not server_installed:

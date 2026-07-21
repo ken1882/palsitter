@@ -4,7 +4,7 @@ import shutil
 from pathlib import Path
 
 from pywebio.output import close_popup, popup, put_button, put_row, put_scope, put_text, use_scope
-from pywebio.pin import pin, put_checkbox, put_input
+from pywebio.pin import pin, put_input
 from pywebio.session import local
 
 from module.games.palworld.backup import BackupService
@@ -18,14 +18,6 @@ from module.webui.file_browser import _browse_normalize_path
 
 
 def render_fields() -> None:
-    import_enabled = list(
-        getattr(
-            local,
-            "add_import_reopen_enabled",
-            getattr(pin, "add_import_enabled", []),
-        )
-        or []
-    )
     import_path = str(
         getattr(
             local,
@@ -38,11 +30,6 @@ def render_fields() -> None:
         put_scope(
             "add_import_panel",
             [
-                put_checkbox(
-                    "add_import_enabled",
-                    options=[{"label": t("add.import_dedicated"), "value": "yes"}],
-                    value=import_enabled,
-                ),
                 put_row(
                     [
                         put_input(
@@ -74,7 +61,6 @@ def _open_import_browser() -> None:
         "game": str(getattr(pin, "add_server_game", "palworld") or "palworld"),
         "origin": str(getattr(pin, "add_server_origin", "template") or "template"),
     }
-    local.add_import_reopen_enabled = list(getattr(pin, "add_import_enabled", []) or [])
     local.add_import_reopen_path = str(getattr(pin, "add_import_path", "") or "")
 
     open_browser(
@@ -94,7 +80,6 @@ def _reopen_import_add_server() -> None:
         browse_state.get("selected_path", local.add_import_reopen_path)
     )
     reopen_add_server()
-    local.add_import_reopen_enabled = None
     local.add_import_reopen_path = None
 
 
@@ -119,11 +104,10 @@ def _show_single_player_warning() -> None:
 
 
 def create(name: str, origin: str) -> bool | None:
-    import_enabled = "yes" in (pin.add_import_enabled or [])
-    if not import_enabled:
+    import_source = str(pin.add_import_path or "").strip()
+    if not import_source:
         create_instance(name, "palworld", origin)
         return None
-    import_source = str(pin.add_import_path or "").strip()
     try:
         level_path = _browse_normalize_path(import_source)
     except (OSError, ValueError):

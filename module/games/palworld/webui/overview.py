@@ -11,13 +11,19 @@ from pywebio.pin import pin, put_input
 from pywebio.session import local, register_thread
 from module.games.palworld.backup import BackupService
 from module.instances import load_instance, load_runtime
-from module.games.palworld.config import PalworldProfile, load_profile
+from module.games.palworld.config import PalworldProfile, fixed_palserver_dir, load_profile
 from module.games.palworld.server import PalRestClient, get_pal_rest_cache
 from module.games.palworld.audit import AuditEvent, AuditStore, utc_now
 from module.games.palworld.server.status import endpoint_status, instance_is_running
 from module.webui.i18n import t
 from module.webui.session import register_stop_event
 from module.webui.assets import client_call, client_query, put_asset_widget
+
+
+def _open_folder(*args, **kwargs):
+    from module.games.palworld.webui.server_settings import _open_folder as implementation
+
+    return implementation(*args, **kwargs)
 
 def _action_detach(name: str) -> None:
     if _manager(name).detach():
@@ -163,10 +169,24 @@ def _render_scheduler(name: str) -> None:
     profile = load_profile(name)
     clear("scheduler")
     with use_scope("scheduler"):
+        folder_button = put_asset_widget(
+            "palworld.backup_icon_button",
+            {"label": t("scheduler.open_folder"), "glyph": "📁", "folder": True},
+        ).onclick(lambda: _open_scheduler_folder(name))
         put_scope(
             "scheduler_panel",
             [
-                put_asset_widget("shared.panel_title", {"title": t("scheduler.title")}),
+                put_scope(
+                    "scheduler_title_row",
+                    [put_row(
+                        [
+                            put_asset_widget("shared.panel_title", {"title": t("scheduler.title")}),
+                            folder_button,
+                            None,
+                        ],
+                        size="auto auto 1fr",
+                    )],
+                ),
                 put_row(
                     [
                         put_scope("scheduler_toggle"),
@@ -185,6 +205,13 @@ def _render_scheduler(name: str) -> None:
     _update_scheduler_backup(name)
     _update_scheduler_endpoints()
     _update_scheduler_backup_info(profile)
+
+
+def _open_scheduler_folder(name: str) -> None:
+    try:
+        _open_folder(fixed_palserver_dir(name))
+    except Exception as exc:
+        toast(t("scheduler.open_failed", error=exc), color="error")
 
 def _next_backup_time(
     profile: Profile,
