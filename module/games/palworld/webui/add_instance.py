@@ -1,0 +1,165 @@
+from __future__ import annotations
+
+import shutil
+from pathlib import Path
+
+from pywebio.output import close_popup, popup, put_button, put_row, put_scope, put_text, use_scope
+from pywebio.pin import pin, put_checkbox, put_input
+from pywebio.session import local
+
+from module.games.palworld.backup import BackupService
+from module.games.palworld.config import load_profile
+from module.games.palworld.saves import LEVEL_FILENAME, ManagedWorldService, scan_dedicated_worlds
+from module.instances import create_instance, delete_instance, profile_dir
+from module.webui.game_ui import InstanceCreationUI
+from module.webui.i18n import t
+from module.webui.assets import client_call
+from module.webui.file_browser import _browse_normalize_path
+
+
+def render_fields() -> None:
+    import_enabled = list(
+        getattr(
+            local,
+            "add_import_reopen_enabled",
+            getattr(pin, "add_import_enabled", []),
+        )
+        or []
+    )
+    import_path = str(
+        getattr(
+            local,
+            "add_import_reopen_path",
+            getattr(pin, "add_import_path", ""),
+        )
+        or ""
+    )
+    with use_scope("add_server_import"):
+        put_scope(
+            "add_import_panel",
+            [
+                put_checkbox(
+                    "add_import_enabled",
+                    options=[{"label": t("add.import_dedicated"), "value": "yes"}],
+                    value=import_enabled,
+                ),
+                put_row(
+                    [
+                        put_input(
+                            "add_import_path",
+                            label=t("add.import_path"),
+                            value=import_path,
+                            placeholder=t("add.import_path_placeholder"),
+                        ),
+                        None,
+                        put_button(
+                            t("add.browse_save"),
+                            onclick=lambda: _open_import_browser(),
+                            color="secondary",
+                        ),
+                    ],
+                    size="1fr .5rem auto",
+                ),
+            ],
+        )
+        client_call("dom.addClasses", scope="add_import_panel", classes=["add-import-panel"])
+
+
+def _open_import_browser() -> None:
+    from module.webui.file_browser import open_browser
+    from module.webui.add_instance import reopen_add_server
+
+    local.add_server_reopen_values = {
+        "name": str(getattr(pin, "add_server_name", "") or ""),
+        "game": str(getattr(pin, "add_server_game", "palworld") or "palworld"),
+        "origin": str(getattr(pin, "add_server_origin", "template") or "template"),
+    }
+    local.add_import_reopen_enabled = list(getattr(pin, "add_import_enabled", []) or [])
+    local.add_import_reopen_path = str(getattr(pin, "add_import_path", "") or "")
+
+    open_browser(
+        "add_import_path",
+        mode="file",
+        label=t("add.import_path"),
+        allowed_names=(LEVEL_FILENAME,),
+        on_close=_reopen_import_add_server,
+    )
+
+
+def _reopen_import_add_server() -> None:
+    from module.webui.add_instance import reopen_add_server
+
+    browse_state = getattr(local, "browse", {})
+    local.add_import_reopen_path = str(
+        browse_state.get("selected_path", local.add_import_reopen_path)
+    )
+    reopen_add_server()
+    local.add_import_reopen_enabled = None
+    local.add_import_reopen_path = None
+
+
+def _is_single_player_world(level_path: Path) -> bool:
+    players = level_path.parent / "Players"
+    if not players.is_dir() or players.is_symlink():
+        return False
+    player_saves = [
+        path
+        for path in players.iterdir()
+        if path.is_file() and not path.is_symlink()
+    ]
+    return len(player_saves) == 1 and player_saves[0].name == (
+        "00000000000000000000000000000001.sav"
+    )
+
+
+def _show_single_player_warning() -> None:
+    with popup(t("add.single_player_title"), closable=True):
+        put_text(t("add.single_player_message"))
+        put_button(t("common.close"), onclick=close_popup, color="secondary")
+
+
+def create(name: str, origin: str) -> bool | None:
+    import_enabled = "yes" in (pin.add_import_enabled or [])
+    if not import_enabled:
+        create_instance(name, "palworld", origin)
+        return None
+    import_source = str(pin.add_import_path or "").strip()
+    try:
+        level_path = _browse_normalize_path(import_source)
+    except (OSError, ValueError):
+        raise RuntimeError(t("add.select_level_save"))
+    if level_path.name != LEVEL_FILENAME or not level_path.is_file():
+        raise RuntimeError(t("add.select_level_save"))
+    worlds = scan_dedicated_worlds(level_path.parent)
+    if len(worlds) != 1 or worlds[0].path != level_path.parent:
+        raise RuntimeError(t("add.no_dedicated_worlds"))
+    world_id = worlds[0].world_id
+    if _is_single_player_world(level_path):
+        _show_single_player_warning()
+        return False
+    created = False
+    try:
+        create_instance(name, "palworld", "template")
+        created = True
+        profile = load_profile(name)
+        ManagedWorldService(
+            profile,
+            backup_service=BackupService(profile),
+            is_server_active=lambda: False,
+        ).import_world(level_path.parent, world_id=world_id, activate=True)
+    except Exception:
+        if created:
+            try:
+                delete_instance(name)
+            except FileNotFoundError:
+                pass
+            created_root = profile_dir(name)
+            if created_root.exists():
+                shutil.rmtree(created_root)
+        raise
+    return True
+
+
+CREATION_UI = InstanceCreationUI(render_fields=render_fields, create=create)
+
+__all__ = ["CREATION_UI"]

@@ -1,0 +1,17 @@
+<div class="instance-card instance-card-{{state}}" data-instance-card="{{name}}">
+  <div class="instance-card-head"><strong data-home-field="name">{{label}}</strong><span class="instance-state" data-home-field="state_label">{{state_label}}</span></div>
+  <div class="quiet" data-home-field="summary">{{summary}}</div>
+  {{#unsupported}}<div class="instance-card-message" data-home-field="unsupported_message">{{unsupported_message}}</div>{{/unsupported}}
+  {{^unsupported}}
+  <div class="instance-card-metrics">
+    <span>{{players_label}}<b data-home-field="players">{{players}}</b></span>
+    <span>{{fps_label}}<b data-home-field="fps">{{fps}}</b></span>
+    <span>{{cpu_label}}<b data-home-field="cpu">{{cpu}}</b></span>
+    <span>{{memory_label}}<b data-home-field="memory">{{memory}}</b></span>
+  </div>
+  <div class="instance-card-line" data-home-field="endpoints">{{endpoints}}</div>
+  <div class="instance-card-line" data-home-field="version">{{version}}</div>
+  <div class="instance-card-line" data-home-field="backup">{{backup}}</div>
+  <div data-home-progress>{{#progress}}<div class="instance-progress" data-operation-kind="{{kind}}"><strong>{{phase}}{{percent}}</strong> {{message}}</div>{{/progress}}</div>
+  {{/unsupported}}
+</div>

@@ -1,0 +1,798 @@
+{
+  "sources": {
+    "en-US": "https://paldb.cc/en/Palpagos_Islands?filters=Fast+Travel%2CWatchtower",
+    "zh-TW": "https://paldb.cc/tw/Palpagos_Islands?filters=Fast+Travel%2CWatchtower",
+    "ja-JP": "https://paldb.cc/ja/Palpagos_Islands?filters=Fast+Travel%2CWatchtower"
+  },
+  "markers": {
+    "Fast Travel": [
+      {
+        "en-US": "Deserted Islet",
+        "zh-TW": "忘卻孤島",
+        "ja-JP": "忘れられた孤島"
+      },
+      {
+        "en-US": "Free Pal Alliance Tower Entrance",
+        "zh-TW": "帕魯保護團體的高塔 入口",
+        "ja-JP": "パル愛護団体の塔 入口"
+      },
+      {
+        "en-US": "Mount Obsidian - Midpoint",
+        "zh-TW": "黑曜火山 山腰",
+        "ja-JP": "黒曜火山 中腹"
+      },
+      {
+        "en-US": "Eternal Pyre Tower Entrance",
+        "zh-TW": "永炎同心會的高塔 入口",
+        "ja-JP": "永炎の同志の塔 入口"
+      },
+      {
+        "en-US": "Ancient Civilization Ruins",
+        "zh-TW": "古代文明遺跡",
+        "ja-JP": "古代文明跡地"
+      },
+      {
+        "en-US": "Fisherman's Point",
+        "zh-TW": "邊遠漁村",
+        "ja-JP": "果ての漁村"
+      },
+      {
+        "en-US": "Mount Obsidian - Anubis Statue",
+        "zh-TW": "黒曜火山的阿努比斯雕像",
+        "ja-JP": "黒曜火山のアヌビス像"
+      },
+      {
+        "en-US": "Beach of Everlasting Summer",
+        "zh-TW": "常夏海濱",
+        "ja-JP": "常夏の浜"
+      },
+      {
+        "en-US": "PIDF Tower Entrance",
+        "zh-TW": "自衛隊的高塔 入口",
+        "ja-JP": "自警団の塔 入口"
+      },
+      {
+        "en-US": "Sand Dunes Entrance",
+        "zh-TW": "沙丘入口",
+        "ja-JP": "砂丘入り口"
+      },
+      {
+        "en-US": "Duneshelter",
+        "zh-TW": "沙漠之鎮",
+        "ja-JP": "砂漠の街"
+      },
+      {
+        "en-US": "Deep Sand Dunes",
+        "zh-TW": "沙丘深處",
+        "ja-JP": "砂丘奥地"
+      },
+      {
+        "en-US": "Cold Shore",
+        "zh-TW": "寒水之濱",
+        "ja-JP": "冷水浜辺"
+      },
+      {
+        "en-US": "No Man's Trail",
+        "zh-TW": "無生者山路",
+        "ja-JP": "生者を拒む山道"
+      },
+      {
+        "en-US": "Icy Weasel Hill",
+        "zh-TW": "冰鼬之丘",
+        "ja-JP": "氷イタチの丘"
+      },
+      {
+        "en-US": "Unthawable Lake",
+        "zh-TW": "永凍湖",
+        "ja-JP": "不溶湖"
+      },
+      {
+        "en-US": "Land of Absolute Zero",
+        "zh-TW": "絕對零度之地",
+        "ja-JP": "絶対零度の地"
+      },
+      {
+        "en-US": "PAL Genetic Research Unit Tower Entrance",
+        "zh-TW": "基因研究部隊的高塔 入口",
+        "ja-JP": "遺伝子研究部隊の塔 入口"
+      },
+      {
+        "en-US": "Azure Covenant Tower Entrance",
+        "zh-TW": "盟約之塔 入口",
+        "ja-JP": "盟約の塔 入口"
+      },
+      {
+        "en-US": "The Azure Tapestry",
+        "zh-TW": "碧落裂隙",
+        "ja-JP": "碧落の​裂地"
+      },
+      {
+        "en-US": "Enchanted Firmament",
+        "zh-TW": "天空仙境",
+        "ja-JP": "天空仙境"
+      },
+      {
+        "en-US": "Farcry Marsh",
+        "zh-TW": "雲泥濕地",
+        "ja-JP": "雲泥湿地"
+      },
+      {
+        "en-US": "Crystalline Archipelago",
+        "zh-TW": "結晶群島",
+        "ja-JP": "結晶群島"
+      },
+      {
+        "en-US": "Waterlily Gorge",
+        "zh-TW": "睡蓮峽谷",
+        "ja-JP": "睡蓮の山峡"
+      },
+      {
+        "en-US": "Ruined Fortress City",
+        "zh-TW": "被毀滅的要塞都市",
+        "ja-JP": "滅びた城塞都市"
+      },
+      {
+        "en-US": "Feybreak Shipwreck",
+        "zh-TW": "天墜的遇難船",
+        "ja-JP": "天落の難破船"
+      },
+      {
+        "en-US": "Arena Entrance",
+        "zh-TW": "競技場入口",
+        "ja-JP": "闘技場入口"
+      },
+      {
+        "en-US": "Sakurajima - Mushroom Wetlands",
+        "zh-TW": "櫻花島：蘑菇濕地",
+        "ja-JP": "桜島:キノコ湿原"
+      },
+      {
+        "en-US": "Sakurajima - Southern Sandbar",
+        "zh-TW": "櫻花島：南部砂原",
+        "ja-JP": "桜島:南の砂原"
+      },
+      {
+        "en-US": "Moonflower Tower Entrance",
+        "zh-TW": "月花眾的高塔 入口",
+        "ja-JP": "月花衆の塔 入口"
+      },
+      {
+        "en-US": "Cherry Blossom Crossroads",
+        "zh-TW": "通往櫻花的岔路",
+        "ja-JP": "桜への分岐路"
+      },
+      {
+        "en-US": "Sakurajima - Northern Rock Field",
+        "zh-TW": "櫻花島：北部礦場",
+        "ja-JP": "桜島:北の岩場"
+      },
+      {
+        "en-US": "Secluded Cemetery",
+        "zh-TW": "離島墓地",
+        "ja-JP": "島外れの墓地"
+      },
+      {
+        "en-US": "Scorched Ashland",
+        "zh-TW": "燃灰之地",
+        "ja-JP": "燃えた灰の地"
+      },
+      {
+        "en-US": "Stone Pillar Cave Entrance",
+        "zh-TW": "石柱洞窟入口",
+        "ja-JP": "石柱洞窟の入口"
+      },
+      {
+        "en-US": "Loess Plains",
+        "zh-TW": "黃土平原",
+        "ja-JP": "黄土平原"
+      },
+      {
+        "en-US": "Hidden Passage to the Oculus Gate",
+        "zh-TW": "通往環形門的密道",
+        "ja-JP": "円門への隠し通路"
+      },
+      {
+        "en-US": "The Oculus Gate, Tower in Sight",
+        "zh-TW": "俯瞰高塔的環形門",
+        "ja-JP": "塔を臨む円門"
+      },
+      {
+        "en-US": "Feybreak Tower Entrance",
+        "zh-TW": "天墜之塔 入口",
+        "ja-JP": "天落の塔 入口"
+      },
+      {
+        "en-US": "Scorched Hill",
+        "zh-TW": "灼熱高台",
+        "ja-JP": "灼けついた高台"
+      },
+      {
+        "en-US": "Deserted Ash Plateau",
+        "zh-TW": "鏽灰高原",
+        "ja-JP": "さびれた灰の台地"
+      },
+      {
+        "en-US": "Emberstone Plateau",
+        "zh-TW": "餘燼溶岩台",
+        "ja-JP": "燃え残る溶岩台"
+      },
+      {
+        "en-US": "Shield Dragon Tunnel",
+        "zh-TW": "盾龍坑道",
+        "ja-JP": "盾龍の坑道"
+      },
+      {
+        "en-US": "Isle of Silence Church Ruins",
+        "zh-TW": "寂靜之島的教會遺跡",
+        "ja-JP": "静寂の島の教会跡地"
+      },
+      {
+        "en-US": "Marsh Island Church Ruins",
+        "zh-TW": "濕地之島的教會遺跡",
+        "ja-JP": "湿原島の教会跡地"
+      },
+      {
+        "en-US": "Isle of the Glacial Core",
+        "zh-TW": "冰封孤島",
+        "ja-JP": "氷塊の孤島"
+      },
+      {
+        "en-US": "Oasis Isle",
+        "zh-TW": "綠洲孤島",
+        "ja-JP": "オアシスの孤島"
+      },
+      {
+        "en-US": "Isle of Decayed Treasures",
+        "zh-TW": "塵封寶藏孤島",
+        "ja-JP": "朽ちた宝の孤島"
+      },
+      {
+        "en-US": "Sunlit Isle",
+        "zh-TW": "向陽孤島",
+        "ja-JP": "日向の孤島"
+      },
+      {
+        "en-US": "Frostbitten Isle",
+        "zh-TW": "極凍孤島",
+        "ja-JP": "凍えの孤島"
+      },
+      {
+        "en-US": "Sealed Realm of Terraria",
+        "zh-TW": "泰拉瑞亞密域",
+        "ja-JP": "テラリアの封域"
+      },
+      {
+        "en-US": "Phantom Isle",
+        "zh-TW": "亡靈孤島",
+        "ja-JP": "亡霊の孤島"
+      },
+      {
+        "en-US": "Desiccated Coast",
+        "zh-TW": "乾涸海岸",
+        "ja-JP": "渇きの海岸"
+      },
+      {
+        "en-US": "Thirst's End",
+        "zh-TW": "枯竭邊境",
+        "ja-JP": "渇きの最果て"
+      },
+      {
+        "en-US": "Desert Backbone",
+        "zh-TW": "沙漠之脊",
+        "ja-JP": "砂漠の背骨"
+      },
+      {
+        "en-US": "Sandbar of Solitude",
+        "zh-TW": "孤立沙堤",
+        "ja-JP": "孤立の砂堤"
+      },
+      {
+        "en-US": "The Furthest Flats",
+        "zh-TW": "邊境白洲",
+        "ja-JP": "最果ての白洲"
+      },
+      {
+        "en-US": "Seaward Passage",
+        "zh-TW": "徑海迴廊",
+        "ja-JP": "海へ伸びる回廊"
+      },
+      {
+        "en-US": "Frozen Dune Cape",
+        "zh-TW": "凍沙海角",
+        "ja-JP": "凍てつく砂の岬"
+      },
+      {
+        "en-US": "Windwatch Outlook",
+        "zh-TW": "候風觀景台",
+        "ja-JP": "風待ちの展望台"
+      },
+      {
+        "en-US": "Thawtide Cape",
+        "zh-TW": "雪融碧岬",
+        "ja-JP": "雪解けの碧岬"
+      },
+      {
+        "en-US": "Garden Beneath the Astral Mountains",
+        "zh-TW": "靈峰山腰",
+        "ja-JP": "霊峰の中腹"
+      },
+      {
+        "en-US": "Garden Beneath the Cliffs",
+        "zh-TW": "被遺忘的崖下庭園",
+        "ja-JP": "崖下の忘れ庭"
+      },
+      {
+        "en-US": "Sakurajima: West Coast",
+        "zh-TW": "櫻花島：西部海岸",
+        "ja-JP": "桜島:西の海岸"
+      },
+      {
+        "en-US": "Isle of Murmurs Beach",
+        "zh-TW": "潺鳴之島海濱",
+        "ja-JP": "さざめきの島の浜"
+      },
+      {
+        "en-US": "Anubis Dunes",
+        "zh-TW": "阿努比斯沙丘",
+        "ja-JP": "アヌビスの砂丘"
+      },
+      {
+        "en-US": "Flamepulse Islet",
+        "zh-TW": "炎脈孤島",
+        "ja-JP": "炎脈の孤島"
+      },
+      {
+        "en-US": "Islet of Circular Ruins",
+        "zh-TW": "環形遺跡孤島",
+        "ja-JP": "円環遺跡の孤島"
+      },
+      {
+        "en-US": "Scouring Islet",
+        "zh-TW": "風蝕孤島",
+        "ja-JP": "風蝕の孤島"
+      },
+      {
+        "en-US": "Bicornis Islet",
+        "zh-TW": "雙角孤島",
+        "ja-JP": "双角の孤島"
+      },
+      {
+        "en-US": "Glacial Memento Islet",
+        "zh-TW": "冰環遺跡孤島",
+        "ja-JP": "凍環遺跡の孤島"
+      },
+      {
+        "en-US": "Sandstone Gate Islet",
+        "zh-TW": "砂岩門孤島",
+        "ja-JP": "砂岩門の孤島"
+      },
+      {
+        "en-US": "Suncrest Islet",
+        "zh-TW": "太陽紋孤島",
+        "ja-JP": "太陽紋の孤島"
+      },
+      {
+        "en-US": "Heatwave Gate",
+        "zh-TW": "熱浪海門",
+        "ja-JP": "熱波の海門"
+      },
+      {
+        "en-US": "Whisperwind Cliffs",
+        "zh-TW": "竹鳴崖",
+        "ja-JP": "笹鳴りの断崖"
+      },
+      {
+        "en-US": "Whisperwind Hill",
+        "zh-TW": "竹鳴坡",
+        "ja-JP": "笹鳴りの坂"
+      },
+      {
+        "en-US": "Windscream Valley",
+        "zh-TW": "風嘯之谷",
+        "ja-JP": "風鳴りの谷"
+      },
+      {
+        "en-US": "Sea Breeze Coast",
+        "zh-TW": "潮風海岸",
+        "ja-JP": "潮風海岸"
+      },
+      {
+        "en-US": "Mount Obsidian - Second Ascent",
+        "zh-TW": "黑曜火山第二站",
+        "ja-JP": "黒曜火山の二合目"
+      },
+      {
+        "en-US": "Mount Obsidian Trail",
+        "zh-TW": "黒曜火山登山道",
+        "ja-JP": "黒曜火山の登山道"
+      },
+      {
+        "en-US": "Dry Dunes",
+        "zh-TW": "乾燥沙丘",
+        "ja-JP": "乾いた砂丘"
+      },
+      {
+        "en-US": "Dustview Coast",
+        "zh-TW": "臨沙海岸",
+        "ja-JP": "砂塵を臨む海岸"
+      },
+      {
+        "en-US": "Altar of the Windcaller",
+        "zh-TW": "召喚風暴的祭壇",
+        "ja-JP": "嵐呼びの祭壇"
+      },
+      {
+        "en-US": "Mossanda Inner Coast",
+        "zh-TW": "草熊貓裏海岸",
+        "ja-JP": "草熊猫の裏海岸"
+      },
+      {
+        "en-US": "Verdant Stream",
+        "zh-TW": "新綠清流",
+        "ja-JP": "新緑の渓流"
+      },
+      {
+        "en-US": "Crimson Cliffs",
+        "zh-TW": "赤紅懸崖",
+        "ja-JP": "紅の断崖"
+      },
+      {
+        "en-US": "Hill Entrance",
+        "zh-TW": "高台入口",
+        "ja-JP": "高台への入り口"
+      },
+      {
+        "en-US": "Curved Redrock",
+        "zh-TW": "彎曲赤岩",
+        "ja-JP": "湾曲の赤岩"
+      },
+      {
+        "en-US": "Scarlet Outlook",
+        "zh-TW": "深紅觀景台",
+        "ja-JP": "真紅の展望台"
+      },
+      {
+        "en-US": "Crimson Labyrinth",
+        "zh-TW": "赤色迷失森林",
+        "ja-JP": "紅の迷い森"
+      },
+      {
+        "en-US": "Crystallized Great Tree",
+        "zh-TW": "結晶大樹",
+        "ja-JP": "結晶の大樹"
+      },
+      {
+        "en-US": "Wildlands Floodgate",
+        "zh-TW": "荒野水門",
+        "ja-JP": "荒野の水門"
+      },
+      {
+        "en-US": "Oilfield Overlook",
+        "zh-TW": "眺望油田之丘",
+        "ja-JP": "油田望の丘"
+      },
+      {
+        "en-US": "Shady Mushroom Cliffs",
+        "zh-TW": "怪菇崖",
+        "ja-JP": "怪しいキノコの崖"
+      },
+      {
+        "en-US": "Silent Lake",
+        "zh-TW": "寂靜之湖",
+        "ja-JP": "静寂の湖"
+      },
+      {
+        "en-US": "Azure Cliffs",
+        "zh-TW": "碧藍海崖",
+        "ja-JP": "碧の海崖"
+      },
+      {
+        "en-US": "Amethyst Outcrop",
+        "zh-TW": "紫色孤岬",
+        "ja-JP": "紫の孤岬"
+      },
+      {
+        "en-US": "Exile's Cape",
+        "zh-TW": "流亡者海角",
+        "ja-JP": "追放者の岬"
+      },
+      {
+        "en-US": "Foot of the World Tree",
+        "zh-TW": "世界樹下",
+        "ja-JP": "世界樹の麓"
+      },
+      {
+        "en-US": "Bridge of the Twin Knights",
+        "zh-TW": "雙騎士大橋",
+        "ja-JP": "双騎士の大橋"
+      },
+      {
+        "en-US": "Ravine Entrance",
+        "zh-TW": "溪谷入口",
+        "ja-JP": "渓谷入口"
+      },
+      {
+        "en-US": "Isle of Silence",
+        "zh-TW": "寂靜之島",
+        "ja-JP": "静寂の島"
+      },
+      {
+        "en-US": "Isle of Murmurs",
+        "zh-TW": "潺鳴之島",
+        "ja-JP": "さざめきの島"
+      },
+      {
+        "en-US": "Kelpsea Hill",
+        "zh-TW": "小青龍之濱",
+        "ja-JP": "小青龍の浜"
+      },
+      {
+        "en-US": "Sea Breeze Archipelago - Castaway Beach",
+        "zh-TW": "潮風群島 漂流者海濱",
+        "ja-JP": "潮風諸島 漂流者の浜"
+      },
+      {
+        "en-US": "Sea Breeze Archipelago Church",
+        "zh-TW": "潮風群島的教會",
+        "ja-JP": "潮風諸島の教会"
+      },
+      {
+        "en-US": "Small Cove",
+        "zh-TW": "小型海灣",
+        "ja-JP": "小さな入り江"
+      },
+      {
+        "en-US": "Islandhopper Coast",
+        "zh-TW": "渡島海岸",
+        "ja-JP": "島渡り海岸"
+      },
+      {
+        "en-US": "Marsh Island",
+        "zh-TW": "濕地之島",
+        "ja-JP": "湿原の島"
+      },
+      {
+        "en-US": "Eastern Wild Island",
+        "zh-TW": "東部的荒蕪島嶼",
+        "ja-JP": "東の荒れ島"
+      },
+      {
+        "en-US": "Natural Bridge",
+        "zh-TW": "天然陸橋",
+        "ja-JP": "天然の陸橋"
+      },
+      {
+        "en-US": "Cinnamoth Forest",
+        "zh-TW": "彩蝶之森",
+        "ja-JP": "彩蝶の森"
+      },
+      {
+        "en-US": "Sealed Realm of the Ardent",
+        "zh-TW": "灼熱密域",
+        "ja-JP": "灼熱の封域"
+      },
+      {
+        "en-US": "Deep Bamboo Thicket",
+        "zh-TW": "竹林深處",
+        "ja-JP": "竹林奥地"
+      },
+      {
+        "en-US": "Sealed Realm of the Myriad Flames",
+        "zh-TW": "百焰密域",
+        "ja-JP": "百焔の封域"
+      },
+      {
+        "en-US": "Pristine Snow Field",
+        "zh-TW": "純白雪原",
+        "ja-JP": "純白の雪原"
+      },
+      {
+        "en-US": "Ascetic Falls",
+        "zh-TW": "修行者瀑布",
+        "ja-JP": "修験者の滝"
+      },
+      {
+        "en-US": "Foot of the Volcano",
+        "zh-TW": "火山山腳",
+        "ja-JP": "火山の麓"
+      },
+      {
+        "en-US": "Sealed Realm of the Swordmaster",
+        "zh-TW": "劍豪密域",
+        "ja-JP": "剣豪の封域"
+      },
+      {
+        "en-US": "Investigator's Fork",
+        "zh-TW": "探究者歧路",
+        "ja-JP": "探究者の分岐路"
+      },
+      {
+        "en-US": "Ancient Ritual Site",
+        "zh-TW": "古老的祭祀場",
+        "ja-JP": "古びた祭祀場"
+      },
+      {
+        "en-US": "Mount Flopie Summit",
+        "zh-TW": "花兔山 山頂",
+        "ja-JP": "花兎山 山頂"
+      },
+      {
+        "en-US": "Lake Center",
+        "zh-TW": "湖心",
+        "ja-JP": "湖中央"
+      },
+      {
+        "en-US": "Hypocrite Hill",
+        "zh-TW": "偽善者之丘",
+        "ja-JP": "偽善者の丘"
+      },
+      {
+        "en-US": "Sealed Realm of the Mystic",
+        "zh-TW": "神秘密域",
+        "ja-JP": "神秘の封域"
+      },
+      {
+        "en-US": "Snowy Mountain Crossroads",
+        "zh-TW": "通往雪山的岔路",
+        "ja-JP": "雪山への分岐路"
+      },
+      {
+        "en-US": "Frostbound Mountains Summit",
+        "zh-TW": "霜凍雪山山頂",
+        "ja-JP": "凍てつき山の山頂"
+      },
+      {
+        "en-US": "Sealed Realm of the Swift",
+        "zh-TW": "神速密域",
+        "ja-JP": "神速の封域"
+      },
+      {
+        "en-US": "Mossanda Forest",
+        "zh-TW": "草熊貓之森",
+        "ja-JP": "草熊猫の森"
+      },
+      {
+        "en-US": "Gobfin's Turf",
+        "zh-TW": "鯊小子的地盤",
+        "ja-JP": "小鮫のなわばり"
+      },
+      {
+        "en-US": "Rayne Syndicate Tower Entrance",
+        "zh-TW": "雷恩盜獵集團的高塔 入口",
+        "ja-JP": "レイン密猟団の塔 入口"
+      },
+      {
+        "en-US": "Grassy Behemoth Hills",
+        "zh-TW": "草巨獸山陵",
+        "ja-JP": "草巨獣の丘陵"
+      },
+      {
+        "en-US": "Desolate Church",
+        "zh-TW": "破敗教會",
+        "ja-JP": "さびれた教会"
+      },
+      {
+        "en-US": "Hill of Beginnings",
+        "zh-TW": "初始台地",
+        "ja-JP": "始まりの丘"
+      },
+      {
+        "en-US": "Small Settlement",
+        "zh-TW": "小型聚落",
+        "ja-JP": "小さな集落"
+      },
+      {
+        "en-US": "Sealed Realm of the Frozen Wings",
+        "zh-TW": "冰鳥密域",
+        "ja-JP": "氷鳥の封域"
+      },
+      {
+        "en-US": "Fort Ruins",
+        "zh-TW": "要塞遺跡",
+        "ja-JP": "砦跡地"
+      }
+    ],
+    "Watchtower": [
+      {
+        "en-US": "Crescent Moon Shore Watchtower",
+        "zh-TW": "弦月湖畔的瞭望塔",
+        "ja-JP": "月欠け湖畔の観測塔"
+      },
+      {
+        "en-US": "Deep Bamboo Thicket Watchtower",
+        "zh-TW": "竹林深處的瞭望塔",
+        "ja-JP": "竹林奥地の観測塔"
+      },
+      {
+        "en-US": "Dry Sandy Beach Watchtower",
+        "zh-TW": "乾燥沙灘的瞭望塔",
+        "ja-JP": "乾いた砂浜の観測塔"
+      },
+      {
+        "en-US": "Sunreach Watchtower",
+        "zh-TW": "天陽鄉的瞭望塔",
+        "ja-JP": "天陽郷の観測塔"
+      },
+      {
+        "en-US": "Windswept Island Watchtower",
+        "zh-TW": "風起之島的瞭望塔",
+        "ja-JP": "風立ちの島の観測塔"
+      },
+      {
+        "en-US": "Eastern Wild Island Watchtower",
+        "zh-TW": "東部的荒蕪島嶼的瞭望塔",
+        "ja-JP": "東の荒れ島の観測塔"
+      },
+      {
+        "en-US": "Searing Dunes Watchtower",
+        "zh-TW": "熱砂丘陵的瞭望塔",
+        "ja-JP": "熱砂丘陵の観測塔"
+      },
+      {
+        "en-US": "Sandstone Plateau Watchtower",
+        "zh-TW": "砂岩台地的瞭望塔",
+        "ja-JP": "砂岩台地の観測塔"
+      },
+      {
+        "en-US": "Verdant Stream Watchtower",
+        "zh-TW": "新綠清流的瞭望塔",
+        "ja-JP": "新緑渓流の観測塔"
+      },
+      {
+        "en-US": "Icy Weasel Hill Watchtower",
+        "zh-TW": "冰鼬山丘的瞭望塔",
+        "ja-JP": "氷イタチの丘の観測塔"
+      },
+      {
+        "en-US": "Astral Mountains Garden Watchtower",
+        "zh-TW": "白銀靈峰山腰的瞭望塔",
+        "ja-JP": "白銀霊峰中腹の観測塔"
+      },
+      {
+        "en-US": "Bamboo Groves Watchtower",
+        "zh-TW": "翠竹溪谷的瞭望塔",
+        "ja-JP": "竹林渓谷の観測塔"
+      },
+      {
+        "en-US": "Sea Breeze Archipelago Watchtower",
+        "zh-TW": "潮風群島的瞭望塔",
+        "ja-JP": "潮風諸島の観測塔"
+      },
+      {
+        "en-US": "Sakurajima Watchtower",
+        "zh-TW": "櫻花島的瞭望塔",
+        "ja-JP": "桜島の観測塔"
+      },
+      {
+        "en-US": "Scorched Obsidian Watchtower",
+        "zh-TW": "黑曜焦土的瞭望塔",
+        "ja-JP": "黒曜焦土の観測塔"
+      },
+      {
+        "en-US": "Burning Fault Watchtower",
+        "zh-TW": "灼熱斷層的瞭望塔",
+        "ja-JP": "灼熱断層の観測塔"
+      },
+      {
+        "en-US": "Frozen Coral Hill Watchtower",
+        "zh-TW": "冰封珊瑚丘的瞭望塔",
+        "ja-JP": "凍てつく珊瑚の丘の観測塔"
+      },
+      {
+        "en-US": "Loess Plains Watchtower",
+        "zh-TW": "黃土平原的瞭望塔",
+        "ja-JP": "黄土平原の観測塔"
+      },
+      {
+        "en-US": "Scorched Plateau Watchtower",
+        "zh-TW": "焦熱台地的瞭望塔",
+        "ja-JP": "焦熱台地の観測塔"
+      },
+      {
+        "en-US": "Arid Wasteland Watchtower",
+        "zh-TW": "熱風荒野的瞭望塔",
+        "ja-JP": "熱風荒野の観測塔"
+      }
+    ]
+  }
+}

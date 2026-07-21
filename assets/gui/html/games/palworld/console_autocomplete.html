@@ -1,0 +1,6 @@
+<div id="console-autocomplete" class="console-autocomplete" role="listbox" hidden>
+  {{#commands}}<button type="button" class="console-autocomplete-option" id="console-command-option-{{index}}" role="option" aria-selected="false" tabindex="-1" data-command="{{verb}}">
+    <span class="console-autocomplete-command">{{command}}</span>
+    <span class="console-autocomplete-hint">{{hint}}</span>
+  </button>{{/commands}}
+</div>

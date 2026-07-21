@@ -1,0 +1,59 @@
+{
+  "markers": {
+    "Fast Travel": [
+      {
+        "en-US": "Rotmist Root"
+      },
+      {
+        "en-US": "Forbidden Laboratory"
+      },
+      {
+        "en-US": "Shinespore Root"
+      },
+      {
+        "en-US": "The Verdant Rootpath"
+      },
+      {
+        "en-US": "Alluvion Lakefront"
+      },
+      {
+        "en-US": "Corroded Hollow"
+      },
+      {
+        "en-US": "Remnant Riverside"
+      },
+      {
+        "en-US": "Boreal Summit"
+      },
+      {
+        "en-US": "Abandoned Laboratory"
+      },
+      {
+        "en-US": "Gilded City Ruins"
+      },
+      {
+        "en-US": "Within the Seal"
+      },
+      {
+        "en-US": "Spore Cloister"
+      },
+      {
+        "en-US": "Lacrymal Shoal"
+      },
+      {
+        "en-US": "Dusty Ravine"
+      },
+      {
+        "en-US": "Whimsical Wisteria Grove"
+      }
+    ],
+    "Watchtower": [
+      {
+        "en-US": "Dusty Ravine Watchtower"
+      },
+      {
+        "en-US": "Gilded City Ruins Watchtower"
+      }
+    ]
+  }
+}

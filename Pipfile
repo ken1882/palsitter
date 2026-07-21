@@ -1,0 +1,19 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+psutil = ">=7.0.0"
+pywebio = ">=1.8.3"
+requests = ">=2.30.0"
+pytest = ">=8.0.0"
+pytest-xdist = ">=3.6.0"
+playwright = ">=1.50.0"
+palworld-save-tools = ">=0.24.0"
+pywinpty = {version = ">=2.0", markers = "sys_platform == \"win32\""}
+
+[dev-packages]
+
+[requires]
+python_version = "3.12"

@@ -1,0 +1,28 @@
+#pywebio-scope-browse_double_click,
+#pywebio-scope-browse_address_enter,
+#pywebio-scope-browse_address_check,
+#pywebio-scope-map_refresh,
+#pywebio-scope-players_auto_refresh,
+#pywebio-scope-players_detail_auto_refresh { display: none; }
+.utils-log-title { font-size: 1.25rem; margin: auto .5rem auto; }
+.world-field-hidden { display: none !important; }
+.metric-dot-fps { background: #38bdf8; }
+.metric-dot-uptime { background: #9ca3af; }
+.metric-dot-days { background: #facc15; }
+.metric-dot-cpu { background: #fb7185; }
+.metric-dot-memory { background: #f3c178; }
+.metric-dot-game-version { background: #c084fc; }
+.settings-view > div { grid-column: 1 / -1; width: 100%; }
+.settings-view > div[style*="grid-auto-flow"] { align-items: start; }
+.loading-indicator .spinner-border,
+.loading-indicator .spinner-grow { width: 1.5rem; height: 1.5rem; }
+.loading-border .spinner-border { border: .2em solid currentColor; border-right-color: transparent; }
+.loading-border.loading-fill .spinner-border { border: .2em solid currentColor; }
+.world-field-scope > div { grid-column: 1 / -1; width: 100%; }
+#pywebio-scope-players_list > div > div[style*="grid-auto-flow"],
+#pywebio-scope-players_detail_list > div > div[style*="grid-auto-flow"] { align-items: center; }
+.backup-folder-button { margin: 1rem 0 .25rem .5rem; }
+#pywebio-scope-builtin_backup_title_row > div,
+#pywebio-scope-backup_title_row > div,
+#pywebio-scope-mods_lua_title_row > div,
+#pywebio-scope-mods_pak_title_row > div { align-items: center; }

@@ -1,0 +1,6 @@
+<div class="metric-row">
+  {{#metrics}}<div class="metric" data-metric="{{key}}">
+    <span class="metric-dot metric-dot-{{key}}"></span>
+    <div><p class="metric-value">{{value}}{{#updateAvailable}} <b class="metric-update-available" data-tooltip="{{updateTooltip}}" tabindex="0">(↑)</b>{{/updateAvailable}}</p><p class="metric-label">{{label}}</p></div>
+  </div>{{/metrics}}
+</div>

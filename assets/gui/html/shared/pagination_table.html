@@ -1,0 +1,66 @@
+<section id="{{table_id}}" class="pagination-table">
+  <div class="pagination-table-toolbar">
+    <div class="pagination-table-filter-chips">
+      <label class="pagination-table-search pagination-table-chip">
+        <input id="{{input_id}}" type="search" placeholder="{{search_placeholder}}" aria-label="{{search_placeholder}}">
+      </label>
+      <div class="pagination-table-filter-group">
+        <button type="button" class="btn btn-secondary pagination-table-tags-button pagination-table-chip" aria-expanded="false" aria-controls="{{tag_popup_id}}">
+          <span>{{tags_label}}</span>
+        </button>
+        <div id="{{tag_popup_id}}" class="pagination-table-popover pagination-table-tags-popup" hidden>
+          <div class="pagination-table-tags-title">{{tags_title}}</div>
+          {{#tags}}
+          <label class="pagination-table-tag-option">
+            <input type="checkbox" data-tag-value="{{value}}" checked><span>{{label}}</span>
+          </label>
+          {{/tags}}
+        </div>
+      </div>
+    </div>
+    <div class="pagination-table-toolbar-actions">
+      <div class="pagination-table-time-group">
+        <button type="button" class="btn btn-secondary pagination-table-time-button" aria-expanded="false" aria-controls="{{table_id}}-time-popup">
+          <span class="pagination-table-time-label">{{all_time}}</span>
+        </button>
+        <div id="{{table_id}}-time-popup" class="pagination-table-popover pagination-table-time-popup" hidden>
+          <div class="pagination-table-time-popup-title">{{time_window}}</div>
+          <div class="pagination-table-quick-options">
+            {{#quick_options}}<button type="button" data-quick-value="{{value}}">{{label}}</button>{{/quick_options}}
+          </div>
+          <div class="pagination-table-custom-range">
+            <div class="pagination-table-custom-range-title">{{custom_range}}</div>
+            <label>{{from_label}}<input id="{{start_id}}" type="datetime-local" step="1"></label>
+            <label>{{to_label}}<input id="{{end_id}}" type="datetime-local" step="1"></label>
+            <button type="button" class="pagination-table-apply">{{apply}}</button>
+          </div>
+          <select id="{{quick_id}}" aria-label="{{time_window}}" hidden>
+            {{#quick_options}}<option value="{{value}}">{{label}}</option>{{/quick_options}}
+          </select>
+        </div>
+      </div>
+      <label class="pagination-table-page-size">
+        <span>{{items_per_page}}</span>
+        <select id="{{page_size_id}}">{{#page_sizes}}<option value="{{value}}" {{#selected}}selected{{/selected}}>{{value}}</option>{{/page_sizes}}</select>
+      </label>
+    </div>
+  </div>
+  <div class="pagination-table-shell">
+    <table>
+      <colgroup>{{#columns}}<col class="pagination-table-column" data-column-index="{{index}}">{{/columns}}</colgroup>
+      <thead><tr>{{#columns}}<th scope="col"><span class="pagination-table-header-label">{{label}}</span>{{#resizable}}<span class="pagination-table-resize-handle" data-column-index="{{index}}" role="separator" aria-orientation="vertical" aria-hidden="true"></span>{{/resizable}}</th>{{/columns}}</tr></thead>
+      <tbody></tbody>
+    </table>
+    <div class="pagination-table-empty" hidden></div>
+  </div>
+    <div class="pagination-table-footer" role="contentinfo">
+    <span class="pagination-table-count"></span>
+    <nav class="pagination-table-navigation" aria-label="{{pagination}}">
+      <button type="button" class="pagination-table-first" aria-label="{{first}}">&lt;&lt;</button>
+      <button type="button" class="pagination-table-previous" aria-label="{{previous}}">&lt;</button>
+      <div class="pagination-table-pages"></div>
+      <button type="button" class="pagination-table-next" aria-label="{{next}}">&gt;</button>
+      <button type="button" class="pagination-table-last" aria-label="{{last}}">&gt;&gt;</button>
+    </nav>
+  </div>
+</section>

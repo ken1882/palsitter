@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local environment
+.venv/
+venv/
+env/
+
+# Generated and runtime data
+/artifacts/*
+!/artifacts/.gitkeep
+/config/*
+!/config/.gitkeep
+/logs/*
+!/logs/.gitkeep
+/Pal/*
+!/Pal/.gitkeep
+/profile/*
+!/profile/.gitkeep
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+*.swp

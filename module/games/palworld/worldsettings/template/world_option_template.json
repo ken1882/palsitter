@@ -1,0 +1,584 @@
+ {
+	"header": {
+		"magic": 1396790855,
+		"save_game_version": 3,
+		"package_file_version_ue4": 522,
+		"package_file_version_ue5": 1008,
+		"engine_version_major": 5,
+		"engine_version_minor": 1,
+		"engine_version_patch": 1,
+		"engine_version_changelist": 0,
+		"engine_version_branch": "++UE5+Release-5.1",
+		"custom_version_format": 3,
+		"custom_versions": [],
+		"save_game_class_name": "/Game/Pal/Blueprint/Save/WorldOptionSaveGame.WorldOptionSaveGame_C"
+	},
+	"properties": {
+		"OptionWorldSaveData": {
+			"struct_type": "PalOptionWorldSaveData",
+			"struct_id": "00000000-0000-0000-0000-000000000000",
+			"id": null,
+			"value": {
+				"Difficulty": {
+					"id": null,
+					"value": {
+						"type": "EPalOptionEnum_Difficulty",
+						"value": "EPalOptionEnum_Difficulty::None"
+					},
+					"type": "EnumProperty"
+				},
+				"RandomizerType": {
+					"id": null,
+					"value": {
+						"type": "EPalOptionEnum_RandomizerType",
+						"value": "EPalOptionEnum_RandomizerType::None"
+					},
+					"type": "EnumProperty"
+				},
+				"RandomizerSeed": {
+					"id": null,
+					"value": "",
+					"type": "StrProperty"
+				},
+				"bIsRandomizerPalLevelRandom": {
+					"id": null,
+					"value": false,
+					"type": "BoolProperty"
+				},
+				"DayTimeSpeedRate": {
+					"id": null,
+					"value": 1.0,
+					"type": "FloatProperty"
+				},
+				"NightTimeSpeedRate": {
+					"id": null,
+					"value": 1.0,
+					"type": "FloatProperty"
+				},
+				"ExpRate": {
+					"id": null,
+					"value": 1.0,
+					"type": "FloatProperty"
+				},
+				"PalCaptureRate": {
+					"id": null,
+					"value": 1.0,
+					"type": "FloatProperty"
+				},
+				"PalSpawnNumRate": {
+					"id": null,
+					"value": 1.0,
+					"type": "FloatProperty"
+				},
+				"WorkSpeedRate": {
+					"id": null,
+					"value": 1.0,
+					"type": "FloatProperty"
+				},
+				"PalDamageRateAttack": {
+					"id": null,
+					"value": 1.0,
+					"type": "FloatProperty"
+				},
+				"PalDamageRateDefense": {
+					"id": null,
+					"value": 1.0,
+					"type": "FloatProperty"
+				},
+				"PlayerDamageRateAttack": {
+					"id": null,
+					"value": 1.0,
+					"type": "FloatProperty"
+				},
+				"PlayerDamageRateDefense": {
+					"id": null,
+					"value": 1.0,
+					"type": "FloatProperty"
+				},
+				"BuildObjectDamageRate": {
+					"id": null,
+					"value": 1.0,
+					"type": "FloatProperty"
+				},
+				"BuildObjectDeteriorationDamageRate": {
+					"id": null,
+					"value": 1.0,
+					"type": "FloatProperty"
+				},
+				"PalStomachDecreaceRate": {
+					"id": null,
+					"value": 1.0,
+					"type": "FloatProperty"
+				},
+				"PalStaminaDecreaceRate": {
+					"id": null,
+					"value": 1.0,
+					"type": "FloatProperty"
+				},
+				"PalAutoHPRegeneRate": {
+					"id": null,
+					"value": 1.0,
+					"type": "FloatProperty"
+				},
+				"PalAutoHpRegeneRateInSleep": {
+					"id": null,
+					"value": 1.0,
+					"type": "FloatProperty"
+				},
+				"PlayerStomachDecreaceRate": {
+					"id": null,
+					"value": 1.0,
+					"type": "FloatProperty"
+				},
+				"PlayerStaminaDecreaceRate": {
+					"id": null,
+					"value": 1.0,
+					"type": "FloatProperty"
+				},
+				"PlayerAutoHPRegeneRate": {
+					"id": null,
+					"value": 1.0,
+					"type": "FloatProperty"
+				},
+				"PlayerAutoHpRegeneRateInSleep": {
+					"id": null,
+					"value": 1.0,
+					"type": "FloatProperty"
+				},
+				"BuildObjectHpRate": {
+					"id": null,
+					"value": 1.0,
+					"type": "FloatProperty"
+				},
+				"MaxBuildingLimitNum": {
+					"id": null,
+					"value": 0,
+					"type": "IntProperty"
+				},
+				"bBuildAreaLimit": {
+					"id": null,
+					"value": false,
+					"type": "BoolProperty"
+				},
+				"ServerReplicatePawnCullDistance": {
+					"id": null,
+					"value": 15000,
+					"type": "IntProperty"
+				},
+				"ItemContainerForceMarkDirtyInterval": {
+					"id": null,
+					"value": 1,
+					"type": "IntProperty"
+				},
+				"PhysicsActiveDropItemMaxNum": {
+					"id": null,
+					"value": 100,
+					"type": "IntProperty"
+				},
+				"CollectionDropRate": {
+					"id": null,
+					"value": 1.0,
+					"type": "FloatProperty"
+				},
+				"EnemyDropItemRate": {
+					"id": null,
+					"value": 1.0,
+					"type": "FloatProperty"
+				},
+				"CollectionObjectHpRate": {
+					"id": null,
+					"value": 1.0,
+					"type": "FloatProperty"
+				},
+				"CollectionObjectRespawnSpeedRate": {
+					"id": null,
+					"value": 1.0,
+					"type": "FloatProperty"
+				},
+				"DropItemMaxNum": {
+					"id": null,
+					"value": 3000,
+					"type": "IntProperty"
+				},
+				"DropItemAliveMaxHours": {
+					"id": null,
+					"value": 1,
+					"type": "IntProperty"
+				},
+				"SupplyDropSpan": {
+					"id": null,
+					"value": 180,
+					"type": "IntProperty"
+				},
+				"bActiveUNKO": {
+					"id": null,
+					"value": false,
+					"type": "BoolProperty"
+				},
+				"DropItemMaxNum_UNKO": {
+					"id": null,
+					"value": 100,
+					"type": "IntProperty"
+				},
+				"EquipmentDurabilityDamageRate": {
+					"id": null,
+					"value": 1.0,
+					"type": "FloatProperty"
+				},
+				"ItemCorruptionMultiplier": {
+					"id": null,
+					"value": 1.0,
+					"type": "FloatProperty"
+				},
+				"DenyTechnologyList": {
+					"id": null,
+					"value": "",
+					"type": "StrProperty"
+				},
+				"ItemWeightRate": {
+					"id": null,
+					"value": 1.0,
+					"type": "FloatProperty"
+				},
+				"DeathPenalty": {
+					"id": null,
+					"value": {
+						"type": "EPalOptionEnum_DeathPenalty",
+						"value": "EPalOptionEnum_DeathPenalty::All"
+					},
+					"type": "EnumProperty"
+				},
+				"bEnableAimAssistPad": {
+					"id": null,
+					"value": true,
+					"type": "BoolProperty"
+				},
+				"bEnableAimAssistKeyboard": {
+					"id": null,
+					"value": false,
+					"type": "BoolProperty"
+				},
+				"bCharacterRecreateInHardcore": {
+					"id": null,
+					"value": false,
+					"type": "BoolProperty"
+				},
+				"bIsPvP": {
+					"id": null,
+					"value": false,
+					"type": "BoolProperty"
+				},
+				"bEnablePlayerToPlayerDamage": {
+					"id": null,
+					"value": false,
+					"type": "BoolProperty"
+				},
+				"bEnableDefenseOtherGuildPlayer": {
+					"id": null,
+					"value": false,
+					"type": "BoolProperty"
+				},
+				"bEnableInvaderEnemy": {
+					"id": null,
+					"value": true,
+					"type": "BoolProperty"
+				},
+				"bHardcore": {
+					"id": null,
+					"value": false,
+					"type": "BoolProperty"
+				},
+				"bPalLost": {
+					"id": null,
+					"value": false,
+					"type": "BoolProperty"
+				},
+				"bEnableFriendlyFire": {
+					"id": null,
+					"value": false,
+					"type": "BoolProperty"
+				},
+				"bCanPickupOtherGuildDeathPenaltyDrop": {
+					"id": null,
+					"value": false,
+					"type": "BoolProperty"
+				},
+				"bAdditionalDropItemWhenPlayerKillingInPvPMode": {
+					"id": null,
+					"value": false,
+					"type": "BoolProperty"
+				},
+				"AdditionalDropItemNumWhenPlayerKillingInPvPMode": {
+					"id": null,
+					"value": 1,
+					"type": "IntProperty"
+				},
+				"AdditionalDropItemWhenPlayerKillingInPvPMode": {
+					"id": null,
+					"value": "PlayerDropItem",
+					"type": "StrProperty"
+				},
+				"bDisplayPvPItemNumOnWorldMap_Player": {
+					"id": null,
+					"value": false,
+					"type": "BoolProperty"
+				},
+				"bDisplayPvPItemNumOnWorldMap_BaseCamp": {
+					"id": null,
+					"value": false,
+					"type": "BoolProperty"
+				},
+				"bInvisibleOtherGuildBaseCampAreaFX": {
+					"id": null,
+					"value": false,
+					"type": "BoolProperty"
+				},
+				"RespawnPenaltyDurationThreshold": {
+					"id": null,
+					"value": 0,
+					"type": "IntProperty"
+				},
+				"RespawnPenaltyTimeScale": {
+					"id": null,
+					"value": 2.0,
+					"type": "FloatProperty"
+				},
+				"BlockRespawnTime": {
+					"id": null,
+					"value": 5,
+					"type": "IntProperty"
+				},
+				"BaseCampMaxNum": {
+					"id": null,
+					"value": 128,
+					"type": "IntProperty"
+				},
+				"BaseCampWorkerMaxNum": {
+					"id": null,
+					"value": 15,
+					"type": "IntProperty"
+				},
+				"BaseCampMaxNumInGuild": {
+					"id": null,
+					"value": 4,
+					"type": "IntProperty"
+				},
+				"GuildPlayerMaxNum": {
+					"id": null,
+					"value": 20,
+					"type": "IntProperty"
+				},
+				"CoopPlayerMaxNum": {
+					"id": null,
+					"value": 4,
+					"type": "IntProperty"
+				},
+				"ServerPlayerMaxNum": {
+					"id": null,
+					"value": 32,
+					"type": "IntProperty"
+				},
+				"bAutoResetGuildNoOnlinePlayers": {
+					"id": null,
+					"value": false,
+					"type": "BoolProperty"
+				},
+				"AutoResetGuildTimeNoOnlinePlayers": {
+					"id": null,
+					"value": 72.0,
+					"type": "FloatProperty"
+				},
+				"GuildRejoinCooldownMinutes": {
+					"id": null,
+					"value": 0,
+					"type": "IntProperty"
+				},
+				"PalEggDefaultHatchingTime": {
+					"id": null,
+					"value": 72.0,
+					"type": "FloatProperty"
+				},
+				"bAllowEnhanceStat_Health": {
+					"id": null,
+					"value": true,
+					"type": "BoolProperty"
+				},
+				"bAllowEnhanceStat_Stamina": {
+					"id": null,
+					"value": true,
+					"type": "BoolProperty"
+				},
+				"bAllowEnhanceStat_Attack": {
+					"id": null,
+					"value": true,
+					"type": "BoolProperty"
+				},
+				"bAllowEnhanceStat_Weight": {
+					"id": null,
+					"value": true,
+					"type": "BoolProperty"
+				},
+				"bAllowEnhanceStat_WorkSpeed": {
+					"id": null,
+					"value": true,
+					"type": "BoolProperty"
+				},
+				"bIsStartLocationSelectByMap": {
+					"id": null,
+					"value": true,
+					"type": "BoolProperty"
+				},
+				"bEnableNonLoginPenalty": {
+					"id": null,
+					"value": true,
+					"type": "BoolProperty"
+				},
+				"bEnableFastTravelOnlyBaseCamp": {
+					"id": null,
+					"value": false,
+					"type": "BoolProperty"
+				},
+				"bEnableFastTravel": {
+					"id": null,
+					"value": true,
+					"type": "BoolProperty"
+				},
+				"bExistPlayerAfterLogout": {
+					"id": null,
+					"value": false,
+					"type": "BoolProperty"
+				},
+				"EnablePredatorBossPal": {
+					"id": null,
+					"value": true,
+					"type": "BoolProperty"
+				},
+				"bAllowGlobalPalboxExport": {
+					"id": null,
+					"value": true,
+					"type": "BoolProperty"
+				},
+				"bAllowGlobalPalboxImport": {
+					"id": null,
+					"value": false,
+					"type": "BoolProperty"
+				},
+				"ServerName": {
+					"id": null,
+					"value": "Default Palworld Server",
+					"type": "StrProperty"
+				},
+				"ServerDescription": {
+					"id": null,
+					"value": "",
+					"type": "StrProperty"
+				},
+				"ServerPassword": {
+					"id": null,
+					"value": "",
+					"type": "StrProperty"
+				},
+				"AdminPassword": {
+					"id": null,
+					"value": "",
+					"type": "StrProperty"
+				},
+				"PublicPort": {
+					"id": null,
+					"value": 8211,
+					"type": "IntProperty"
+				},
+				"PublicIP": {
+					"id": null,
+					"value": "",
+					"type": "StrProperty"
+				},
+				"RCONEnabled": {
+					"id": null,
+					"value": false,
+					"type": "BoolProperty"
+				},
+				"RCONPort": {
+					"id": null,
+					"value": 25575,
+					"type": "IntProperty"
+				},
+				"RESTAPIEnabled": {
+					"id": null,
+					"value": false,
+					"type": "BoolProperty"
+				},
+				"RESTAPIPort": {
+					"id": null,
+					"value": 8212,
+					"type": "IntProperty"
+				},
+				"CrossplayPlatforms": {
+					"id": null,
+					"value": "(Steam,Xbox,PS5,Mac)",
+					"type": "StrProperty"
+				},
+				"Region": {
+					"id": null,
+					"value": "",
+					"type": "StrProperty"
+				},
+				"bUseAuth": {
+					"id": null,
+					"value": true,
+					"type": "BoolProperty"
+				},
+				"BanListURL": {
+					"id": null,
+					"value": "https://api.palworldgame.com/api/banlist.txt",
+					"type": "StrProperty"
+				},
+				"bAllowClientMod": {
+					"id": null,
+					"value": true,
+					"type": "BoolProperty"
+				},
+				"bIsMultiplay": {
+					"id": null,
+					"value": false,
+					"type": "BoolProperty"
+				},
+				"bShowPlayerList": {
+					"id": null,
+					"value": false,
+					"type": "BoolProperty"
+				},
+				"bIsShowJoinLeftMessage": {
+					"id": null,
+					"value": true,
+					"type": "BoolProperty"
+				},
+				"ChatPostLimitPerMinute": {
+					"id": null,
+					"value": 30,
+					"type": "IntProperty"
+				},
+				"AutoSaveSpan": {
+					"id": null,
+					"value": 30,
+					"type": "IntProperty"
+				},
+				"bIsUseBackupSaveData": {
+					"id": null,
+					"value": true,
+					"type": "BoolProperty"
+				},
+				"LogFormatType": {
+					"id": null,
+					"value": {
+						"type": "EPalOptionEnum_LogFormatType",
+						"value": "EPalOptionEnum_LogFormatType::Text"
+					},
+					"type": "EnumProperty"
+				}
+			},
+			"type": "StructProperty"
+		}
+	},
+	"trailer": "AAAAAA=="
+}

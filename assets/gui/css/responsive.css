@@ -1,0 +1,58 @@
+body.light-palsitter table { background: #fff; border-color: #dee2e6; color: #2c2c2c; }
+
+@media (max-width: 1100px) {
+    .overview { height: auto; min-height: 0; grid-template-columns: 1fr; }
+    #pywebio-scope-scheduler { min-height: 35rem; }
+    .scheduler-log { min-height: 45rem; }
+}
+
+@media (max-width: 900px) {
+    #pywebio-scope-contents { grid-template-columns: 4.6rem 1fr; grid-template-rows: auto minmax(0, 1fr); }
+    #pywebio-scope-aside { grid-row: 1 / 3; }
+    #pywebio-scope-menu {
+        grid-column: 2;
+        display: flex;
+        gap: .25rem;
+        overflow-x: auto;
+        overflow-y: hidden;
+        padding: .4rem .5rem;
+        border-right: 0;
+        border-bottom: 1px solid #21262d;
+    }
+    #pywebio-scope-main { grid-column: 2; grid-row: 2; }
+    .menu-button { flex: 0 0 auto; border-left: 0; border-bottom: 3px solid transparent; }
+    .menu-button:hover, .menu-active { border-left-color: transparent; border-bottom-color: #7a77bb; }
+    .menu-divider { display: none; }
+    .settings-actions { left: calc(4.6rem + 1.25rem); }
+    .world-filter-toolbar { top: 0; grid-template-columns: 1fr auto; }
+    .world-category-buttons { grid-column: 1 / -1; grid-row: 2; }
+}
+
+@media (max-width: 600px) {
+    #pywebio-scope-brand { width: auto; }
+    .brand-title { display: none; }
+    #pywebio-scope-header_status { margin-left: 0; }
+    #pywebio-scope-title { text-align: right; padding-right: .5rem; }
+    #pywebio-scope-contents { grid-template-columns: 3.8rem 1fr; }
+    .rail-button { width: 3.7rem; font-size: .7rem; }
+    .settings-actions { left: calc(3.8rem + .5rem); right: .5rem; bottom: .5rem; }
+    .settings-view { display: block; }
+    .settings-field-label, .settings-field-control { display: block; width: 100%; }
+    .settings-view > div { grid-template-columns: 1fr !important; }
+    .settings-view > div > :nth-child(2) { display: none; }
+    .world-filter-toolbar { grid-template-columns: 1fr; }
+    #world-changed-only { width: 100%; }
+    #pywebio-scope-players_detail_list > div > div { grid-auto-flow: row !important; grid-template-columns: 1fr !important; }
+    .player-userid-value { flex-basis: 100%; width: 100%; }
+    .metric { min-width: 7rem; }
+    #pywebio-scope-scheduler_maintenance > div { grid-auto-flow: row !important; grid-template-columns: 1fr !important; }
+    #pywebio-scope-scheduler_maintenance button { width: 100%; }
+    .reliability-summary { grid-template-columns: 1fr; }
+    .palworld-map-top-left { top: .5rem; left: .5rem; width: auto; max-width: calc(100% - 8.5rem); }
+    .palworld-map-top-right { top: .5rem; right: .5rem; min-width: 8rem; }
+    .palworld-map-legend { gap: .2rem; }
+    .palworld-map-legend span { font-size: 0; }
+    .palworld-map-legend img { width: 1.5rem; height: 1.5rem; }
+    .palworld-map-player-dropdown { width: 18rem; max-width: calc(100vw - 1rem); }
+    .palworld-map-zoom-controls { right: .5rem; bottom: .5rem; }
+}

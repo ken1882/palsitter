@@ -1,0 +1,1218 @@
+{
+  "source": "https://paldb.cc/en/Palpagos_Islands?filters=Fast+Travel%2CWatchtower",
+  "native_size": 8192,
+  "tile_size": 512,
+  "tile_zoom": 4,
+  "tiles": [
+    "z4x0y0.webp",
+    "z4x1y0.webp",
+    "z4x2y0.webp",
+    "z4x3y0.webp",
+    "z4x4y0.webp",
+    "z4x5y0.webp",
+    "z4x6y0.webp",
+    "z4x7y0.webp",
+    "z4x8y0.webp",
+    "z4x9y0.webp",
+    "z4x10y0.webp",
+    "z4x11y0.webp",
+    "z4x12y0.webp",
+    "z4x13y0.webp",
+    "z4x14y0.webp",
+    "z4x15y0.webp",
+    "z4x0y1.webp",
+    "z4x1y1.webp",
+    "z4x2y1.webp",
+    "z4x3y1.webp",
+    "z4x4y1.webp",
+    "z4x5y1.webp",
+    "z4x6y1.webp",
+    "z4x7y1.webp",
+    "z4x8y1.webp",
+    "z4x9y1.webp",
+    "z4x10y1.webp",
+    "z4x11y1.webp",
+    "z4x12y1.webp",
+    "z4x13y1.webp",
+    "z4x14y1.webp",
+    "z4x15y1.webp",
+    "z4x0y2.webp",
+    "z4x1y2.webp",
+    "z4x2y2.webp",
+    "z4x3y2.webp",
+    "z4x4y2.webp",
+    "z4x5y2.webp",
+    "z4x6y2.webp",
+    "z4x7y2.webp",
+    "z4x8y2.webp",
+    "z4x9y2.webp",
+    "z4x10y2.webp",
+    "z4x11y2.webp",
+    "z4x12y2.webp",
+    "z4x13y2.webp",
+    "z4x14y2.webp",
+    "z4x15y2.webp",
+    "z4x0y3.webp",
+    "z4x1y3.webp",
+    "z4x2y3.webp",
+    "z4x3y3.webp",
+    "z4x4y3.webp",
+    "z4x5y3.webp",
+    "z4x6y3.webp",
+    "z4x7y3.webp",
+    "z4x8y3.webp",
+    "z4x9y3.webp",
+    "z4x10y3.webp",
+    "z4x11y3.webp",
+    "z4x12y3.webp",
+    "z4x13y3.webp",
+    "z4x14y3.webp",
+    "z4x15y3.webp",
+    "z4x0y4.webp",
+    "z4x1y4.webp",
+    "z4x2y4.webp",
+    "z4x3y4.webp",
+    "z4x4y4.webp",
+    "z4x5y4.webp",
+    "z4x6y4.webp",
+    "z4x7y4.webp",
+    "z4x8y4.webp",
+    "z4x9y4.webp",
+    "z4x10y4.webp",
+    "z4x11y4.webp",
+    "z4x12y4.webp",
+    "z4x13y4.webp",
+    "z4x14y4.webp",
+    "z4x15y4.webp",
+    "z4x0y5.webp",
+    "z4x1y5.webp",
+    "z4x2y5.webp",
+    "z4x3y5.webp",
+    "z4x4y5.webp",
+    "z4x5y5.webp",
+    "z4x6y5.webp",
+    "z4x7y5.webp",
+    "z4x8y5.webp",
+    "z4x9y5.webp",
+    "z4x10y5.webp",
+    "z4x11y5.webp",
+    "z4x12y5.webp",
+    "z4x13y5.webp",
+    "z4x14y5.webp",
+    "z4x15y5.webp",
+    "z4x0y6.webp",
+    "z4x1y6.webp",
+    "z4x2y6.webp",
+    "z4x3y6.webp",
+    "z4x4y6.webp",
+    "z4x5y6.webp",
+    "z4x6y6.webp",
+    "z4x7y6.webp",
+    "z4x8y6.webp",
+    "z4x9y6.webp",
+    "z4x10y6.webp",
+    "z4x11y6.webp",
+    "z4x12y6.webp",
+    "z4x13y6.webp",
+    "z4x14y6.webp",
+    "z4x15y6.webp",
+    "z4x0y7.webp",
+    "z4x1y7.webp",
+    "z4x2y7.webp",
+    "z4x3y7.webp",
+    "z4x4y7.webp",
+    "z4x5y7.webp",
+    "z4x6y7.webp",
+    "z4x7y7.webp",
+    "z4x8y7.webp",
+    "z4x9y7.webp",
+    "z4x10y7.webp",
+    "z4x11y7.webp",
+    "z4x12y7.webp",
+    "z4x13y7.webp",
+    "z4x14y7.webp",
+    "z4x15y7.webp",
+    "z4x0y8.webp",
+    "z4x1y8.webp",
+    "z4x2y8.webp",
+    "z4x3y8.webp",
+    "z4x4y8.webp",
+    "z4x5y8.webp",
+    "z4x6y8.webp",
+    "z4x7y8.webp",
+    "z4x8y8.webp",
+    "z4x9y8.webp",
+    "z4x10y8.webp",
+    "z4x11y8.webp",
+    "z4x12y8.webp",
+    "z4x13y8.webp",
+    "z4x14y8.webp",
+    "z4x15y8.webp",
+    "z4x0y9.webp",
+    "z4x1y9.webp",
+    "z4x2y9.webp",
+    "z4x3y9.webp",
+    "z4x4y9.webp",
+    "z4x5y9.webp",
+    "z4x6y9.webp",
+    "z4x7y9.webp",
+    "z4x8y9.webp",
+    "z4x9y9.webp",
+    "z4x10y9.webp",
+    "z4x11y9.webp",
+    "z4x12y9.webp",
+    "z4x13y9.webp",
+    "z4x14y9.webp",
+    "z4x15y9.webp",
+    "z4x0y10.webp",
+    "z4x1y10.webp",
+    "z4x2y10.webp",
+    "z4x3y10.webp",
+    "z4x4y10.webp",
+    "z4x5y10.webp",
+    "z4x6y10.webp",
+    "z4x7y10.webp",
+    "z4x8y10.webp",
+    "z4x9y10.webp",
+    "z4x10y10.webp",
+    "z4x11y10.webp",
+    "z4x12y10.webp",
+    "z4x13y10.webp",
+    "z4x14y10.webp",
+    "z4x15y10.webp",
+    "z4x0y11.webp",
+    "z4x1y11.webp",
+    "z4x2y11.webp",
+    "z4x3y11.webp",
+    "z4x4y11.webp",
+    "z4x5y11.webp",
+    "z4x6y11.webp",
+    "z4x7y11.webp",
+    "z4x8y11.webp",
+    "z4x9y11.webp",
+    "z4x10y11.webp",
+    "z4x11y11.webp",
+    "z4x12y11.webp",
+    "z4x13y11.webp",
+    "z4x14y11.webp",
+    "z4x15y11.webp",
+    "z4x0y12.webp",
+    "z4x1y12.webp",
+    "z4x2y12.webp",
+    "z4x3y12.webp",
+    "z4x4y12.webp",
+    "z4x5y12.webp",
+    "z4x6y12.webp",
+    "z4x7y12.webp",
+    "z4x8y12.webp",
+    "z4x9y12.webp",
+    "z4x10y12.webp",
+    "z4x11y12.webp",
+    "z4x12y12.webp",
+    "z4x13y12.webp",
+    "z4x14y12.webp",
+    "z4x15y12.webp",
+    "z4x0y13.webp",
+    "z4x1y13.webp",
+    "z4x2y13.webp",
+    "z4x3y13.webp",
+    "z4x4y13.webp",
+    "z4x5y13.webp",
+    "z4x6y13.webp",
+    "z4x7y13.webp",
+    "z4x8y13.webp",
+    "z4x9y13.webp",
+    "z4x10y13.webp",
+    "z4x11y13.webp",
+    "z4x12y13.webp",
+    "z4x13y13.webp",
+    "z4x14y13.webp",
+    "z4x15y13.webp",
+    "z4x0y14.webp",
+    "z4x1y14.webp",
+    "z4x2y14.webp",
+    "z4x3y14.webp",
+    "z4x4y14.webp",
+    "z4x5y14.webp",
+    "z4x6y14.webp",
+    "z4x7y14.webp",
+    "z4x8y14.webp",
+    "z4x9y14.webp",
+    "z4x10y14.webp",
+    "z4x11y14.webp",
+    "z4x12y14.webp",
+    "z4x13y14.webp",
+    "z4x14y14.webp",
+    "z4x15y14.webp",
+    "z4x0y15.webp",
+    "z4x1y15.webp",
+    "z4x2y15.webp",
+    "z4x3y15.webp",
+    "z4x4y15.webp",
+    "z4x5y15.webp",
+    "z4x6y15.webp",
+    "z4x7y15.webp",
+    "z4x8y15.webp",
+    "z4x9y15.webp",
+    "z4x10y15.webp",
+    "z4x11y15.webp",
+    "z4x12y15.webp",
+    "z4x13y15.webp",
+    "z4x14y15.webp",
+    "z4x15y15.webp"
+  ],
+  "bounds": {
+    "world_x_min": -1099400,
+    "world_x_max": 349400,
+    "world_y_min": -724400,
+    "world_y_max": 724400
+  },
+  "markers": {
+    "Fast Travel": [
+      {
+        "label": "Deserted Islet -172,33",
+        "x": 4543.37095527333,
+        "y": 2590.0640971838766,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Free Pal Alliance Tower Entrance 34,-308",
+        "x": 5077.1966869133075,
+        "y": 3475.2671452236336,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Mount Obsidian - Midpoint -498,-444",
+        "x": 3697.872644947543,
+        "y": 3827.600044174489,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Eternal Pyre Tower Entrance -595,-531",
+        "x": 3446.028580894533,
+        "y": 4054.7685919381556,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Ancient Civilization Ruins -398,-633",
+        "x": 3956.886405300939,
+        "y": 4319.046537824406,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Fisherman's Point -480,-745",
+        "x": 3744.6509552733296,
+        "y": 4609.950745444506,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Mount Obsidian - Anubis Statue -540,-638",
+        "x": 3587.042032026505,
+        "y": 4330.982838210934,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Beach of Everlasting Summer -803,-565",
+        "x": 2904.1171507454446,
+        "y": 4142.269420209828,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "PIDF Tower Entrance 542,335",
+        "x": 6396.822263942573,
+        "y": 1807.2327774710102,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Sand Dunes Entrance 282,160",
+        "x": 5721.010535615682,
+        "y": 2260.0432026504695,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Duneshelter 356,347",
+        "x": 5912.912998343457,
+        "y": 1774.3924019878523,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Deep Sand Dunes 528,526",
+        "x": 6358.497183876311,
+        "y": 1310.5390612921037,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Cold Shore -43,11",
+        "x": 4878.220651573716,
+        "y": 2648.699547211485,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "No Man's Trail -36,95",
+        "x": 4895.890447266704,
+        "y": 2430.8323799006075,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Icy Weasel Hill 4,184",
+        "x": 4998.499657647709,
+        "y": 2198.4166096079516,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Unthawable Lake -101,287",
+        "x": 4727.990635008283,
+        "y": 1930.3841855328546,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Land of Absolute Zero -239,492",
+        "x": 4370.38789618995,
+        "y": 1397.9776918829375,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "PAL Genetic Research Unit Tower Entrance -139,465",
+        "x": 4629.559977912755,
+        "y": 1468.8547763666484,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Azure Covenant Tower Entrance -433,-1424",
+        "x": 3866.4962120375485,
+        "y": 6371.813141910547,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "The Azure Tapestry -479,-1382",
+        "x": 3746.5055770292656,
+        "y": 6262.2038652678075,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Enchanted Firmament -214,-1512",
+        "x": 4434.287531750414,
+        "y": 6600.943743787962,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Farcry Marsh -325,-1411",
+        "x": 4144.893031474324,
+        "y": 6336.8693539480955,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Crystalline Archipelago -386,-1536",
+        "x": 3987.0805521811153,
+        "y": 6663.610734400883,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Waterlily Gorge -531,-1498",
+        "x": 3610.4396686913306,
+        "y": 6563.930469353948,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Ruined Fortress City -563,-247",
+        "x": 3527.795913859746,
+        "y": 3316.193749309774,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Feybreak Shipwreck -1389,-1470",
+        "x": 1384.322473771397,
+        "y": 6492.176963003865,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Arena Entrance 629,15",
+        "x": 6621.734732192159,
+        "y": 2638.3973495306464,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Sakurajima - Mushroom Wetlands -464,132",
+        "x": 3784.977669795693,
+        "y": 2334.7935063500827,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Sakurajima - Southern Sandbar -650,81",
+        "x": 3301.8939370513526,
+        "y": 2465.911871893981,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Moonflower Tower Entrance -602,214",
+        "x": 3426.724682495859,
+        "y": 2119.9344450579792,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Cherry Blossom Crossroads -516,213",
+        "x": 3649.725985643291,
+        "y": 2122.156598564329,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Sakurajima - Northern Rock Field -522,341",
+        "x": 3635.6240750966317,
+        "y": 1790.2358475980118,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Secluded Cemetery -668,265",
+        "x": 3256.0712092766425,
+        "y": 1988.0018553285481,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Scorched Ashland -811,-828",
+        "x": 2883.8237437879625,
+        "y": 4825.352622860299,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Stone Pillar Cave Entrance -897,-1011",
+        "x": 2661.0429596907784,
+        "y": 5301.16488128106,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Loess Plains -891,-1456",
+        "x": 2676.140033130867,
+        "y": 6455.83655438984,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Hidden Passage to the Oculus Gate -1048,-1252",
+        "x": 2270.328437327443,
+        "y": 5925.262065157372,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "The Oculus Gate, Tower in Sight -1118,-1386",
+        "x": 2088.9034566537825,
+        "y": 6274.530314743236,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Feybreak Tower Entrance -1288,-1665",
+        "x": 1647.2207620099393,
+        "y": 6997.126007730536,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Scorched Hill -1192,-1254",
+        "x": 1896.2942020982882,
+        "y": 5930.8881281060185,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Deserted Ash Plateau -1399,-1018",
+        "x": 1357.8319160684705,
+        "y": 5318.014798453893,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Emberstone Plateau -720,-1194",
+        "x": 3121.147476532303,
+        "y": 5774.777603533959,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Shield Dragon Tunnel -970,-977",
+        "x": 2471.939392600773,
+        "y": 5212.516223081171,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Isle of Silence Church Ruins -461,-13",
+        "x": 3794.0189508558806,
+        "y": 2711.027277747101,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Marsh Island Church Ruins 399,-276",
+        "x": 6024.750082827168,
+        "y": 3392.069265599116,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Isle of the Glacial Core 139,637",
+        "x": 5350.1201104362235,
+        "y": 1022.931330756488,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Oasis Isle 885,196",
+        "x": 7286.701446714523,
+        "y": 2167.204682495859,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Isle of Decayed Treasures 610,-161",
+        "x": 6572.604218663721,
+        "y": 3094.7021535063504,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Sunlit Isle 386,-462",
+        "x": 5992.243313086692,
+        "y": 3874.6554168967423,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Frostbitten Isle -80,-947",
+        "x": 4780.807774710105,
+        "y": 5133.061512976256,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Sealed Realm of Terraria -422,-795",
+        "x": 3893.9988956377692,
+        "y": 4738.999624516841,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Phantom Isle -887,-186",
+        "x": 2686.781490889012,
+        "y": 3159.2237658752074,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Desiccated Coast 694,301",
+        "x": 6790.550546659304,
+        "y": 1894.2699503036993,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Thirst's End 684,113",
+        "x": 6765.818487023744,
+        "y": 2382.2559911651024,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Desert Backbone 541,187",
+        "x": 6392.491043622308,
+        "y": 2191.687951408062,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Sandbar of Solitude 529,40",
+        "x": 6362.240353395914,
+        "y": 2573.0784759801218,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "The Furthest Flats 473,686",
+        "x": 6218.269685256764,
+        "y": 894.45353948095,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Seaward Passage 322,659",
+        "x": 5824.937205963556,
+        "y": 964.9857095527332,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Frozen Dune Cape 254,544",
+        "x": 5648.668978464936,
+        "y": 1263.2405521811152,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Windwatch Outlook 199,296",
+        "x": 5505.065842076201,
+        "y": 1906.8847708448375,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Thawtide Cape 85,422",
+        "x": 5209.84172280508,
+        "y": 1582.0602098288236,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Garden Beneath the Astral Mountains -405,505",
+        "x": 3937.4750745444508,
+        "y": 1365.2899834345662,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Garden Beneath the Cliffs -228,187",
+        "x": 4398.01497515185,
+        "y": 2191.03770292656,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Sakurajima: West Coast -722,174",
+        "x": 3114.4018553285478,
+        "y": 2224.0024737713966,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Isle of Murmurs Beach -226,-16",
+        "x": 4404.059458862507,
+        "y": 2718.3439867476536,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Anubis Dunes -130,-79",
+        "x": 4653.183787962452,
+        "y": 2882.26880176698,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Flamepulse Islet 761,408",
+        "x": 6964.981115405853,
+        "y": 1616.8965654334625,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Islet of Circular Ruins 940,-64",
+        "x": 7428.721369409166,
+        "y": 2841.5067034787407,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Scouring Islet 447,-713",
+        "x": 6150.434632799558,
+        "y": 4527.114743235781,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Bicornis Islet -1153,-1874",
+        "x": 1997.1675317504141,
+        "y": 7539.682032026505,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Glacial Memento Islet -1659,-969",
+        "x": 683.8804638321369,
+        "y": 5191.238961899503,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Sandstone Gate Islet -1296,-660",
+        "x": 1625.8982661512975,
+        "y": 4389.5165102153505,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Suncrest Islet -880,135",
+        "x": 2704.728348978465,
+        "y": 2325.169828823854,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Heatwave Gate -356,-387",
+        "x": 4066.687929320817,
+        "y": 3681.435494202098,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Whisperwind Cliffs -141,-312",
+        "x": 4623.147962451684,
+        "y": 3485.094378796245,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Whisperwind Hill -268,-246",
+        "x": 4292.618177802319,
+        "y": 3314.8027829928214,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Windscream Valley -177,-409",
+        "x": 4530.433837658752,
+        "y": 3737.0006405300937,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Sea Breeze Coast -280,-648",
+        "x": 4261.717239094423,
+        "y": 4358.553373826615,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Mount Obsidian - Second Ascent -474,-295",
+        "x": 3760.39827719492,
+        "y": 3441.2223964660407,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Mount Obsidian Trail -818,-356",
+        "x": 2865.792070679183,
+        "y": 3599.5550745444507,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Dry Dunes -698,-635",
+        "x": 3177.6851684152402,
+        "y": 4323.711363887355,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Dustview Coast 421,9",
+        "x": 6081.287774710105,
+        "y": 2653.584892324682,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Altar of the Windcaller 347,-71",
+        "x": 5890.77062396466,
+        "y": 2860.4261071231367,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Mossanda Inner Coast 279,-220",
+        "x": 5712.681700717835,
+        "y": 3247.6123246824955,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Verdant Stream 119,107",
+        "x": 5299.16890115958,
+        "y": 2399.2981557150742,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Crimson Cliffs -689,-989",
+        "x": 3201.393793484263,
+        "y": 5244.174842628382,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Hill Entrance -996,-841",
+        "x": 2403.832932081723,
+        "y": 4858.696234124793,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Curved Redrock -1207,-834",
+        "x": 1856.5272667034787,
+        "y": 4840.890734400884,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Scarlet Outlook -1083,-1045",
+        "x": 2179.3784649364993,
+        "y": 5387.964572059635,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Crimson Labyrinth -1158,-1150",
+        "x": 1984.869353948095,
+        "y": 5660.684439536168,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Crystallized Great Tree -947,-1134",
+        "x": 2532.367266703479,
+        "y": 5619.76401987852,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Wildlands Floodgate -864,-1310",
+        "x": 2747.769144119271,
+        "y": 6076.08578685809,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Oilfield Overlook -1343,-1287",
+        "x": 1504.352689122032,
+        "y": 6015.878431805632,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Shady Mushroom Cliffs -1307,-1410",
+        "x": 1597.926272777471,
+        "y": 6336.377426836002,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Silent Lake -1203,-1496",
+        "x": 1868.3957150745443,
+        "y": 6559.29956929873,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Azure Cliffs -1112,-1616",
+        "x": 2103.6669243511874,
+        "y": 6869.586836002209,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Amethyst Outcrop -1183,-1742",
+        "x": 1918.4648481501933,
+        "y": 7196.130314743235,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Exile's Cape -1398,-1661",
+        "x": 1360.738244064053,
+        "y": 6986.688106018774,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Foot of the World Tree -839,689",
+        "x": 2812.432114853672,
+        "y": 887.1311761457755,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Bridge of the Twin Knights -13,-372",
+        "x": 4956.8159028161235,
+        "y": 3642.6919933738263,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Ravine Entrance -67,-425",
+        "x": 4815.061733848703,
+        "y": 3779.357261181668,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Isle of Silence -543,-29",
+        "x": 3579.533075648813,
+        "y": 2751.455770292656,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Isle of Murmurs -353,77",
+        "x": 4073.8180452788515,
+        "y": 2476.8586637217004,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Kelpsea Hill -408,-101",
+        "x": 3930.6672556598564,
+        "y": 2939.1231363887355,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Sea Breeze Archipelago - Castaway Beach -99,-711",
+        "x": 4732.847708448371,
+        "y": 4521.884483710657,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Sea Breeze Archipelago Church -73,-551",
+        "x": 4800.699723909443,
+        "y": 4105.895085588073,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Small Cove -205,-545",
+        "x": 4457.65124240751,
+        "y": 4091.36344561016,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Islandhopper Coast 241,-310",
+        "x": 5615.263169519602,
+        "y": 3479.564439536168,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Marsh Island 430,-345",
+        "x": 6106.511761457758,
+        "y": 3570.7688569850907,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Eastern Wild Island 548,-102",
+        "x": 6412.88057426836,
+        "y": 2940.9268691330753,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Natural Bridge 376,-212",
+        "x": 5965.8036443953615,
+        "y": 3227.4885477636662,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Cinnamoth Forest -69,-272",
+        "x": 4809.61095527333,
+        "y": 3382.253340695748,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Sealed Realm of the Ardent -110,-468",
+        "x": 4704.745665378244,
+        "y": 3889.956046383214,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Deep Bamboo Thicket -325,-199",
+        "x": 4146.063478741027,
+        "y": 3193.505996686913,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Sealed Realm of the Myriad Flames -264,-155",
+        "x": 4303.615858641634,
+        "y": 3079.5541910546663,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Pristine Snow Field -344,270",
+        "x": 4096,
+        "y": 1975.5905908337936,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Ascetic Falls -224,-441",
+        "x": 4407.763048039757,
+        "y": 3821.221954721149,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Foot of the Volcano -353,-492",
+        "x": 4073.184759801215,
+        "y": 3952.0180231916065,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Sealed Realm of the Swordmaster -215,-348",
+        "x": 4431.6017228050805,
+        "y": 3580.2172501380455,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Investigator's Fork -217,-206",
+        "x": 4426.9368967421315,
+        "y": 3211.8712755383767,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Ancient Ritual Site -15,-292",
+        "x": 4951.206802871342,
+        "y": 3434.1657868580896,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Mount Flopie Summit 21,-95",
+        "x": 5043.2084815019325,
+        "y": 2923.7716178906685,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Lake Center 16,-212",
+        "x": 5029.700276090558,
+        "y": 3226.53296521259,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Hypocrite Hill 71,-248",
+        "x": 5173.772722252899,
+        "y": 3319.150966316952,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Sealed Realm of the Mystic 120,-61",
+        "x": 5300.944362230812,
+        "y": 2834.189994478189,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Snowy Mountain Crossroads 95,-3",
+        "x": 5236.592379900608,
+        "y": 2685.107807840972,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Frostbound Mountains Summit 167,45",
+        "x": 5423.417250138045,
+        "y": 2560.480618442849,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Sealed Realm of the Swift 286,18",
+        "x": 5730.611595803423,
+        "y": 2628.3043622308114,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Mossanda Forest 233,-117",
+        "x": 5594.4552181115405,
+        "y": 2980.795582551077,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Gobfin's Turf 149,-208",
+        "x": 5376.113086692435,
+        "y": 3214.901998895638,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Rayne Syndicate Tower Entrance 118,-422",
+        "x": 5295.3013362782995,
+        "y": 3772.44200993926,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Grassy Behemoth Hills 172,-475",
+        "x": 5435.427056874655,
+        "y": 3909.604859193815,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Desolate Church 63,-416",
+        "x": 5152.5124240750965,
+        "y": 3755.835229155163,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Hill of Beginnings 240,-512",
+        "x": 5611.022418553285,
+        "y": 4004.3149641082273,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Small Settlement 73,-485",
+        "x": 5179.975527332966,
+        "y": 3935.5186747653233,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Sealed Realm of the Frozen Wings 119,-337",
+        "x": 5298.558233020431,
+        "y": 3550.175770292656,
+        "icon": "fast-travel.webp"
+      },
+      {
+        "label": "Fort Ruins 181,-390",
+        "x": 5459.0339039204855,
+        "y": 3687.8983986747653,
+        "icon": "fast-travel.webp"
+      }
+    ],
+    "Watchtower": [
+      {
+        "label": "Crescent Moon Shore Watchtower -38,-160",
+        "x": 4890.490557702927,
+        "y": 3090.925057979017,
+        "icon": "watchtower.webp"
+      },
+      {
+        "label": "Deep Bamboo Thicket Watchtower -313,-154",
+        "x": 4177.281060187742,
+        "y": 3075.794058531198,
+        "icon": "watchtower.webp"
+      },
+      {
+        "label": "Dry Sandy Beach Watchtower -692,-690",
+        "x": 3194.5463942573165,
+        "y": 4467.263611264494,
+        "icon": "watchtower.webp"
+      },
+      {
+        "label": "Sunreach Watchtower -292,-1494",
+        "x": 4231.449585864163,
+        "y": 6552.322120375483,
+        "icon": "watchtower.webp"
+      },
+      {
+        "label": "Windswept Island Watchtower -14,-488",
+        "x": 4953.542043070127,
+        "y": 3943.7004969630043,
+        "icon": "watchtower.webp"
+      },
+      {
+        "label": "Eastern Wild Island Watchtower 512,-149",
+        "x": 6319.210866924351,
+        "y": 3063.597658752071,
+        "icon": "watchtower.webp"
+      },
+      {
+        "label": "Searing Dunes Watchtower 450,204",
+        "x": 6157.270723357261,
+        "y": 2147.6689563776918,
+        "icon": "watchtower.webp"
+      },
+      {
+        "label": "Sandstone Plateau Watchtower 324,456",
+        "x": 5829.602032026504,
+        "y": 1492.2750303699613,
+        "icon": "watchtower.webp"
+      },
+      {
+        "label": "Verdant Stream Watchtower 203,-99",
+        "x": 5516.549795692988,
+        "y": 2932.106107123136,
+        "icon": "watchtower.webp"
+      },
+      {
+        "label": "Icy Weasel Hill Watchtower -39,212",
+        "x": 4888.1609718387635,
+        "y": 2125.1533959138596,
+        "icon": "watchtower.webp"
+      },
+      {
+        "label": "Astral Mountains Garden Watchtower -298,444",
+        "x": 4216.307277747101,
+        "y": 1522.5992269464386,
+        "icon": "watchtower.webp"
+      },
+      {
+        "label": "Bamboo Groves Watchtower -235,-365",
+        "x": 4379.824980673661,
+        "y": 3622.8339701822197,
+        "icon": "watchtower.webp"
+      },
+      {
+        "label": "Sea Breeze Archipelago Watchtower -168,-663",
+        "x": 4554.594809497516,
+        "y": 4397.7831474323575,
+        "icon": "watchtower.webp"
+      },
+      {
+        "label": "Sakurajima Watchtower -573,161",
+        "x": 3502.8094091662065,
+        "y": 2257.278233020431,
+        "icon": "watchtower.webp"
+      },
+      {
+        "label": "Scorched Obsidian Watchtower -465,-524",
+        "x": 3781.5115626725565,
+        "y": 4035.9622749861956,
+        "icon": "watchtower.webp"
+      },
+      {
+        "label": "Burning Fault Watchtower -799,-1097",
+        "x": 2915.765080066262,
+        "y": 5524.064406405301,
+        "icon": "watchtower.webp"
+      },
+      {
+        "label": "Frozen Coral Hill Watchtower -1117,-1440",
+        "x": 2090.254842628382,
+        "y": 6413.112401987852,
+        "icon": "watchtower.webp"
+      },
+      {
+        "label": "Loess Plains Watchtower -962,-1345",
+        "x": 2493.6859635560463,
+        "y": 6167.15450027609,
+        "icon": "watchtower.webp"
+      },
+      {
+        "label": "Scorched Plateau Watchtower -1272,-1101",
+        "x": 1689.390789618995,
+        "y": 5533.258354500276,
+        "icon": "watchtower.webp"
+      },
+      {
+        "label": "Arid Wasteland Watchtower -1020,-1113",
+        "x": 2341.001965764771,
+        "y": 5563.9500828271675,
+        "icon": "watchtower.webp"
+      }
+    ]
+  }
+}

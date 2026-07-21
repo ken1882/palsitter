@@ -1,0 +1,37 @@
+<div id="palworld-map-page" class="palworld-map-page">
+  <div id="palworld-map-viewport" class="palworld-map-viewport" tabindex="0" role="application" aria-label="{{map_aria}}">
+    <div id="palworld-map-world" class="palworld-map-world">
+      {{#layers}}
+      <div class="palworld-map-layer" data-map-name="{{name}}" {{#hidden}}hidden{{/hidden}}>
+        <div class="palworld-map-base">
+          {{#fallback_tiles}}<img class="palworld-map-fallback-tile" draggable="false" alt="" src="{{src}}" data-map-left="{{left}}" data-map-top="{{top}}" data-map-width="{{width}}" data-map-height="{{height}}">{{/fallback_tiles}}
+        </div>
+        <div class="palworld-map-tiles">
+          {{#tiles}}<img class="palworld-map-tile" draggable="false" alt="" src="{{src}}" data-map-left="{{left}}" data-map-top="{{top}}">{{/tiles}}
+        </div>
+        <div class="palworld-map-pois">
+          {{#markers}}<span class="palworld-map-poi-wrap" data-poi-type="{{type}}" data-location-name="{{label}}" title="{{label}}" data-map-left="{{left}}" data-map-top="{{top}}"><img class="palworld-map-poi" data-poi-type="{{type}}" src="{{src}}" alt="{{label}}" draggable="false"><span class="palworld-map-tooltip" role="tooltip">{{label}}</span></span>{{/markers}}
+        </div>
+      </div>
+      {{/layers}}
+      <div id="palworld-map-players" class="palworld-map-players"></div>
+    </div>
+    <div id="palworld-map-top-left" class="palworld-map-overlay palworld-map-top-left">
+      <label class="palworld-map-select-label" for="palworld-map-select">{{map_select}}</label>
+      <select id="palworld-map-select" class="palworld-map-select">
+        <option selected value="palpagos">{{palpagos}}</option><option value="world-tree">{{world_tree}}</option>
+      </select>
+      <div class="palworld-map-legend" aria-label="{{legend}}">
+        <span><img src="{{fast_travel_icon}}" alt="">{{fast_travel}}</span>
+        <span><img src="{{watchtower_icon}}" alt="">{{watchtower}}</span>
+      </div>
+    </div>
+    <div id="palworld-map-top-right" class="palworld-map-overlay palworld-map-top-right">
+      <button id="palworld-map-player-button" class="palworld-map-player-button" type="button" aria-expanded="false" aria-controls="palworld-map-player-dropdown">{{players}}</button>
+      <div id="palworld-map-player-dropdown" class="palworld-map-player-dropdown" hidden><div class="palworld-map-player-dropdown-title">{{player_list}}</div><div id="palworld-map-player-list" class="palworld-map-player-list"></div></div>
+    </div>
+    <div class="palworld-map-overlay palworld-map-zoom-controls" aria-label="{{zoom_controls}}">
+      <button id="palworld-map-zoom-in" type="button" aria-label="{{zoom_in}}">+</button><button id="palworld-map-zoom-out" type="button" aria-label="{{zoom_out}}">−</button>
+    </div>
+  </div>
+</div>
