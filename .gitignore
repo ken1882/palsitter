@@ -21,6 +21,17 @@ env/
 !/Pal/.gitkeep
 /profile/*
 !/profile/.gitkeep
+/tmp/*
+
+# Electron build outputs
+/desktop/node_modules/
+/desktop/dist/
+/desktop/runtime/
+/desktop/.cache/
+/desktop/.electron-gyp/
+npm-debug.log*
+*.tsbuildinfo
+/desktop/assets/*.original
 
 # OS/editor files
 .DS_Store

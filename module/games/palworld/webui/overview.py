@@ -752,6 +752,11 @@ def _restart(name: str) -> None:
     _instance(name)
 
 def _backup_now(name: str) -> None:
+    from module.webui.shutdown import is_shutting_down
+
+    if is_shutting_down():
+        _manager(name).append_log("Backup rejected: Palsitter is shutting down")
+        return
     if client_query("dom.scopeExists", scope="scheduler_backup"):
         _update_scheduler_backup(name, disabled=True)
     if client_query("dom.scopeExists", scope="backup_now_button"):
@@ -761,6 +766,10 @@ def _backup_now(name: str) -> None:
     task.start()
 
 def _run_backup_now(name: str) -> None:
+    from module.webui.shutdown import is_shutting_down
+
+    if is_shutting_down():
+        return
     profile = load_profile(name)
     try:
         result = BackupService(

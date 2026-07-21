@@ -226,6 +226,10 @@ def _confirm_world_switch(name: str, world_id: str) -> None:
         )
 
 def _start_world_switch(name: str, world_id: str) -> None:
+    from module.webui.shutdown import is_shutting_down
+
+    if is_shutting_down():
+        return
     close_popup()
 
     def run() -> None:
@@ -249,6 +253,10 @@ def _start_world_switch(name: str, world_id: str) -> None:
     task.start()
 
 def _save_backup_settings(name: str, *, rerender: bool = True) -> bool:
+    from module.webui.shutdown import is_shutting_down
+
+    if is_shutting_down():
+        return False
     profile = load_profile(name)
     data = profile.to_dict()
     for key in ("backup_dir", "backup_interval_minutes", "backup_retention_count"):
@@ -403,6 +411,10 @@ def _confirm_backup_delete(name: str, path: Path) -> None:
         )
 
 def _delete_backup(name: str, path: Path) -> None:
+    from module.webui.shutdown import is_shutting_down
+
+    if is_shutting_down():
+        return
     close_popup()
     try:
         BackupService(load_profile(name), logger=_manager(name).append_log).delete_backup(path)
@@ -428,6 +440,10 @@ def _confirm_backup_rollback(name: str, path: Path) -> None:
         )
 
 def _start_backup_rollback(name: str, path: Path) -> None:
+    from module.webui.shutdown import is_shutting_down
+
+    if is_shutting_down():
+        return
     close_popup()
     toast(t("backups.rollback_started"))
     task = threading.Thread(
@@ -445,6 +461,10 @@ def _run_backup_rollback(
     service=None,
     sleep=time.sleep,
 ) -> None:
+    from module.webui.shutdown import is_shutting_down
+
+    if is_shutting_down():
+        return
     manager = manager or _manager(name)
     profile = load_profile(name)
     service = service or BackupService(

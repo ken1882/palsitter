@@ -353,6 +353,10 @@ def run_workflow() -> None:
 
 def start_workflow() -> dict[str, Any] | None:
     global _WORKFLOW_THREAD
+    from module.webui.shutdown import is_shutting_down
+
+    if is_shutting_down():
+        return load_state()
     with _WORKFLOW_LOCK:
         state = begin_operation()
         if state is None or state.get("phase") != "saving":

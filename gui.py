@@ -4,30 +4,84 @@ import argparse
 import os
 import subprocess
 import sys
+import threading
 from pathlib import Path
 
 from pywebio import start_server
 
 from module.webui.app import app
+from module.webui.desktop_control import DesktopControlServer
 from module.webui.restart import RESTART_EXIT_CODE
+from module.webui.shutdown import shutdown_all
 
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Palsitter web GUI")
     parser.add_argument("--host", default=os.getenv("PALSITTER_HOST", "127.0.0.1"))
     parser.add_argument("--port", type=int, default=int(os.getenv("PALSITTER_PORT", "22368")))
+    parser.add_argument(
+        "--desktop-server",
+        action="store_true",
+        help="Run one desktop-managed GUI server without the restart wrapper",
+    )
+    parser.add_argument(
+        "--control-port",
+        type=int,
+        default=int(os.getenv("PALSITTER_CONTROL_PORT", "22369")),
+        help=argparse.SUPPRESS,
+    )
     parser.add_argument("--server-child", action="store_true", help=argparse.SUPPRESS)
     return parser
 
 
-def _run_server(host: str, port: int) -> None:
-    Path("logs").mkdir(exist_ok=True)
+def _run_server(host: str, port: int, loop_ready=None) -> None:
+    import tornado.ioloop
+
+    if loop_ready is not None:
+        loop_ready(tornado.ioloop.IOLoop.current())
+    log_dir = Path(os.getenv("PALSITTER_LOG_DIR", str(Path(__file__).resolve().parent / "logs")))
+    log_dir.mkdir(parents=True, exist_ok=True)
     static_dir = Path(__file__).resolve().parent / "assets"
     start_server(app, host=host, port=port, debug=False, static_dir=str(static_dir))
 
 
+def _run_desktop_server(host: str, port: int, control_port: int) -> int:
+    loop_ready = threading.Event()
+    loop_holder: dict[str, object] = {}
+
+    def remember_loop(loop: object) -> None:
+        loop_holder["loop"] = loop
+        loop_ready.set()
+
+    def stop_web_server() -> None:
+        loop = loop_holder.get("loop")
+        if loop is not None:
+            loop.add_callback(loop.stop)
+
+    control = DesktopControlServer(
+        control_port,
+        os.environ.get("PALSITTER_DESKTOP_TOKEN", ""),
+        shutdown_all,
+        stop_web_server,
+    )
+    control.start()
+    web_thread = threading.Thread(
+        target=_run_server,
+        args=(host, port, remember_loop),
+        name="palsitter-web-server",
+        daemon=True,
+    )
+    web_thread.start()
+    loop_ready.wait(timeout=10)
+    web_thread.join()
+    control.close()
+    return 0
+
+
 def main() -> int:
     args = _parser().parse_args()
+    if args.desktop_server:
+        return _run_desktop_server(args.host, args.port, args.control_port)
     if args.server_child:
         _run_server(args.host, args.port)
         return 0

@@ -22,3 +22,4 @@ These rules belong to the multi-game application rather than one game integratio
 - [Language / i18n](./features/i18n.md)
 - [File Browser](./features/file-browser.md)
 - [Pagination Table](./features/pagination-table.md)
+- [Windows Electron Release](./features/windows-electron-release.md)

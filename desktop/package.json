@@ -1,0 +1,42 @@
+{
+  "name": "palsitter-desktop",
+  "version": "1.0.0",
+  "description": "Palsitter desktop shell",
+  "author": "Palsitter",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "build:win": "electron-builder --win --x64"
+  },
+  "devDependencies": {
+    "electron": "43.1.1",
+    "electron-builder": "26.15.3"
+  },
+  "build": {
+    "appId": "com.palsitter.desktop",
+    "productName": "Palsitter",
+    "asar": false,
+    "directories": {
+      "output": "dist",
+      "buildResources": "build-resources"
+    },
+    "files": [
+      "main.js",
+      "package.json",
+      "assets/**/*"
+    ],
+    "extraResources": [
+      { "from": "../gui.py", "to": "backend/gui.py" },
+      { "from": "../module", "to": "backend/module" },
+      { "from": "../assets", "to": "backend/assets" },
+      { "from": "../config", "to": "backend/config-template" },
+      { "from": "../requirements-runtime.txt", "to": "backend/requirements-runtime.txt" },
+      { "from": "runtime", "to": "python" }
+    ],
+    "win": {
+      "icon": "build-resources/palsitter.ico",
+      "target": [{ "target": "dir", "arch": ["x64"] }]
+    }
+  }
+}

@@ -21,6 +21,14 @@ _PROCESS_CONTEXT = mp.get_context("spawn")
 _PROCESS_FACTORY = _PROCESS_CONTEXT.Process
 
 
+def _shutdown_in_progress() -> bool:
+    # Keep the shutdown coordinator independent from ProcessManager's import
+    # path while still preventing new lifecycle work during desktop exit.
+    from module.webui.shutdown import is_shutting_down
+
+    return is_shutting_down()
+
+
 @dataclass(frozen=True)
 class LifecycleEventRecord:
     timestamp: dt.datetime
@@ -360,7 +368,10 @@ class ProcessManager:
         update: bool | None = None,
         reason: str = "manual start",
         adopt_managed: bool = False,
+        shutdown: bool = False,
     ) -> bool:
+        if _shutdown_in_progress() and not shutdown:
+            return self._operation_rejected("Palsitter is shutting down")
         record = load_instance(self.config_name)
         adapter = get_game(record.game)
         if not adapter.capabilities.lifecycle:
@@ -511,6 +522,8 @@ class ProcessManager:
             self._record_lifecycle_event(reason, f"failed: {exc}")
 
     def _begin_adapter_operation(self, kind: str, *, validate: bool = False, force: bool = False) -> bool:
+        if _shutdown_in_progress():
+            return self._operation_rejected("Palsitter is shutting down")
         record = load_instance(self.config_name)
         adapter = get_game(record.game)
         if not adapter.capabilities.updates:
@@ -660,7 +673,9 @@ class ProcessManager:
             return self.check_update(force=option)
         return self.update(validate=option)
 
-    def stop(self) -> bool:
+    def stop(self, *, shutdown: bool = False) -> bool:
+        if _shutdown_in_progress() and not shutdown:
+            return self._operation_rejected("Palsitter is shutting down")
         if not self.active:
             return self._operation_rejected("Not running")
         with self._lock:
@@ -673,6 +688,8 @@ class ProcessManager:
         return True
 
     def kill(self) -> bool:
+        if _shutdown_in_progress():
+            return self._operation_rejected("Palsitter is shutting down")
         if self.ownership == "external":
             return self._operation_rejected("Cannot KILL an externally managed server")
         if not self.active and not self.alive:
@@ -767,6 +784,8 @@ class ProcessManager:
         return True
 
     def restart(self) -> bool:
+        if _shutdown_in_progress():
+            return self._operation_rejected("Palsitter is shutting down")
         if self.ownership == "external":
             return self._operation_rejected("Cannot restart an externally managed server")
         if not self.active:

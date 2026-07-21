@@ -29,3 +29,4 @@ features that implement their behavior instead of repeating those rules.
 - [Shared specifications](./shared/README.md)
 - [Palworld specifications](./games/palworld/README.md)
 - [Satisfactory specifications](./games/satisfactory/README.md)
+- [Windows Electron release](./shared/features/windows-electron-release.md)

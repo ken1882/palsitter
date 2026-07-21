@@ -1,0 +1,5 @@
+palworld-save-tools==0.24.0
+psutil==7.2.2
+pywebio==1.8.4
+pywinpty>=2.0; sys_platform == "win32"
+requests==2.34.2

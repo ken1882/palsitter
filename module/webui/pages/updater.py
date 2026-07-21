@@ -136,6 +136,10 @@ def _render_updater_state(state) -> None:
         _render_updater_tables()
 
 def _check_updater() -> None:
+    from module.webui.shutdown import is_shutting_down
+
+    if is_shutting_down():
+        return
     _render_updater_state("checking")
     stop_event = threading.Event()
     register_stop_event(stop_event)
@@ -183,6 +187,10 @@ def _pull_update() -> bool:
         return False
 
 def _run_updater() -> None:
+    from module.webui.shutdown import is_shutting_down
+
+    if is_shutting_down():
+        return
     _render_updater_state("updating")
     stop_event = threading.Event()
     register_stop_event(stop_event)
