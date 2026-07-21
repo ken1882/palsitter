@@ -1,0 +1,52 @@
+param(
+    [string]$Output = "$(Join-Path $PSScriptRoot '..\source')"
+)
+
+$ErrorActionPreference = "Stop"
+$metadataPath = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\git-metadata'))
+$outputPath = if ([IO.Path]::IsPathRooted($Output)) {
+    [IO.Path]::GetFullPath($Output)
+} else {
+    [IO.Path]::GetFullPath((Join-Path $PSScriptRoot $Output))
+}
+$repositoryRoot = (& git -c safe.directory=* rev-parse --show-toplevel).Trim()
+$archive = Join-Path $env:TEMP "palsitter-source-$([guid]::NewGuid().ToString('N')).tar"
+
+if (Test-Path -LiteralPath $outputPath) {
+    Remove-Item -LiteralPath $outputPath -Recurse -Force
+}
+if (Test-Path -LiteralPath $metadataPath) {
+    Remove-Item -LiteralPath $metadataPath -Recurse -Force
+}
+New-Item -ItemType Directory -Path $outputPath -Force | Out-Null
+
+& git -c safe.directory=* -C $repositoryRoot archive --format=tar --output=$archive HEAD
+if ($LASTEXITCODE -ne 0) {
+    throw "Could not create a source archive from Git"
+}
+try {
+    tar -xf $archive -C $outputPath
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not extract the source archive"
+    }
+} finally {
+    Remove-Item -LiteralPath $archive -Force -ErrorAction SilentlyContinue
+}
+
+Copy-Item -LiteralPath (Join-Path $repositoryRoot '.git') -Destination $metadataPath -Recurse -Force
+& git -c safe.directory=* --git-dir $metadataPath config core.autocrlf false
+if ($LASTEXITCODE -ne 0) {
+    throw "Could not configure packaged Git metadata"
+}
+& git -c safe.directory=* -c core.autocrlf=true --git-dir $metadataPath --work-tree $outputPath add --all
+if ($LASTEXITCODE -ne 0) {
+    throw "Could not refresh packaged Git metadata"
+}
+$status = & git -c safe.directory=* --git-dir $metadataPath --work-tree $outputPath status --porcelain --untracked-files=all
+if ($status) {
+    throw "Packaged source is not clean: $($status -join '; ')"
+}
+
+if (-not (Test-Path -LiteralPath (Join-Path $outputPath 'gui.py'))) {
+    throw "The staged source is missing gui.py"
+}

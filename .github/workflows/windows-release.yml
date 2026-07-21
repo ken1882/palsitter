@@ -13,6 +13,11 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Preserve an updateable main branch in packaged history
+        shell: pwsh
+        run: git switch -C main $env:GITHUB_SHA
       - uses: actions/setup-node@v4
         with:
           node-version: '24.15.0'
@@ -30,6 +35,12 @@ jobs:
       - name: Assemble standalone Python runtime
         shell: pwsh
         run: .\desktop\scripts\build-runtime.ps1
+      - name: Assemble bundled Git runtime
+        shell: pwsh
+        run: .\desktop\scripts\build-git.ps1
+      - name: Stage tracked source for the editable release
+        shell: pwsh
+        run: .\desktop\scripts\prepare-source.ps1
       - name: Compile Python sources
         run: python -m compileall -q .
       - name: Build unpacked Electron application

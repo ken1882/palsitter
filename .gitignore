@@ -27,6 +27,9 @@ env/
 /desktop/node_modules/
 /desktop/dist/
 /desktop/runtime/
+/desktop/git-runtime/
+/desktop/git-metadata/
+/desktop/source/
 /desktop/.cache/
 /desktop/.electron-gyp/
 npm-debug.log*

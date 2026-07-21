@@ -151,6 +151,7 @@ class UE4SSService:
             reason_key = "mods.native_linux_unsupported"
         elif not server_installed:
             reason = "Install the Palworld server before managing UE4SS."
+            reason_key = "mods.server_not_installed"
         version = str(marker.get("version")) if installed and marker.get("version") else None
         return ModsStatus(
             supported=supported,

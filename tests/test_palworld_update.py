@@ -267,6 +267,40 @@ def test_install_or_update_builds_validate_command_and_reports_structured_progre
     assert events[-1].phase == "complete"
 
 
+def test_install_or_update_retries_when_steamcmd_self_update_is_not_last_line(tmp_path):
+    profile = _profile(tmp_path)
+    Path(profile.steamcmd).parent.mkdir(parents=True)
+    Path(profile.steamcmd).write_text("stub", encoding="utf-8")
+    calls = []
+
+    def factory(cmd, **kwargs):
+        calls.append(cmd)
+        if len(calls) == 1:
+            return FakeProcess(
+                [
+                    "[----] Update complete, launching Steamcmd...\n",
+                    "ERROR! Failed to install app '2394010' (Missing configuration)\n",
+                    "CWorkThreadPool::~CWorkThreadPool: work processing queue not empty: 2 items discarded.\n",
+                ],
+                7,
+            )
+        Path(profile.executable).parent.mkdir(parents=True, exist_ok=True)
+        Path(profile.executable).write_text("stub", encoding="utf-8")
+        manifest = appmanifest_path(profile)
+        manifest.parent.mkdir(parents=True, exist_ok=True)
+        manifest.write_text('"buildid" "300"', encoding="utf-8")
+        return FakeProcess(["Success! App '2394010' fully installed.\n"])
+
+    info = PalworldUpdateService(
+        profile,
+        logger=lambda message: None,
+        pty_process_factory=factory,
+    ).install_or_update()
+
+    assert len(calls) == 2
+    assert info.installed_build_id == "300"
+
+
 def test_linux_install_or_update_validates_linux_server_executable(tmp_path, monkeypatch):
     monkeypatch.setenv("PALSITTER_CONFIG_DIR", str(tmp_path / "config"))
     monkeypatch.setattr("module.games.palworld.config.WINDOWS", False)

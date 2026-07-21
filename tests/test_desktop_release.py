@@ -14,11 +14,15 @@ def test_desktop_package_keeps_palsitter_source_unpacked():
     assert package["build"]["asar"] is False
     assert "main.js" in package["build"]["files"]
     resources = package["build"]["extraResources"]
+    source = next(item for item in resources if item["to"] == "backend")
+    assert source["from"] == "source"
+    history = next(item for item in resources if item["to"] == "backend/.git")
+    assert history["from"] == "git-metadata"
     assert {item["to"] for item in resources} >= {
-        "backend/gui.py",
-        "backend/module",
-        "backend/assets",
+        "backend/.git",
+        "backend/config/.gitkeep",
         "python",
+        "git",
     }
 
 
@@ -28,8 +32,21 @@ def test_desktop_source_and_release_icon_exist():
     assert (DESKTOP / "build-resources" / "palsitter.ico").is_file()
 
 
+def test_packaged_data_stays_next_to_the_portable_executable():
+    source = (DESKTOP / "main.js").read_text(encoding="utf-8")
+
+    assert "app.setPath('userData'" in source
+    assert "path.dirname(process.execPath)" in source
+    assert "path.join(path.dirname(process.execPath), 'data')" in source
+
+
 def test_runtime_builder_exposes_backend_to_embedded_python():
     script = (DESKTOP / "scripts" / "build-runtime.ps1").read_text(encoding="utf-8")
 
     assert '"../backend"' in script
     assert '"python312.zip"' in script
+
+
+def test_release_scripts_stage_source_and_bundle_git():
+    assert (DESKTOP / "scripts" / "prepare-source.ps1").is_file()
+    assert (DESKTOP / "scripts" / "build-git.ps1").is_file()

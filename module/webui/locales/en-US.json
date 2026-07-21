@@ -59,6 +59,7 @@
   "mods.not_installed": "Not installed",
   "mods.ue4ss_description": "UE4SS provides the runtime used by Lua and Blueprint mods. Changes take effect the next time the server starts.",
   "mods.unsupported": "Unavailable: {reason}",
+  "mods.server_not_installed": "Install the Palworld server before managing UE4SS.",
   "mods.native_linux_unsupported": "UE4SS Lua/C++ management is not supported for native Linux Palworld servers.",
   "mods.loading_releases": "Loading UE4SS releases from GitHub...",
   "mods.no_releases": "No installable UE4SS releases were found.",

@@ -214,8 +214,8 @@ class PalworldUpdateService:
                 args.append("validate")
             args.append("+quit")
             self._emit(kind, "updating", 0.0, "Running SteamCMD")
-            returncode, last_line, _ = self._run_steamcmd(args, kind)
-            if returncode != 0 and STEAMCMD_SELF_UPDATE_MARKER in last_line:
+            returncode, last_line, output = self._run_steamcmd(args, kind)
+            if returncode != 0 and STEAMCMD_SELF_UPDATE_MARKER in output:
                 self.log("SteamCMD updated itself; retrying server update")
                 returncode, last_line, _ = self._run_steamcmd(args, kind)
             if returncode != 0:

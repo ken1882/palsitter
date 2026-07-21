@@ -69,3 +69,12 @@ def test_ue4ss_linux_unavailable_reason_is_translated():
         "ネイティブ Linux の Palworld サーバーでは UE4SS Lua/C++ の管理に対応していません。"
         "Pak MOD は一覧表示、有効化、無効化、削除ができます。"
     )
+
+
+def test_ue4ss_missing_server_reason_is_translated():
+    assert t("mods.server_not_installed", language="zh-TW") == (
+        "管理 UE4SS 前請先安裝 Palworld 伺服器。"
+    )
+    assert t("mods.server_not_installed", language="ja-JP") == (
+        "UE4SS を管理する前に、Palworld サーバーをインストールしてください。"
+    )

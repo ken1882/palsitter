@@ -259,6 +259,14 @@ def test_status_lists_mods_and_manual_install_has_unknown_version(tmp_path, monk
     ]
 
 
+def test_status_translates_missing_server_reason_key(tmp_path, monkeypatch):
+    monkeypatch.setenv("PALSITTER_CONFIG_DIR", str(tmp_path / "config"))
+    status = UE4SSService(PalworldProfile(name="default"), platform_supported=True).status()
+
+    assert status.server_installed is False
+    assert status.reason_key == "mods.server_not_installed"
+
+
 def test_linux_status_keeps_pak_management_available_and_ue4ss_unsupported(tmp_path, monkeypatch):
     monkeypatch.setattr("module.games.palworld.config.WINDOWS", False)
     profile = _installed_profile(tmp_path, monkeypatch)

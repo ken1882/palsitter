@@ -1,5 +1,5 @@
 const { app, BrowserWindow, dialog, Menu, nativeImage, Tray } = require('electron');
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 const net = require('net');
 const path = require('path');
 
@@ -22,6 +22,12 @@ function applicationRoot() {
   return app.isPackaged ? process.resourcesPath : path.resolve(__dirname, '..');
 }
 
+function configureDataPath() {
+  if (app.isPackaged) {
+    app.setPath('userData', path.join(path.dirname(process.execPath), 'data'));
+  }
+}
+
 function backendRoot() {
   return app.isPackaged ? path.join(applicationRoot(), 'backend') : applicationRoot();
 }
@@ -30,6 +36,20 @@ function pythonPath() {
   if (process.env.PALSITTER_PYTHON) return process.env.PALSITTER_PYTHON;
   if (app.isPackaged) return path.join(applicationRoot(), 'python', 'python.exe');
   return process.platform === 'win32' ? 'python.exe' : 'python3';
+}
+
+function gitPath() {
+  if (process.env.PALSITTER_GIT) return process.env.PALSITTER_GIT;
+  if (app.isPackaged) return path.join(applicationRoot(), 'git', 'cmd', 'git.exe');
+  return process.platform === 'win32' ? 'git.exe' : 'git';
+}
+
+function refreshPackagedRepository() {
+  if (!app.isPackaged) return;
+  spawnSync(gitPath(), ['-C', backendRoot(), 'update-index', '--refresh'], {
+    windowsHide: true,
+    stdio: 'ignore',
+  });
 }
 
 function reservePort(preferred) {
@@ -65,6 +85,7 @@ function buildEnvironment(dataRoot) {
     PALSITTER_PROFILE_DIR: path.join(dataRoot, 'profile'),
     PALSITTER_LOG_DIR: path.join(dataRoot, 'logs'),
     PALSITTER_BACKEND_DIR: backend,
+    PALSITTER_GIT: gitPath(),
     PYTHONPATH: process.env.PYTHONPATH ? `${backend}${path.delimiter}${process.env.PYTHONPATH}` : backend,
     PALSITTER_DESKTOP_TOKEN: controlToken,
   };
@@ -208,12 +229,14 @@ async function startBackend() {
 }
 
 async function main() {
+  configureDataPath();
   if (!app.requestSingleInstanceLock()) {
     app.quit();
     return;
   }
   app.on('second-instance', showWindow);
   await app.whenReady();
+  refreshPackagedRepository();
   createWindow();
   createTray();
   try {

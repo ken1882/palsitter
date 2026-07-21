@@ -27,12 +27,15 @@
       "assets/**/*"
     ],
     "extraResources": [
-      { "from": "../gui.py", "to": "backend/gui.py" },
-      { "from": "../module", "to": "backend/module" },
-      { "from": "../assets", "to": "backend/assets" },
-      { "from": "../config", "to": "backend/config-template" },
-      { "from": "../requirements-runtime.txt", "to": "backend/requirements-runtime.txt" },
-      { "from": "runtime", "to": "python" }
+      { "from": "source", "to": "backend" },
+      { "from": "git-metadata", "to": "backend/.git" },
+      { "from": "source/Pal/.gitkeep", "to": "backend/Pal/.gitkeep" },
+      { "from": "source/artifacts/.gitkeep", "to": "backend/artifacts/.gitkeep" },
+      { "from": "source/config/.gitkeep", "to": "backend/config/.gitkeep" },
+      { "from": "source/logs/.gitkeep", "to": "backend/logs/.gitkeep" },
+      { "from": "source/profile/.gitkeep", "to": "backend/profile/.gitkeep" },
+      { "from": "runtime", "to": "python" },
+      { "from": "git-runtime", "to": "git" }
     ],
     "win": {
       "icon": "build-resources/palsitter.ico",

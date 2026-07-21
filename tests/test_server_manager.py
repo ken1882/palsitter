@@ -1150,7 +1150,16 @@ def test_run_update_retries_after_steamcmd_self_update():
     def pty_process(cmd, **kwargs):
         calls.append(cmd)
         if len(calls) == 1:
-            return FakeProc(stdout=iter(["[----] Update complete, launching...\n"]), returncode=7)
+            return FakeProc(
+                stdout=iter(
+                    [
+                        "[----] Update complete, launching Steamcmd...\n",
+                        "ERROR! Failed to install app '2394010' (Missing configuration)\n",
+                        "CWorkThreadPool::~CWorkThreadPool: work processing queue not empty: 2 items discarded.\n",
+                    ]
+                ),
+                returncode=7,
+            )
         return FakeProc(stdout=iter(["Success! App '2394010' fully installed.\n"]), returncode=0)
 
     manager = PalServerManager(Profile(name="test"), logger=logs.append, pty_process_factory=pty_process)

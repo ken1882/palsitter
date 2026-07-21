@@ -280,7 +280,7 @@ class PalServerManager:
             AdapterEvent(when or self.now(), event_type, message)
         )
 
-    def _run_steamcmd_update(self) -> tuple[int, str]:
+    def _run_steamcmd_update(self) -> tuple[int, str, str]:
         process = self.pty_process_factory(
             self.steam_update_args(),
             cwd=self._steamcmd_workdir(),
@@ -315,6 +315,7 @@ class PalServerManager:
 
         reader = threading.Thread(target=read_output, daemon=True)
         reader.start()
+        all_lines: list[str] = []
         last_line = ""
         last_output_at = time.monotonic()
         silence_logged_at = last_output_at
@@ -327,6 +328,7 @@ class PalServerManager:
             text = ANSI_ESCAPE_RE.sub("", line.rstrip()).lstrip()
             if not text:
                 return
+            all_lines.append(text)
             last_line = text
             last_output_at = time.monotonic()
             silence_logged_at = last_output_at
@@ -353,7 +355,7 @@ class PalServerManager:
                         handle_line(output.get_nowait())
                     except queue.Empty:
                         break
-                return returncode, last_line
+                return returncode, last_line, "\n".join(all_lines)
 
             try:
                 handle_line(output.get(timeout=1))
@@ -812,10 +814,10 @@ class PalServerManager:
                 handle.write(" ".join(self.steam_update_args()[1:]) + "\n")
             self.log("Update completed")
             return
-        returncode, last_line = self._run_steamcmd_update()
-        if returncode != 0 and STEAMCMD_SELF_UPDATE_MARKER in last_line:
+        returncode, last_line, output = self._run_steamcmd_update()
+        if returncode != 0 and STEAMCMD_SELF_UPDATE_MARKER in output:
             self.log("SteamCMD updated itself; retrying server update")
-            returncode, last_line = self._run_steamcmd_update()
+            returncode, last_line, _ = self._run_steamcmd_update()
         if returncode != 0:
             detail = f": {last_line}" if last_line else ""
             raise RuntimeError(f"SteamCMD update failed ({returncode}){detail}")

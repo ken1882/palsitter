@@ -7,6 +7,16 @@ application-owned Electron JavaScript from `resources/app`, Python backend sourc
 The application is intentionally packaged with `asar: false`. Editing Palsitter-owned
 JavaScript, Python, or GUI assets takes effect on the next launch without rebuilding.
 
+The release also contains the repository's full `.git` history under
+`resources/backend/.git` and a portable Git runtime under `resources/git`. This keeps the
+Updater history, fetch, and pull operations functional without requiring Git to be
+installed separately.
+
+Packaged runtime data is stored beside `Palsitter.exe` in the portable release's `data`
+directory instead of `%APPDATA%`: configuration is under `data/config`, instance state
+under `data/profile`, and logs under `data/logs`. The extracted release directory must be
+writable by the current user.
+
 Tray Exit is a full graceful shutdown. It saves active instances, requests graceful
 shutdown through every active supervisor and agent, waits for game servers and agents to
 exit, stops the PyWebIO server, and then quits Electron. If any component does not stop
