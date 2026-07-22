@@ -20,7 +20,8 @@
 .loading-border.loading-fill .spinner-border { border: .2em solid currentColor; }
 .world-field-scope > div { grid-column: 1 / -1; width: 100%; }
 #pywebio-scope-players_list > div > div[style*="grid-auto-flow"],
-#pywebio-scope-players_detail_list > div > div[style*="grid-auto-flow"] { align-items: center; }
+#pywebio-scope-players_detail_list > div > div[style*="grid-auto-flow"],
+#pywebio-scope-players_offline_list > div > div[style*="grid-auto-flow"] { align-items: center; }
 .backup-folder-button { margin: 1rem 0 .25rem .5rem; }
 #pywebio-scope-builtin_backup_title_row > div,
 #pywebio-scope-backup_title_row > div,

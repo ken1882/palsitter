@@ -6,6 +6,12 @@ It is a dedicated REST-backed administration page; the Overview keeps a compact 
 - Each online-player row shows name, level, whole-millisecond ping (rendered with
   `int(ping)`), coordinates, and building count when the REST response supplies them. IP
   addresses are never displayed.
+- The page separates current REST players from offline players retained in the per-instance
+  cache. Offline rows keep their last known player details and have no live kick/ban actions.
+  They omit ping and label cached coordinates as `Last location`.
+- Each cached row records the last login in `yyyy/mm/dd hh:mm:ss` format and total play time;
+  total play time is shown in hours and increases by the REST players-poll interval while the
+  player is online.
 - User ids are masked initially in a fixed-width region. Reveal/Hide and Copy retain
   stable positions for both masked and full values. Reveal changes only that row; Copy
   copies the full id without revealing every other row.
@@ -37,6 +43,7 @@ It is a dedicated REST-backed administration page; the Overview keeps a compact 
 vertical centering, then clicks reveal/copy, Kick, Ban, and cached-player Unban through
 the real page. It also verifies stable row identity and revealed-id state across a cache
 update, the removed controls and stale refreshes, and proves
-polling stops on navigation. Storage tests verify cache upserts, timestamps, name lookup,
+polling stops on navigation. Storage tests verify cache upserts, timestamps, login/play-time
+tracking, name lookup,
 and missing-banlist creation. REST tests assert method, URL, Basic Auth, bodies, successful
 parsing, and HTTP failures against a fake server.

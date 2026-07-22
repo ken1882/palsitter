@@ -16,7 +16,9 @@ RCON is deprecated upstream in favor of the REST API.
   source of truth and creates an empty file when it does not yet exist.
 - Every successful `GET /players` response upserts rows into the per-instance
   `players.json` cache without deleting offline players. Each row seen in that response
-  receives a UTC `updated_at`; banned-player names are resolved from these cached rows.
+  receives a UTC `updated_at`, an `online` state, and a `total_play_time_seconds` increase
+  equal to the configured REST poll interval. `last_login` is set when a player first appears
+  or returns after being offline; banned-player names are resolved from these cached rows.
 - Kick and Ban confirmations may send an empty message but never an empty user id.
 - The client omits IP addresses from its UI model and reports HTTP, authentication, and
   decode failures without clearing the last successful roster.

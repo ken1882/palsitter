@@ -41,5 +41,11 @@ POST /desktop/force-shutdown
 X-Palsitter-Token: <token>
 ```
 
+At startup, if the preferred web or control port is already in use, the executable asks
+whether to stop the process listening on that port. If stopping it does not free the port,
+or the operator declines, it asks whether to choose another available loopback port. Declining
+that second prompt exits without starting Palsitter. Startup prompt text follows the system
+locale for English, Traditional Chinese, and Japanese.
+
 The portable archive is built by the Windows GitHub Actions workflow and includes a
 SHA-256 checksum. It does not include an installer or automatic updater.

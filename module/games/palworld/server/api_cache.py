@@ -80,7 +80,9 @@ class PalRestCache:
             )
         )
         self.players_updated = players_updated or (
-            lambda players: PlayerCache(name).upsert(players)
+            lambda players: PlayerCache(name).upsert(
+                players, poll_interval_seconds=self.poll_interval
+            )
         )
         self.poll_interval = float(poll_interval)
         self._lock = threading.RLock()

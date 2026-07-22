@@ -42,7 +42,9 @@ body.light-palsitter table { background: #fff; border-color: #dee2e6; color: #2c
     .settings-view > div > :nth-child(2) { display: none; }
     .world-filter-toolbar { grid-template-columns: 1fr; }
     #world-changed-only { width: 100%; }
-    #pywebio-scope-players_detail_list > div > div { grid-auto-flow: row !important; grid-template-columns: 1fr !important; }
+    #pywebio-scope-players_detail_list > div > div,
+    #pywebio-scope-players_offline_list > div > div { grid-auto-flow: row !important; grid-template-columns: 1fr !important; }
+    .player-activity { justify-self: start; text-align: left; }
     .player-userid-value { flex-basis: 100%; width: 100%; }
     .metric { min-width: 7rem; }
     #pywebio-scope-scheduler_maintenance > div { grid-auto-flow: row !important; grid-template-columns: 1fr !important; }

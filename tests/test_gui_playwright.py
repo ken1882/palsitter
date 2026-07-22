@@ -25,6 +25,7 @@ from module.games.palworld.server.history import (
     classify_process_exit,
 )
 from module.games.palworld.audit import AuditEvent, AuditStore
+from module.games.palworld.players_cache import PlayerCache
 from module.worldsettings.ini_codec import read_ini_option_settings
 from module.worldsettings.sav_codec import WorldOptionSavCodec, extract_option_values, merge_option_values
 from module.worldsettings.service import resolve_ini_path
@@ -145,6 +146,7 @@ def _mock_metrics_server(
     players_delay=0,
     players_fail_after=None,
     players_override=None,
+    players_sequence=None,
     get_calls=None,
     shutdown_executable=None,
     banlist_path=None,
@@ -189,18 +191,23 @@ def _mock_metrics_server(
                 if player_get_count > 1:
                     time.sleep(players_delay)
                 level = 17 if player_get_count == 1 else 18
-                rows = players_override if players_override is not None else [
-                    {
-                        "name": "Alice",
-                        "userId": "steam_1",
-                        "level": level,
-                        "ping": 23.9,
-                        "location_x": 120.5,
-                        "location_y": -44.25,
-                        "building_count": 7,
-                        "ip": "203.0.113.5",
-                    }
-                ]
+                if players_sequence is not None:
+                    rows = players_sequence[min(player_get_count - 1, len(players_sequence) - 1)]
+                elif players_override is not None:
+                    rows = players_override
+                else:
+                    rows = [
+                        {
+                            "name": "Alice",
+                            "userId": "steam_1",
+                            "level": level,
+                            "ping": 23.9,
+                            "location_x": 120.5,
+                            "location_y": -44.25,
+                            "building_count": 7,
+                            "ip": "203.0.113.5",
+                        }
+                    ]
                 self._write_json(
                     {
                         "players": rows
@@ -442,6 +449,40 @@ def test_home_has_home_updater_utils_and_no_add_server(tmp_path, monkeypatch):
         assert page.locator("#pywebio-scope-content").get_by_text(
             "Automatic git update is not available yet."
         ).count() == 0
+
+
+@pytest.mark.playwright
+def test_home_navigation_interrupts_slow_card_load_and_discards_stale_result(
+    tmp_path, monkeypatch
+):
+    get_calls = []
+    with _running_palserver_process(tmp_path), _mock_metrics_server(
+        delay=5, get_calls=get_calls
+    ) as (rest_port, _):
+        with _gui_page(tmp_path, monkeypatch, rest_port=rest_port) as (page, _):
+            deadline = time.monotonic() + 15
+            while "/v1/api/metrics" not in get_calls and time.monotonic() < deadline:
+                time.sleep(0.05)
+            assert "/v1/api/metrics" in get_calls
+
+            started = time.monotonic()
+            page.locator("#pywebio-scope-aside").get_by_text(
+                "default", exact=True
+            ).click()
+            page.locator("#pywebio-scope-overview").wait_for(timeout=1000)
+            assert time.monotonic() - started < 1.5
+
+            page.locator("#pywebio-scope-aside").get_by_text(
+                "Home", exact=True
+            ).click()
+            card = page.locator('.instance-card[data-instance-card="default"]')
+            card.wait_for(timeout=5000)
+            page.wait_for_timeout(1000)
+            assert "instance-card-loading" in (card.get_attribute("class") or "")
+
+            page.locator(
+                '.instance-card[data-instance-card="default"]:not(.instance-card-loading)'
+            ).wait_for(timeout=10000)
 
 
 @pytest.mark.playwright
@@ -2031,14 +2072,16 @@ def test_game_map_places_overlays_and_centers_from_cached_players(tmp_path, monk
 
 @pytest.mark.playwright
 @pytest.mark.parametrize(
-    ("language", "map_label", "expected_marker"),
+    ("language", "map_label", "map_name", "expected_marker"),
     [
-        ("zh-TW", "遊戲地圖", "忘卻孤島"),
-        ("ja-JP", "ゲームマップ", "忘れられた孤島"),
+        ("zh-TW", "遊戲地圖", "palpagos", "忘卻孤島"),
+        ("ja-JP", "ゲームマップ", "palpagos", "忘れられた孤島"),
+        ("zh-TW", "遊戲地圖", "world-tree", "腐蝕霧的源頭"),
+        ("ja-JP", "ゲームマップ", "world-tree", "腐蝕霧の根源"),
     ],
 )
 def test_game_map_uses_paldb_localized_marker_names(
-    tmp_path, monkeypatch, language, map_label, expected_marker
+    tmp_path, monkeypatch, language, map_label, map_name, expected_marker
 ):
     with _running_palserver_process(tmp_path), _mock_metrics_server() as (rest_port, _):
         with _gui_page(
@@ -2055,7 +2098,12 @@ def test_game_map_uses_paldb_localized_marker_names(
             ).click()
             viewport = page.locator("#palworld-map-viewport")
             viewport.wait_for(timeout=5000)
-            marker = page.locator(".palworld-map-poi-wrap").first
+            if map_name == "world-tree":
+                page.locator("#palworld-map-select").select_option("world-tree")
+                assert viewport.get_attribute("data-map-name") == "world-tree"
+            marker = page.locator(
+                f".palworld-map-layer[data-map-name='{map_name}'] .palworld-map-poi-wrap"
+            ).first
             assert marker.get_attribute("data-location-name") == expected_marker
             visible_marker_index = page.locator(".palworld-map-poi-wrap").evaluate_all(
                 """
@@ -3090,6 +3138,71 @@ def test_players_panel_lists_roster_and_manages_file_backed_bans(tmp_path, monke
                 get_calls.count("/v1/api/players")
                 - get_calls.count("/v1/api/metrics")
             ) <= 1
+
+
+@pytest.mark.playwright
+def test_players_page_splits_cached_offline_players_and_shows_activity(
+    tmp_path, monkeypatch
+):
+    alice = {
+        "name": "Alice",
+        "userId": "steam_1",
+        "level": 17,
+        "ping": 23.9,
+        "location_x": 192205.78125,
+        "location_y": -226869.515625,
+        "building_count": 7,
+    }
+    bob = {**alice, "name": "Bob", "userId": "steam_2"}
+    with _running_palserver_process(tmp_path), _mock_metrics_server(
+        players_sequence=[[alice], [bob], [alice]],
+    ) as (rest_port, _):
+        with _gui_page(tmp_path, monkeypatch, rest_port=rest_port) as (page, _):
+            page.locator("#pywebio-scope-aside").get_by_text("default", exact=True).click()
+            page.locator("#pywebio-scope-players_panel").get_by_text(
+                "Alice (Lv: 17)", exact=True
+            ).wait_for(timeout=15000)
+            page.locator("#pywebio-scope-menu").get_by_text("Players", exact=True).click()
+
+            online = page.locator("#pywebio-scope-players_detail_list")
+            offline = page.locator("#pywebio-scope-players_offline_list")
+            online.get_by_text("Bob", exact=False).wait_for(timeout=15000)
+            offline.get_by_text("Alice", exact=False).wait_for(timeout=5000)
+            online.get_by_text("Location 192205.78, -226869.52", exact=True).wait_for(timeout=5000)
+            offline.get_by_text("Last location 192205.78, -226869.52", exact=True).wait_for(timeout=5000)
+            assert offline.locator('[data-player-field="ping"]').count() == 0
+            assert online.get_by_role("button", name="Kick", exact=True).count() == 1
+            assert offline.get_by_role("button", name="Kick", exact=True).count() == 0
+            assert online.get_by_text("Last login: ", exact=False).count() == 1
+            assert online.get_by_text("Play time: 0.0hours", exact=True).count() == 1
+            online_row = online.locator("> div").first
+            activity = online_row.locator(".player-activity")
+            kick = online_row.get_by_role("button", name="Kick", exact=True)
+            activity_box = activity.bounding_box()
+            kick_box = kick.bounding_box()
+            assert activity_box is not None and kick_box is not None
+            assert activity_box["x"] + activity_box["width"] <= kick_box["x"]
+            assert activity.evaluate("node => getComputedStyle(node).textAlign") == "right"
+            online.get_by_text("Alice", exact=False).wait_for(timeout=15000)
+            offline.get_by_text("Bob", exact=False).wait_for(timeout=5000)
+
+
+@pytest.mark.playwright
+def test_players_page_shows_cached_players_when_server_is_unavailable(tmp_path, monkeypatch):
+    with _gui_page(tmp_path, monkeypatch) as (page, _):
+        PlayerCache("default").upsert(
+            [{"userId": "steam_cached", "name": "Cached Player", "level": 22}],
+            updated_at="2026-07-22T13:00:00Z",
+            poll_interval_seconds=3,
+        )
+        page.locator("#pywebio-scope-aside").get_by_text("default", exact=True).click()
+        page.locator("#pywebio-scope-menu").get_by_text("Players", exact=True).click()
+
+        offline = page.locator("#pywebio-scope-players_offline_list")
+        offline.get_by_text("Cached Player", exact=False).wait_for(timeout=10000)
+        page.get_by_text("PalServer is not running or its REST API is unavailable.", exact=False).wait_for(
+            timeout=5000
+        )
 
 
 @pytest.mark.playwright

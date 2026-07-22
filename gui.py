@@ -18,6 +18,7 @@ from module.webui.shutdown_workflow import (
     request_force_shutdown,
     start_workflow as start_shutdown_workflow,
 )
+from module.process import kill_by_port
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -36,6 +37,7 @@ def _parser() -> argparse.ArgumentParser:
         help=argparse.SUPPRESS,
     )
     parser.add_argument("--server-child", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--kill-port", type=int, help=argparse.SUPPRESS)
     return parser
 
 
@@ -92,6 +94,9 @@ def _run_desktop_server(host: str, port: int, control_port: int) -> int:
 
 def main() -> int:
     args = _parser().parse_args()
+    if args.kill_port is not None:
+        kill_by_port(args.kill_port)
+        return 0
     if args.desktop_server:
         return _run_desktop_server(args.host, args.port, args.control_port)
     if args.server_child:

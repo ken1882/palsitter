@@ -63,6 +63,7 @@
     "palworld.player_compact_identity": "gui/html/games/palworld/player_compact_identity.html",
     "palworld.players_section_title": "gui/html/games/palworld/players_section_title.html",
     "palworld.player_details": "gui/html/games/palworld/player_details.html",
+    "palworld.player_activity": "gui/html/games/palworld/player_activity.html",
     "palworld.player_unban_button": "gui/html/games/palworld/player_unban_button.html",
     "palworld.restart_history_intro": "gui/html/games/palworld/restart_history_intro.html",
     "palworld.restart_event_details": "gui/html/games/palworld/restart_event_details.html",

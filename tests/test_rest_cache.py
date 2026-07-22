@@ -1,4 +1,5 @@
 from module.config import Profile
+from module.games.palworld.players_cache import PlayerCache
 from module.games.palworld.server.api_cache import PalRestCache
 
 
@@ -98,3 +99,25 @@ def test_cache_clears_session_data_when_server_stops():
     assert cache.snapshot().info == {"version": "v1"}
     assert cache.snapshot().players is None
     assert cache.snapshot().metrics is None
+
+
+def test_cache_default_player_persistence_tracks_poll_interval(tmp_path, monkeypatch):
+    monkeypatch.setenv("PALSITTER_CONFIG_DIR", str(tmp_path / "config"))
+    client = FakeRestClient()
+    profile = Profile(name="test")
+    cache = PalRestCache(
+        "test",
+        profile_loader=lambda _: profile,
+        session_probe=lambda _: (42, 100.0),
+        rest_probe=lambda _: True,
+        client_factory=lambda _: client,
+        poll_interval=3,
+    )
+
+    cache.poll_once(now=0)
+    cache.poll_once(now=3)
+
+    row = PlayerCache("test").rows()[0]
+    assert row["online"] is True
+    assert row["last_login"]
+    assert row["total_play_time_seconds"] == 6.0

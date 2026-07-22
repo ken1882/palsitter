@@ -233,17 +233,25 @@ def _home_card_data(name: str) -> dict:
 
 def _render_home_card(name: str, stop_event: threading.Event | None = None, context=None) -> None:
     context = context or page_context()
+    if stop_event is not None and stop_event.is_set():
+        return
+    data = _home_card_data(name)
+    if stop_event is not None and stop_event.is_set():
+        return
     return run_if_current(
         context,
-        lambda: _render_home_card_current(name, stop_event),
+        lambda: _render_home_card_current(name, data, stop_event),
     )
 
 
-def _render_home_card_current(name: str, stop_event: threading.Event | None = None) -> None:
+def _render_home_card_current(
+    name: str,
+    data: dict,
+    stop_event: threading.Event | None = None,
+) -> None:
     scope = _home_card_scope(name)
     if not client_query("dom.scopeExists", scope=scope):
         return
-    data = _home_card_data(name)
     if stop_event is not None and stop_event.is_set():
         return
     if not client_query("dom.scopeExists", scope=scope):

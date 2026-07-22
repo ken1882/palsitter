@@ -15,6 +15,7 @@ import psutil
 
 from module.games import AdapterEvent, InstanceStatusSummary, OperationProgress, UpdateInfo, get_game
 from module.instances import load_instance, profile_log_path, prune_dated_log_files
+from module.process import kill_process_tree as _kill_process_tree
 
 
 _PROCESS_CONTEXT = mp.get_context("spawn")
@@ -79,29 +80,6 @@ def _run_profile(
         for line in traceback.format_exc().rstrip().splitlines():
             log(line)
         raise
-
-
-def _kill_process_tree(pid: int, grace: float = 3.0) -> None:
-    try:
-        parent = psutil.Process(pid)
-    except psutil.NoSuchProcess:
-        return
-    try:
-        children = parent.children(recursive=True)
-    except (psutil.NoSuchProcess, psutil.AccessDenied):
-        children = []
-    processes = [*children, parent]
-    for proc in processes:
-        try:
-            proc.terminate()
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
-            continue
-    _, alive = psutil.wait_procs(processes, timeout=grace)
-    for proc in alive:
-        try:
-            proc.kill()
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
-            continue
 
 
 class ProcessManager:

@@ -49,6 +49,17 @@ def test_exit_uses_the_shared_shutdown_workflow():
     assert "http://${WEB_HOST}:${controlPort}/desktop/shutdown" in source
 
 
+def test_startup_handles_port_conflicts_with_kill_and_alternate_port_prompts():
+    source = (DESKTOP / "main.js").read_text(encoding="utf-8")
+
+    assert "reservePortWithPrompt" in source
+    assert "--kill-port" in source
+    assert "startupText('conflictTitle')" in source
+    assert "startupText('alternateTitle')" in source
+    assert "return reservePort(0);" in source
+    assert "class StartupCancelledError" in source
+
+
 def test_runtime_builder_exposes_backend_to_embedded_python():
     script = (DESKTOP / "scripts" / "build-runtime.ps1").read_text(encoding="utf-8")
 

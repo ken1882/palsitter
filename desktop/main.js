@@ -1,5 +1,6 @@
 const { app, BrowserWindow, dialog, Menu, nativeImage, Tray } = require('electron');
 const { spawn, spawnSync } = require('child_process');
+const fs = require('fs');
 const net = require('net');
 const path = require('path');
 
@@ -62,6 +63,82 @@ function reservePort(preferred) {
       server.close(() => resolve(port));
     });
   });
+}
+
+class StartupCancelledError extends Error {}
+
+function desktopLocale() {
+  const locale = String(app.getLocale() || 'en-US').toLowerCase();
+  if (locale.startsWith('zh')) return 'zh-TW';
+  if (locale.startsWith('ja')) return 'ja-JP';
+  return 'en-US';
+}
+
+function startupText(key, values = {}) {
+  const keyName = `startup.${key}`;
+  let text;
+  for (const language of [desktopLocale(), 'en-US']) {
+    try {
+      const localePath = path.join(backendRoot(), 'module', 'webui', 'locales', `${language}.json`);
+      const catalog = JSON.parse(fs.readFileSync(localePath, 'utf8'));
+      text = catalog[keyName];
+    } catch (_) {
+      text = null;
+    }
+    if (text) break;
+  }
+  text = text || keyName;
+  for (const [name, value] of Object.entries(values)) {
+    text = text.replaceAll(`{${name}}`, String(value));
+  }
+  return text;
+}
+
+function killPort(port) {
+  const result = spawnSync(
+    pythonPath(),
+    [path.join(backendRoot(), 'gui.py'), '--kill-port', String(port)],
+    { cwd: backendRoot(), windowsHide: true, stdio: 'ignore' },
+  );
+  return !result.error && result.status === 0;
+}
+
+async function reservePortWithPrompt(preferred) {
+  try {
+    return await reservePort(preferred);
+  } catch (error) {
+    if (error.code !== 'EADDRINUSE') throw error;
+  }
+
+  const killResult = await dialog.showMessageBox(mainWindow, {
+    type: 'warning',
+    buttons: [startupText('no'), startupText('kill')],
+    defaultId: 0,
+    cancelId: 0,
+    title: startupText('conflictTitle'),
+    message: startupText('conflictMessage', { port: preferred }),
+    detail: startupText('conflictDetail'),
+  });
+  if (killResult.response === 1 && killPort(preferred)) {
+    try {
+      return await reservePort(preferred);
+    } catch (_) {
+      // The process may still hold the port or another process may have won
+      // the race. Offer the alternate-port path below.
+    }
+  }
+
+  const alternateResult = await dialog.showMessageBox(mainWindow, {
+    type: 'warning',
+    buttons: [startupText('exit'), startupText('useAlternate')],
+    defaultId: 0,
+    cancelId: 0,
+    title: startupText('alternateTitle'),
+    message: startupText('alternateMessage', { port: preferred }),
+    detail: startupText('alternateDetail'),
+  });
+  if (alternateResult.response !== 1) throw new StartupCancelledError();
+  return reservePort(0);
 }
 
 async function waitForBackend(url) {
@@ -215,8 +292,8 @@ function finishExit() {
 }
 
 async function startBackend() {
-  webPort = await reservePort(Number(process.env.PALSITTER_PORT || DEFAULT_WEB_PORT));
-  controlPort = await reservePort(Number(process.env.PALSITTER_CONTROL_PORT || DEFAULT_CONTROL_PORT));
+  webPort = await reservePortWithPrompt(Number(process.env.PALSITTER_PORT || DEFAULT_WEB_PORT));
+  controlPort = await reservePortWithPrompt(Number(process.env.PALSITTER_CONTROL_PORT || DEFAULT_CONTROL_PORT));
   controlToken = require('crypto').randomBytes(32).toString('hex');
   const dataRoot = app.getPath('userData');
   const args = [
@@ -255,7 +332,12 @@ async function main() {
     await startBackend();
     await mainWindow.loadURL(`http://${WEB_HOST}:${webPort}/`);
   } catch (error) {
-    dialog.showErrorBox('Palsitter could not start', String(error.message || error));
+    if (!(error instanceof StartupCancelledError)) {
+      dialog.showErrorBox(
+        startupText('errorTitle'),
+        String(error.message || error),
+      );
+    }
     app.quit();
   }
 }
@@ -268,6 +350,8 @@ app.on('before-quit', (event) => {
 });
 
 main().catch((error) => {
-  dialog.showErrorBox('Palsitter could not start', String(error.message || error));
+  if (!(error instanceof StartupCancelledError)) {
+    dialog.showErrorBox(startupText('errorTitle'), String(error.message || error));
+  }
   app.quit();
 });

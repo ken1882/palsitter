@@ -199,7 +199,8 @@
   margin-top: .75rem;
 }
 
-#pywebio-scope-players_detail_list>div {
+#pywebio-scope-players_detail_list>div,
+#pywebio-scope-players_offline_list>div {
   padding: .6rem 0;
   border-bottom: 1px solid #21262d;
 }
@@ -266,6 +267,18 @@
 .player-userid-row .btn {
   padding: .1rem .4rem;
   font-size: .75rem;
+}
+
+.player-activity {
+  display: grid;
+  gap: .15rem;
+  align-self: center;
+  justify-self: end;
+  color: #adb5bd;
+  font-size: .85rem;
+  text-align: right;
+  white-space: nowrap;
+  margin: .5rem;
 }
 
 .settings-view .settings-category-heading {

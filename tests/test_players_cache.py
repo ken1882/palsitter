@@ -51,6 +51,44 @@ def test_player_cache_skips_rows_without_user_ids(tmp_path, monkeypatch):
     assert cache.upsert([{"name": "Missing ID"}], updated_at="now") == []
 
 
+def test_player_cache_tracks_login_and_play_time_across_online_transitions(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setenv("PALSITTER_CONFIG_DIR", str(tmp_path / "config"))
+    cache = PlayerCache("default")
+
+    cache.upsert(
+        [{"userId": "steam_1", "name": "Alice"}],
+        updated_at="2026-07-17T01:00:00Z",
+        poll_interval_seconds=3,
+    )
+    cache.upsert(
+        [{"userId": "steam_1", "name": "Alice"}],
+        updated_at="2026-07-17T01:00:03Z",
+        poll_interval_seconds=3,
+    )
+    first = cache.rows()[0]
+    assert first["online"] is True
+    assert first["last_login"] == "2026-07-17T01:00:00Z"
+    assert first["total_play_time_seconds"] == 6.0
+
+    cache.upsert([], updated_at="2026-07-17T01:00:06Z", poll_interval_seconds=3)
+    offline = cache.rows()[0]
+    assert offline["online"] is False
+    assert offline["last_login"] == "2026-07-17T01:00:00Z"
+    assert offline["total_play_time_seconds"] == 6.0
+
+    cache.upsert(
+        [{"userId": "steam_1", "name": "Alice"}],
+        updated_at="2026-07-17T01:00:09Z",
+        poll_interval_seconds=3,
+    )
+    logged_in_again = cache.rows()[0]
+    assert logged_in_again["online"] is True
+    assert logged_in_again["last_login"] == "2026-07-17T01:00:09Z"
+    assert logged_in_again["total_play_time_seconds"] == 9.0
+
+
 def test_palworld_ban_list_touches_missing_file_and_reads_unique_ids(
     tmp_path, monkeypatch
 ):
