@@ -13,6 +13,11 @@ from module.webui.app import app
 from module.webui.desktop_control import DesktopControlServer
 from module.webui.restart import RESTART_EXIT_CODE
 from module.webui.shutdown import shutdown_all
+from module.webui.shutdown_workflow import (
+    configure_completion,
+    request_force_shutdown,
+    start_workflow as start_shutdown_workflow,
+)
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -37,8 +42,11 @@ def _parser() -> argparse.ArgumentParser:
 def _run_server(host: str, port: int, loop_ready=None) -> None:
     import tornado.ioloop
 
+    loop = tornado.ioloop.IOLoop.current()
     if loop_ready is not None:
-        loop_ready(tornado.ioloop.IOLoop.current())
+        loop_ready(loop)
+    else:
+        configure_completion(lambda: loop.add_callback(loop.stop))
     log_dir = Path(os.getenv("PALSITTER_LOG_DIR", str(Path(__file__).resolve().parent / "logs")))
     log_dir.mkdir(parents=True, exist_ok=True)
     static_dir = Path(__file__).resolve().parent / "assets"
@@ -58,11 +66,15 @@ def _run_desktop_server(host: str, port: int, control_port: int) -> int:
         if loop is not None:
             loop.add_callback(loop.stop)
 
+    configure_completion(stop_web_server, replace=True)
+
     control = DesktopControlServer(
         control_port,
         os.environ.get("PALSITTER_DESKTOP_TOKEN", ""),
         shutdown_all,
         stop_web_server,
+        request_force_shutdown,
+        start_shutdown_workflow,
     )
     control.start()
     web_thread = threading.Thread(

@@ -5,6 +5,7 @@ from pywebio.session import local
 from module.games.palworld.backup import BackupService
 from module.games.palworld.config import load_profile, save_profile
 from module.webui.i18n import t
+from module.webui.session import page_context, register_page_cleanup
 from module.webui.assets import client_call, put_asset_icon, put_asset_widget
 from module.games.palworld.worldsettings import WORLD_OPTION_CATEGORIES, WORLD_OPTION_FIELDS, diagnose_ini, diagnose_world_option_sav, disable_undecodable_world_option_sav, find_world_sav_path, load_world_settings, recover_malformed_ini, resolve_ini_path, save_world_settings
 
@@ -119,7 +120,13 @@ def render(name: str) -> None:
             floatNames=[_world_pin(field_.key) for field_ in WORLD_OPTION_FIELDS if field_.ftype == "float"],
             intNames=[_world_pin(field_.key) for field_ in WORLD_OPTION_FIELDS if field_.ftype == "int"],
         )
-        client_call("palworld.worldSettings.mount", changedPrefix=t("world.changed_count", count=""))
+        context = page_context()
+        client_call(
+            "palworld.worldSettings.mount",
+            changedPrefix=t("world.changed_count", count=""),
+            generation=context.generation if context else None,
+        )
+        register_page_cleanup(lambda: client_call("palworld.worldSettings.destroy"))
         with use_scope("world_settings_actions"):
             put_row(
                 [

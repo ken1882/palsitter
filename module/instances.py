@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import threading
+import datetime as dt
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
@@ -14,6 +16,8 @@ PROFILE_CONFIG_NAME = "profile.json"
 _INITIALIZE_LOCK = threading.RLock()
 _RUNTIME_LOCK = threading.RLock()
 _AGENT_LOCK = threading.RLock()
+LOG_RETENTION_DAYS = 30
+_DATED_LOG_RE = re.compile(r"^(?:overview|palserver)-(?P<date>\d{8})\.log$")
 
 
 @dataclass(frozen=True)
@@ -69,8 +73,14 @@ def profile_path(name: str) -> Path:
     return profile_dir(name) / PROFILE_CONFIG_NAME
 
 
-def profile_log_path(name: str) -> Path:
-    return profile_dir(name) / "logs" / "overview.log"
+def _log_date(value: dt.date | dt.datetime | None = None) -> dt.date:
+    if value is None:
+        return dt.datetime.now().date()
+    return value.date() if isinstance(value, dt.datetime) else value
+
+
+def profile_log_path(name: str, when: dt.date | dt.datetime | None = None) -> Path:
+    return profile_dir(name) / "logs" / f"overview-{_log_date(when):%Y%m%d}.log"
 
 
 def profile_runtime_path(name: str) -> Path:
@@ -81,8 +91,68 @@ def profile_agent_state_path(name: str) -> Path:
     return profile_dir(name) / "agent-state.json"
 
 
-def profile_server_output_path(name: str) -> Path:
-    return profile_dir(name) / "logs" / "palserver-output.log"
+def profile_server_output_path(name: str, when: dt.date | dt.datetime | None = None) -> Path:
+    return profile_dir(name) / "logs" / f"palserver-{_log_date(when):%Y%m%d}.log"
+
+
+def prune_dated_log_files(
+    directory: Path, when: dt.date | dt.datetime | None = None
+) -> None:
+    if LOG_RETENTION_DAYS <= 0:
+        return
+    cutoff = _log_date(when) - dt.timedelta(days=LOG_RETENTION_DAYS - 1)
+    try:
+        paths = directory.iterdir()
+    except OSError:
+        return
+    for path in paths:
+        match = _DATED_LOG_RE.fullmatch(path.name)
+        if match is None:
+            continue
+        try:
+            log_date = dt.datetime.strptime(match.group("date"), "%Y%m%d").date()
+        except ValueError:
+            continue
+        if log_date >= cutoff:
+            continue
+        try:
+            path.unlink()
+        except OSError:
+            pass
+
+
+class DailyLogWriter:
+    """Append bytes to the current day's log, reopening it at midnight."""
+
+    def __init__(self, path_factory) -> None:
+        self._path_factory = path_factory
+        self._handle = None
+        self.path: Path | None = None
+
+    def _current_handle(self):
+        path = Path(self._path_factory())
+        if self._handle is None or self.path != path:
+            self.close()
+            path.parent.mkdir(parents=True, exist_ok=True)
+            prune_dated_log_files(path.parent)
+            self._handle = path.open("ab")
+            self.path = path
+        return self._handle
+
+    def write(self, data: bytes) -> int:
+        return self._current_handle().write(data)
+
+    def flush(self) -> None:
+        if self._handle is not None:
+            self._handle.flush()
+
+    def fileno(self) -> int:
+        return self._current_handle().fileno()
+
+    def close(self) -> None:
+        if self._handle is not None:
+            self._handle.close()
+            self._handle = None
 
 
 def _atomic_write_json(path: Path, data: Mapping[str, Any]) -> None:

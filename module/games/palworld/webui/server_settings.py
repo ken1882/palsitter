@@ -9,6 +9,7 @@ from pywebio.session import local
 from module.games.palworld.config import PalworldProfile, fixed_steamcmd_path, load_profile, save_profile
 from module.steamcmd import ensure_steamcmd, steamcmd_download_url
 from module.webui.i18n import t
+from module.webui.session import page_context, register_page_cleanup
 from module.webui.assets import client_call, put_asset_widget
 
 def _clear_dirty_form(*args, **kwargs):
@@ -164,7 +165,12 @@ def render(name: str) -> None:
                 escape_label=False,
             )
             _settings_field(_settings_label("query_port"), "query_port", profile.query_port, type="number", escape_label=False)
-        client_call("palworld.serverSettings.mount")
+        context = page_context()
+        client_call(
+            "palworld.serverSettings.mount",
+            generation=context.generation if context else None,
+        )
+        register_page_cleanup(lambda: client_call("palworld.serverSettings.destroy"))
         with use_scope("settings_actions"):
             put_row(
                 [

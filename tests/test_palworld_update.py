@@ -267,6 +267,57 @@ def test_install_or_update_builds_validate_command_and_reports_structured_progre
     assert events[-1].phase == "complete"
 
 
+def test_install_or_update_terminates_steamcmd_when_stop_requested(tmp_path):
+    profile = _profile(tmp_path)
+    Path(profile.steamcmd).parent.mkdir(parents=True)
+    Path(profile.steamcmd).write_text("stub", encoding="utf-8")
+    started = threading.Event()
+    terminated = threading.Event()
+
+    class CancellableProcess:
+        stdout = iter(())
+
+        def __init__(self):
+            self.returncode = None
+            started.set()
+
+        def poll(self):
+            return self.returncode
+
+        def wait(self, timeout=None):
+            self.returncode = 1
+            return self.returncode
+
+        def terminate(self):
+            terminated.set()
+            self.returncode = 1
+
+        def kill(self):
+            self.returncode = 1
+
+    stop = threading.Event()
+    errors = []
+
+    def run():
+        try:
+            PalworldUpdateService(
+                profile,
+                pty_process_factory=lambda *args, **kwargs: CancellableProcess(),
+                stop_requested=stop.is_set,
+            ).install_or_update()
+        except RuntimeError as exc:
+            errors.append(str(exc))
+
+    thread = threading.Thread(target=run)
+    thread.start()
+    assert started.wait(timeout=1)
+    stop.set()
+    thread.join(timeout=2)
+
+    assert terminated.is_set()
+    assert errors and "SteamCMD update failed" in errors[0]
+
+
 def test_install_or_update_retries_when_steamcmd_self_update_is_not_last_line(tmp_path):
     profile = _profile(tmp_path)
     Path(profile.steamcmd).parent.mkdir(parents=True)

@@ -4,7 +4,7 @@ from module.webui.game_ui import GameWebUI, InstancePage
 
 
 def get_webui() -> GameWebUI:
-    from . import audit, auto_restart, backups, map, mods, overview, players, server_settings, world_settings
+    from . import audit, auto_restart, backups, map, mods, overview, players, server_settings, tools, world_settings
     from .add_instance import CREATION_UI
 
     return GameWebUI(
@@ -33,6 +33,7 @@ def get_webui() -> GameWebUI:
             InstancePage("backups", "nav.backups", "nav.backups", backups.render),
             InstancePage("map", "nav.map", "map.page_title", map.render),
             InstancePage("audit", "nav.audit", "audit.title", audit.render),
+            InstancePage("tools", "nav.tools", "tools.title", tools.render),
         ),
         creation=CREATION_UI,
     )

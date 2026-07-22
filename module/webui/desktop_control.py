@@ -16,10 +16,14 @@ class DesktopControlServer:
         token: str,
         shutdown: Callable[[], ShutdownResult],
         on_success: Callable[[], None],
+        force_shutdown: Callable[[], ShutdownResult] | None = None,
+        start_shutdown: Callable[[], ShutdownResult] | None = None,
     ) -> None:
         if not token:
             raise ValueError("PALSITTER_DESKTOP_TOKEN is required")
         self._shutdown = shutdown
+        self._force_shutdown = force_shutdown
+        self._start_shutdown = start_shutdown
         self._on_success = on_success
         self._token = token.encode("utf-8")
 
@@ -38,19 +42,33 @@ class DesktopControlServer:
                 self.wfile.write(body)
 
             def do_POST(self) -> None:
-                if self.path != "/desktop/shutdown":
+                if self.path not in {"/desktop/shutdown", "/desktop/force-shutdown"}:
                     self._send(404, {"ok": False, "error": "Not found"})
                     return
                 supplied = self.headers.get("X-Palsitter-Token", "").encode("utf-8")
                 if not hmac.compare_digest(supplied, owner._token):
                     self._send(401, {"ok": False, "error": "Unauthorized"})
                     return
-                result = owner._shutdown()
+                shutdown = owner._shutdown
+                on_success = owner._on_success
+                if self.path == "/desktop/force-shutdown":
+                    shutdown = owner._force_shutdown
+                    on_success = owner._on_success if owner._start_shutdown is None else None
+                elif owner._start_shutdown is not None:
+                    shutdown = owner._start_shutdown
+                    on_success = None
+                if shutdown is None:
+                    self._send(404, {"ok": False, "error": "Force shutdown is unavailable"})
+                    return
+                result = shutdown()
                 self._send(200 if result.ok else 409, result.payload())
-                if result.ok:
-                    threading.Thread(target=owner._on_success, daemon=True).start()
+                if result.ok and on_success is not None:
+                    threading.Thread(target=on_success, daemon=True).start()
 
-        self._server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+        class DesktopHTTPServer(ThreadingHTTPServer):
+            daemon_threads = True
+
+        self._server = DesktopHTTPServer(("127.0.0.1", port), Handler)
         self.port = self._server.server_address[1]
         self._thread: threading.Thread | None = None
 

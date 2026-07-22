@@ -2,6 +2,7 @@ import ast
 import json
 import re
 import sys
+import threading
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 
@@ -30,6 +31,7 @@ def test_builtin_game_ui_manifests_are_typed_and_ordered():
             "backups",
             "map",
             "audit",
+            "tools",
         ]
     assert palworld.creation is not None
     assert [page.id for page in satisfactory.pages] == ["overview"]
@@ -79,6 +81,61 @@ def test_page_cleanup_runs_in_reverse_and_session_cleanup_is_safe_only(monkeypat
     session.register_page_cleanup(lambda: calls.append("second"))
     session.cleanup_page()
     assert calls[-2:] == ["second", "first"]
+
+    cleanups = session.initialize_page_lifecycle()
+    session.register_page_cleanup(lambda: calls.append("page"))
+    session.register_page_cleanup(lambda: calls.append("session"), session_safe=True)
+    session.cleanup_page()
+    assert calls[-1] == "page"
+    session.cleanup_session(cleanups)
+    assert calls[-1] == "session"
+
+
+def test_page_context_invalidates_stale_updates_and_preserves_session_cleanup(monkeypatch):
+    fake_local = SimpleNamespace()
+    monkeypatch.setattr(session, "local", fake_local)
+    cleanups = session.initialize_page_lifecycle()
+    page_event = threading.Event()
+    session_event = threading.Event()
+    session.register_page_stop_event(page_event)
+    session.register_stop_event(session_event)
+
+    first_request = session.request_navigation()
+    first = session.begin_page_navigation(first_request)
+    assert first is not None
+    calls = []
+    session.register_page_cleanup(lambda: calls.append("page"))
+    assert session.is_current(first)
+    assert session.run_if_current(first, lambda: calls.append("update")) is None
+    assert calls == ["update"]
+
+    second_request = session.request_navigation()
+    second = session.begin_page_navigation(second_request)
+    assert second is not None
+    assert first.stop_event.is_set()
+    assert page_event.is_set()
+    assert calls == ["update", "page"]
+    assert not session.is_current(first)
+    assert session.run_if_current(first, lambda: calls.append("stale")) is None
+    assert calls == ["update", "page"]
+    assert session.is_current(second)
+    assert not session_event.is_set()
+
+    session.cleanup_session(cleanups)
+    assert session_event.is_set()
+
+
+def test_latest_navigation_request_skips_older_render(monkeypatch):
+    fake_local = SimpleNamespace()
+    monkeypatch.setattr(session, "local", fake_local)
+    session.initialize_page_lifecycle()
+    first = session.request_navigation()
+    second = session.request_navigation()
+
+    assert session.begin_page_navigation(first) is None
+    context = session.begin_page_navigation(second)
+    assert context is not None
+    assert context.generation == 1
 
 
 def test_dirty_form_uses_registered_save_callback(monkeypatch):

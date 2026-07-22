@@ -11,6 +11,17 @@
   let selectedTypes = new Set();
   let consoleController = null;
   let filterController = null;
+  let consoleMountTimer = null;
+  const consoleTimers = new Set();
+
+  const later = (callback, delay) => {
+    const timer = setTimeout(() => {
+      consoleTimers.delete(timer);
+      callback();
+    }, delay);
+    consoleTimers.add(timer);
+    return timer;
+  };
 
   const createRows = items => items.map(item => ({
     id: `overview-log-${++nextRowId}`,
@@ -53,7 +64,8 @@
     if (keepBottom) log.scrollTop = log.scrollHeight;
   };
 
-  api.mountLog = function ({ types: configuredTypes, emptyText: configuredEmpty }) {
+  api.mountLog = function ({ types: configuredTypes, emptyText: configuredEmpty, generation }) {
+    if (generation != null && !root.Palsitter.page.isCurrent(generation)) return;
     rows = [];
     rowNodes = new Map();
     nextRowId = 0;
@@ -102,7 +114,8 @@
     if (keepBottom) log.scrollTop = log.scrollHeight;
   };
 
-  api.mountFilter = function () {
+  api.mountFilter = function ({ generation } = {}) {
+    if (generation != null && !root.Palsitter.page.isCurrent(generation)) return;
     filterController?.abort();
     filterController = new AbortController();
     const signal = filterController.signal;
@@ -116,8 +129,11 @@
     }
   };
 
-  api.mountConsole = function () {
-    setTimeout(() => {
+  api.mountConsole = function ({ generation } = {}) {
+    if (generation != null && !root.Palsitter.page.isCurrent(generation)) return;
+    if (consoleMountTimer) clearTimeout(consoleMountTimer);
+    consoleMountTimer = later(() => {
+      consoleMountTimer = null;
       const input = document.querySelector('input[name="console_command"]');
       const list = document.getElementById("console-autocomplete");
       if (!input || !list) return;
@@ -165,7 +181,7 @@
       };
       input.addEventListener("focus", showMatches, { signal });
       input.addEventListener("input", showMatches, { signal });
-      input.addEventListener("blur", () => setTimeout(() => { setActive(null); setOpen(false); }, 100), { signal });
+      input.addEventListener("blur", () => later(() => { setActive(null); setOpen(false); }, 100), { signal });
       input.addEventListener("keydown", event => {
         if (event.key === "Escape") {
           event.preventDefault(); setActive(null); setOpen(false); return;
@@ -246,6 +262,10 @@
   };
 
   api.destroy = function () {
+    if (consoleMountTimer) clearTimeout(consoleMountTimer);
+    consoleMountTimer = null;
+    for (const timer of consoleTimers) clearTimeout(timer);
+    consoleTimers.clear();
     consoleController?.abort();
     filterController?.abort();
     consoleController = null;

@@ -14,7 +14,7 @@ from typing import Dict, List, Optional
 import psutil
 
 from module.games import AdapterEvent, InstanceStatusSummary, OperationProgress, UpdateInfo, get_game
-from module.instances import load_instance, profile_log_path
+from module.instances import load_instance, profile_log_path, prune_dated_log_files
 
 
 _PROCESS_CONTEXT = mp.get_context("spawn")
@@ -120,6 +120,7 @@ class ProcessManager:
         self._force_stop_requested: mp.synchronize.Event = _PROCESS_CONTEXT.Event()
         self._lock = threading.RLock()
         self.max_logs = 300
+        self._last_log_prune_date: dt.date | None = None
         self.logs = self._load_persisted_logs()
         self._reader: Optional[threading.Thread] = None
         self._reader_process: Optional[mp.Process] = None
@@ -459,6 +460,7 @@ class ProcessManager:
                         record,
                         log=self.append_log,
                         progress=self._set_progress,
+                        stop_requested=self._stop_requested.is_set,
                     )
                     with self._lock:
                         self._update_info = info
@@ -508,6 +510,16 @@ class ProcessManager:
             )
             self._ensure_reader()
         except Exception as exc:
+            if self._stop_requested.is_set():
+                with self._lock:
+                    self.warning = False
+                    self._ownership = "none"
+                    self._state = "inactive"
+                    self._operation_progress = OperationProgress(
+                        "start", "complete", 100.0, "Start cancelled"
+                    )
+                self.append_log("Start cancelled")
+                return
             with self._lock:
                 self.warning = True
                 self._state = "warning"
@@ -628,6 +640,7 @@ class ProcessManager:
                     log=self.append_log,
                     progress=self._set_progress,
                     validate=validate,
+                    stop_requested=self._stop_requested.is_set,
                 )
             with self._lock:
                 self._update_info = info
@@ -647,6 +660,15 @@ class ProcessManager:
             if kind != "check_update":
                 self._record_adapter_event("server_update", "Server updated")
         except Exception as exc:
+            if self._stop_requested.is_set():
+                with self._lock:
+                    self.warning = False
+                    self._state = "inactive"
+                    self._operation_progress = OperationProgress(
+                        kind, "complete", 100.0, "Operation cancelled"
+                    )
+                self.append_log(f"{kind.replace('_', ' ').title()} cancelled")
+                return
             with self._lock:
                 process_still_active = (
                     self._process is not None and self._process.is_alive()
@@ -687,8 +709,8 @@ class ProcessManager:
         self._stop_requested.set()
         return True
 
-    def kill(self) -> bool:
-        if _shutdown_in_progress():
+    def kill(self, *, shutdown: bool = False) -> bool:
+        if _shutdown_in_progress() and not shutdown:
             return self._operation_rejected("Palsitter is shutting down")
         if self.ownership == "external":
             return self._operation_rejected("Cannot KILL an externally managed server")
@@ -719,6 +741,14 @@ class ProcessManager:
             self._ownership = "none"
             self._state = "inactive"
             self.backup_schedule_started_at = None
+        return True
+
+    def prepare_shutdown(self) -> bool:
+        """Expose the stopping state while shutdown saves the instance state."""
+        if not self.active:
+            return False
+        with self._lock:
+            self._state = "stopping"
         return True
 
     def handoff(self) -> bool:
@@ -921,6 +951,13 @@ class ProcessManager:
         try:
             path = profile_log_path(self.config_name)
             path.parent.mkdir(parents=True, exist_ok=True)
+            today = dt.datetime.now().date()
+            with self._lock:
+                should_prune = self._last_log_prune_date != today
+                if should_prune:
+                    self._last_log_prune_date = today
+            if should_prune:
+                prune_dated_log_files(path.parent, today)
             with path.open("a", encoding="utf-8") as handle:
                 handle.write(f"{line}\n")
         except OSError:

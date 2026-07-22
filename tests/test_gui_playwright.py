@@ -18,7 +18,7 @@ import pytest
 import psutil
 
 from module.config import Profile, game_user_settings_path, list_profiles, load_profile, save_profile
-from module.instances import create_instance, load_instance
+from module.instances import create_instance, load_instance, profile_log_path
 from module.games.palworld.server.history import (
     LifecycleEvent,
     RestartHistoryStore,
@@ -300,39 +300,9 @@ def _mock_ue4ss_server():
             self.end_headers()
             self.wfile.write(payload)
 
-        def _release(self, tag, asset, prerelease=False):
-            host, port = self.server.server_address
-            return {
-                "tag_name": tag,
-                "name": tag,
-                "draft": False,
-                "prerelease": prerelease,
-                "assets": [
-                    {
-                        "name": asset,
-                        "browser_download_url": f"http://{host}:{port}/download/{asset}",
-                        "updated_at": "2026-07-17T00:00:00Z",
-                    }
-                ],
-            }
-
         def do_GET(self):
             calls.append(self.path)
             route = self.path.split("?", 1)[0]
-            experimental = self._release(
-                "experimental-latest",
-                "UE4SS_v3.0.1-1012-gc838a8ac.zip",
-                prerelease=True,
-            )
-            if route == "/releases":
-                body = json.dumps(
-                    [experimental, self._release("v3.0.1", "UE4SS_v3.0.1.zip")]
-                ).encode()
-                self._write(body, "application/json")
-                return
-            if route == "/releases/tags/experimental-latest":
-                self._write(json.dumps(experimental).encode(), "application/json")
-                return
             if route.startswith("/download/"):
                 self._write(archive_bytes, "application/zip")
                 return
@@ -570,6 +540,7 @@ def test_utils_matches_actions_live_log_css_and_gated_code(tmp_path, monkeypatch
         assert actions.all_inner_texts() == [
             "Raise exception",
             "Force restart",
+            "Shutdown Palsitter",
             "Run all instances",
             "Stop all instances",
             "Kill all instances",
@@ -635,6 +606,20 @@ def test_utils_matches_actions_live_log_css_and_gated_code(tmp_path, monkeypatch
         page.locator("#pywebio-scope-dev-log").get_by_text(
             "Code executed"
         ).wait_for(timeout=2500)
+
+        page.get_by_role("button", name="Shutdown Palsitter", exact=True).click()
+        modal = page.locator(".modal.show")
+        modal.get_by_text("Shutdown Palsitter?", exact=True).wait_for(timeout=2000)
+        modal.get_by_role("button", name="Shutdown", exact=True).click()
+        shutdown_overlay = page.locator("#pywebio-scope-shutdown_overlay")
+        shutdown_overlay.locator(".shutdown-overlay-card").wait_for(timeout=5000)
+        force_button = shutdown_overlay.get_by_role("button", name="Force Shutdown", exact=True)
+        force_button.wait_for(timeout=10000)
+        if force_button.is_enabled():
+            force_button.click()
+        shutdown_overlay.get_by_text(
+            "Palsitter stopped, you can now safely close this window", exact=True
+        ).wait_for(timeout=15000)
 
 
 @pytest.mark.playwright
@@ -998,6 +983,14 @@ def test_instance_overview_status_log_and_console(tmp_path, monkeypatch):
         page.locator("#pywebio-scope-content").get_by_text("Scheduler").wait_for(timeout=5000)
         page.locator("#pywebio-scope-content").get_by_text("Log", exact=True).wait_for(timeout=5000)
         page.locator(".log-box").wait_for(timeout=5000)
+        scheduler = page.locator("#pywebio-scope-scheduler_panel")
+        server_dir = _fixed_palserver_dir(tmp_path)
+        scheduler.get_by_role("button", name="Open PalServer folder", exact=True).click()
+        page.locator(".toastify").get_by_text(
+            "Please start and install the server once", exact=True
+        ).wait_for(timeout=5000)
+        assert server_dir.is_dir()
+        assert not _fixed_palserver_executable(tmp_path).exists()
         console = page.locator('input[name="console_command"]')
         console.focus()
         autocomplete = page.locator("#console-autocomplete")
@@ -1224,6 +1217,10 @@ def test_scheduler_consolidates_instance_operations_without_persistent_strip(tmp
             assert scheduler.get_by_role("button", name="Logs", exact=True).count() == 0
 
             try:
+                start.click()
+                stop.wait_for(timeout=5000)
+                stop.click()
+                start.wait_for(timeout=10000)
                 start.click()
                 stop.wait_for(timeout=5000)
                 for action in ("Stop", "Save", "Backup"):
@@ -1597,6 +1594,34 @@ def test_delayed_player_refresh_does_not_render_after_leaving_overview(tmp_path,
 
 
 @pytest.mark.playwright
+def test_rapid_navigation_keeps_only_latest_page_widgets(tmp_path, monkeypatch):
+    with _gui_page(tmp_path, monkeypatch) as (page, _):
+        aside = page.locator("#pywebio-scope-aside")
+        menu = page.locator("#pywebio-scope-menu")
+
+        aside.get_by_text("default", exact=True).click()
+        menu.get_by_text("Players", exact=True).click()
+        menu.get_by_text("Overview", exact=True).click()
+        aside.get_by_text("Home", exact=True).click()
+        menu.get_by_text("Utils", exact=True).click()
+        aside.get_by_text("default", exact=True).click()
+        menu.get_by_text("Game Map", exact=True).click()
+        menu.get_by_text("Overview", exact=True).click()
+
+        page.locator("#pywebio-scope-overview").wait_for(timeout=10000)
+        page.wait_for_timeout(1500)
+
+        assert page.locator("#pywebio-scope-overview").count() == 1
+        assert page.locator("#pywebio-scope-players_detail_panel").count() == 0
+        assert page.locator("#palworld-map-viewport").count() == 0
+        assert page.locator("#pywebio-scope-home_page").count() == 0
+        assert page.locator("#pywebio-scope-util-buttons").count() == 0
+        assert page.evaluate(
+            "() => document.documentElement.scrollWidth <= document.documentElement.clientWidth"
+        )
+
+
+@pytest.mark.playwright
 def test_audit_page_supports_monthly_rows_search_tags_time_and_pagination(tmp_path, monkeypatch):
     monkeypatch.setenv("PALSITTER_PROFILE_DIR", str(tmp_path / "profile"))
     now = dt.datetime.now(dt.timezone.utc).replace(microsecond=0)
@@ -1730,6 +1755,68 @@ def test_audit_page_supports_monthly_rows_search_tags_time_and_pagination(tmp_pa
         popup.get_by_text("Palsitter command", exact=True).wait_for(timeout=5000)
         popup.locator("input[data-tag-value='game_command']").uncheck()
         assert audit.locator("tbody tr").count() == 0
+
+
+@pytest.mark.playwright
+def test_palworld_tools_checks_and_repairs_windows_firewall(tmp_path, monkeypatch):
+    firewall_state = tmp_path / "firewall-state.txt"
+    firewall_state.write_text("blocked", encoding="utf-8")
+    with _gui_page(
+        tmp_path,
+        monkeypatch,
+        extra_env={"PALSITTER_TEST_FIREWALL_STATE": str(firewall_state)},
+    ) as (page, _):
+        page.locator("#pywebio-scope-aside").get_by_text("default", exact=True).click()
+        page.locator("#pywebio-scope-menu").get_by_text("Tools", exact=True).click()
+
+        tools_panel = page.locator("#pywebio-scope-tools_panel")
+        tools_panel.wait_for(timeout=5000)
+        tools_panel.get_by_text("PalServer.exe", exact=False).wait_for(timeout=5000)
+        tools_panel.get_by_text("8211", exact=True).wait_for(timeout=5000)
+        page.locator("#pywebio-scope-tools_status").get_by_text(
+            "Not checked", exact=True
+        ).wait_for(timeout=5000)
+
+        tools_panel.get_by_role("button", name="Check", exact=True).click()
+        modal = page.locator(".modal.show")
+        modal.get_by_text("Fix Windows Firewall", exact=True).wait_for(timeout=5000)
+        modal.get_by_text("Administrator approval is required", exact=False).wait_for(
+            timeout=5000
+        )
+        modal.get_by_role("button", name="Fix", exact=True).click()
+
+        page.locator("#pywebio-scope-tools_status").get_by_text(
+            "Open", exact=True
+        ).wait_for(timeout=5000)
+        assert firewall_state.read_text(encoding="utf-8") == "open"
+        assert page.evaluate(
+            "() => document.documentElement.scrollWidth <= document.documentElement.clientWidth"
+        )
+
+
+@pytest.mark.playwright
+def test_palworld_tools_check_does_not_update_after_navigation(tmp_path, monkeypatch):
+    firewall_state = tmp_path / "firewall-state.txt"
+    firewall_state.write_text("open", encoding="utf-8")
+    with _gui_page(
+        tmp_path,
+        monkeypatch,
+        extra_env={
+            "PALSITTER_TEST_FIREWALL_STATE": str(firewall_state),
+            "PALSITTER_TEST_FIREWALL_DELAY": "1.0",
+        },
+    ) as (page, _):
+        page.locator("#pywebio-scope-aside").get_by_text("default", exact=True).click()
+        page.locator("#pywebio-scope-menu").get_by_text("Tools", exact=True).click()
+        tools_panel = page.locator("#pywebio-scope-tools_panel")
+        tools_panel.get_by_role("button", name="Check", exact=True).click()
+        page.wait_for_timeout(100)
+        page.locator("#pywebio-scope-menu").get_by_text("Overview", exact=True).click()
+        page.locator("#pywebio-scope-overview").wait_for(timeout=5000)
+        page.wait_for_timeout(1500)
+
+        assert page.get_by_text("Executable rule", exact=True).count() == 0
+        assert page.get_by_text("UDP port rule", exact=True).count() == 0
 
 
 @pytest.mark.playwright
@@ -2122,7 +2209,9 @@ def test_overview_log_append_preserves_text_selection(tmp_path, monkeypatch):
 
 @pytest.mark.playwright
 def test_overview_replays_persisted_server_logs_after_gui_start(tmp_path, monkeypatch):
-    log_path = tmp_path / "profile" / "default" / "logs" / "overview.log"
+    monkeypatch.setenv("PALSITTER_CONFIG_DIR", str(tmp_path / "config"))
+    monkeypatch.setenv("PALSITTER_PROFILE_DIR", str(tmp_path / "profile"))
+    log_path = profile_log_path("default")
     log_path.parent.mkdir(parents=True)
     log_path.write_text(
         "12:00:00 [default] PalServer: Running Palworld dedicated server on :8211\n",
@@ -2594,6 +2683,14 @@ def test_auto_restart_history_persists_crash_cause_and_escaped_output(tmp_path, 
         monkeypatch.setenv("PALSITTER_CONFIG_DIR", str(config_dir))
         RestartHistoryStore("default").append(
             LifecycleEvent(
+                dt.datetime(2026, 7, 16, 12, 29),
+                "crash",
+                "restarted",
+                termination=classify_process_exit(0, platform="nt"),
+            )
+        )
+        RestartHistoryStore("default").append(
+            LifecycleEvent(
                 dt.datetime(2026, 7, 16, 12, 30),
                 "crash",
                 "restarted",
@@ -2608,6 +2705,7 @@ def test_auto_restart_history_persists_crash_cause_and_escaped_output(tmp_path, 
         history.get_by_text("Access violation", exact=False).wait_for(timeout=5000)
         assert "STATUS_ACCESS_VIOLATION" in history.inner_text()
         assert "0xC0000005" in history.inner_text()
+        assert "0x0" not in history.inner_text()
         history.get_by_text("Final server output", exact=True).click()
         history.locator("pre.restart-output").get_by_text(
             "fatal native crash", exact=False
@@ -3930,7 +4028,9 @@ def test_mods_page_installs_lists_opens_folders_and_removes_ue4ss(tmp_path, monk
             tmp_path,
             monkeypatch,
             extra_env={
-                "PALSITTER_UE4SS_GITHUB_API": github_api,
+                "PALSITTER_TEST_UE4SS_DOWNLOAD_URL": (
+                    f"{github_api}/download/UE4SS-Palworld.zip"
+                ),
                 "PALSITTER_TEST_UE4SS_PLATFORM_SUPPORTED": "1",
                 "PALSITTER_FAKE_OPEN_FOLDER_LOG": str(open_log),
             },
@@ -3942,9 +4042,9 @@ def test_mods_page_installs_lists_opens_folders_and_removes_ue4ss(tmp_path, monk
             release_select = panel.locator('select[name="ue4ss_release"]')
             release_select.wait_for(timeout=5000)
 
-            assert release_select.locator("option").count() == 2
+            assert release_select.locator("option").count() == 1
             assert release_select.locator("option:checked").inner_text().startswith(
-                "experimental-latest"
+                "experimental-palworld"
             )
             assert panel.get_by_text("PalDefender", exact=False).count() == 0
             assert panel.get_by_text(re.compile("upload", re.IGNORECASE)).count() == 0
@@ -4007,9 +4107,9 @@ def test_mods_page_installs_lists_opens_folders_and_removes_ue4ss(tmp_path, monk
 
             panel.get_by_role("button", name="Install", exact=True).click()
             page.locator(".toastify").get_by_text(
-                "UE4SS experimental-latest installed", exact=True
+                "UE4SS experimental-palworld installed", exact=True
             ).wait_for(timeout=10000)
-            panel.get_by_text("Installed: experimental-latest", exact=True).wait_for(timeout=5000)
+            panel.get_by_text("Installed: experimental-palworld", exact=True).wait_for(timeout=5000)
             panel.get_by_text("ExampleLua", exact=True).wait_for(timeout=5000)
 
             win64 = root / "Pal" / "Binaries" / "Win64"
@@ -4019,30 +4119,40 @@ def test_mods_page_installs_lists_opens_folders_and_removes_ue4ss(tmp_path, monk
                 time.sleep(0.05)
             assert "bUseUObjectArrayCache = false" in settings.read_text(encoding="utf-8")
 
+            lua_dir = win64 / "ue4ss" / "Mods"
+            shutil.rmtree(lua_dir)
             panel.get_by_role("button", name="Open Lua mods folder", exact=True).click()
             deadline = time.time() + 5
             while not open_log.exists() and time.time() < deadline:
                 time.sleep(0.05)
             assert open_log.read_text(encoding="utf-8") == str(win64 / "ue4ss" / "Mods")
+            assert lua_dir.is_dir()
+            preserved_mod = lua_dir / "PreservedMod"
+            preserved_mod.mkdir()
 
+            shutil.rmtree(logic_dir)
+            shutil.rmtree(tilde_mods_dir)
             panel.get_by_role("button", name="Open Paks folder", exact=True).click()
             deadline = time.time() + 5
             while open_log.read_text(encoding="utf-8") != str(pak_dir) and time.time() < deadline:
                 time.sleep(0.05)
             assert open_log.read_text(encoding="utf-8") == str(pak_dir)
+            assert logic_dir.is_dir()
+            assert tilde_mods_dir.is_dir()
 
             panel.get_by_role("button", name="Remove", exact=True).click()
             modal = page.locator(".modal.show")
-            modal.get_by_text("every Lua mod", exact=False).wait_for(timeout=5000)
+            modal.get_by_text("Lua mods are preserved", exact=False).wait_for(timeout=5000)
             modal.get_by_role("button", name="Remove", exact=True).click()
             page.locator(".toastify").get_by_text("UE4SS removed", exact=True).wait_for(timeout=10000)
             panel.get_by_text("Not installed", exact=True).wait_for(timeout=5000)
-            assert not (win64 / "ue4ss").exists()
+            assert preserved_mod.is_dir()
+            assert (win64 / "ue4ss").exists()
+            assert not (win64 / "ue4ss" / "UE4SS.dll").exists()
+            assert not (win64 / "dwmapi.dll").exists()
             assert pak_file.exists()
 
-    assert any(path.startswith("/releases?per_page=10") for path in calls)
-    assert "/releases/tags/experimental-latest" in calls
-    assert any(path.startswith("/download/") for path in calls)
+    assert calls == ["/download/UE4SS-Palworld.zip"]
 
 
 @pytest.mark.playwright
@@ -4055,7 +4165,9 @@ def test_overview_streams_ue4ss_log_for_attached_server(tmp_path, monkeypatch):
             tmp_path,
             monkeypatch,
             extra_env={
-                "PALSITTER_UE4SS_GITHUB_API": github_api,
+                "PALSITTER_TEST_UE4SS_DOWNLOAD_URL": (
+                    f"{github_api}/download/UE4SS-Palworld.zip"
+                ),
                 "PALSITTER_TEST_UE4SS_PLATFORM_SUPPORTED": "1",
             },
         ) as (page, _):
@@ -4066,7 +4178,7 @@ def test_overview_streams_ue4ss_log_for_attached_server(tmp_path, monkeypatch):
             panel.locator('select[name="ue4ss_release"]').wait_for(timeout=5000)
             panel.get_by_role("button", name="Install", exact=True).click()
             page.locator(".toastify").get_by_text(
-                "UE4SS experimental-latest installed", exact=True
+                "UE4SS experimental-palworld installed", exact=True
             ).wait_for(timeout=10000)
 
             ue4ss_log = root / "Pal" / "Binaries" / "Win64" / "ue4ss" / "UE4SS.log"
@@ -4083,6 +4195,6 @@ def test_overview_streams_ue4ss_log_for_attached_server(tmp_path, monkeypatch):
                     timeout=10000
                 )
 
-            overview_log = tmp_path / "profile" / "default" / "logs" / "overview.log"
+            overview_log = profile_log_path("default")
             assert "UE4SS: existing UE4SS line" in overview_log.read_text(encoding="utf-8")
             assert "UE4SS: new UE4SS line" in overview_log.read_text(encoding="utf-8")

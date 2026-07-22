@@ -22,8 +22,14 @@ from pywebio.pin import pin, put_select
 from pywebio.session import local, register_thread
 
 from module.games.palworld.config import load_profile
-from module.games.palworld.mods import UE4SSRelease, UE4SSService, default_release_tag
+from module.games.palworld.mods import (
+    PALWORLD_UE4SS_RELEASE_PAGE,
+    UE4SSRelease,
+    UE4SSService,
+    default_release_tag,
+)
 from module.webui.i18n import t
+from module.webui.session import page_context, run_if_current
 from module.webui.assets import client_call, client_query, put_asset_widget
 
 
@@ -64,7 +70,9 @@ def render(name: str) -> None:
     service = _service(name)
     _render_status(name, service.platform_supported)
     if service.platform_supported:
-        _load_releases(name)
+        releases = service.list_releases()
+        local.ue4ss_releases = releases
+        _render_release_controls(name, releases)
 
 
 @use_scope("ue4ss_summary", clear=True)
@@ -92,31 +100,6 @@ def _render_status(name: str, platform_supported: bool | None = None) -> None:
     if platform_supported:
         _render_mod_table(name, "lua")
     _render_mod_table(name, "pak")
-
-
-def _load_releases(name: str) -> None:
-    with use_scope("ue4ss_release_controls", clear=True):
-        put_row(
-            [put_loading("border", "primary"), put_text(t("mods.loading_releases"))],
-            size="auto 1fr",
-        )
-
-    def load() -> None:
-        try:
-            releases = _service(name).list_releases()
-            if not releases:
-                raise RuntimeError(t("mods.no_releases"))
-            local.ue4ss_releases = releases
-            _render_release_controls(name, releases)
-        except Exception as exc:
-            try:
-                _render_release_error(name, exc)
-            except SessionException:
-                return
-
-    thread = threading.Thread(target=load, daemon=True)
-    register_thread(thread)
-    thread.start()
 
 
 @use_scope("ue4ss_release_controls", clear=True)
@@ -162,19 +145,14 @@ def _render_release_controls(name: str, releases: tuple[UE4SSRelease, ...]) -> N
         "palworld.mods_release_source",
         {
             "source": t("mods.release_source"),
-            "href": "https://github.com/UE4SS-RE/RE-UE4SS/releases",
+            "href": PALWORLD_UE4SS_RELEASE_PAGE,
             "link": t("mods.github_releases"),
         },
     )
 
 
-@use_scope("ue4ss_release_controls", clear=True)
-def _render_release_error(name: str, error: Exception) -> None:
-    put_warning(t("mods.release_failed", error=error))
-    put_button(t("mods.retry"), onclick=lambda: _load_releases(name), color="primary")
-
-
 def _start_install(name: str) -> None:
+    context = page_context()
     releases = tuple(getattr(local, "ue4ss_releases", ()))
     selected = str(pin.ue4ss_release or "")
     if selected not in {release.tag for release in releases}:
@@ -191,16 +169,21 @@ def _start_install(name: str) -> None:
     def install() -> None:
         try:
             release = _service(name).install(selected)
-            toast(t("mods.install_complete", version=release.tag), color="success")
+            run_if_current(
+                context,
+                lambda: toast(t("mods.install_complete", version=release.tag), color="success"),
+            )
         except Exception as exc:
-            toast(t("mods.install_failed", error=exc), color="error")
+            run_if_current(context, lambda: toast(t("mods.install_failed", error=exc), color="error"))
         finally:
             try:
-                local.ue4ss_busy = False
-                if client_query("dom.scopeExists", scope="mods_panel"):
-                    clear("ue4ss_operation")
-                    _render_status(name)
-                    _render_release_controls(name, releases)
+                def finish() -> None:
+                    local.ue4ss_busy = False
+                    if client_query("dom.scopeExists", scope="mods_panel"):
+                        clear("ue4ss_operation")
+                        _render_status(name)
+                        _render_release_controls(name, releases)
+                run_if_current(context, finish)
             except SessionException:
                 return
 
@@ -222,6 +205,7 @@ def _confirm_remove(name: str) -> None:
 
 
 def _start_remove(name: str) -> None:
+    context = page_context()
     close_popup()
     releases = tuple(getattr(local, "ue4ss_releases", ()))
     local.ue4ss_busy = True
@@ -235,16 +219,18 @@ def _start_remove(name: str) -> None:
     def remove() -> None:
         try:
             _service(name).uninstall()
-            toast(t("mods.remove_complete"), color="success")
+            run_if_current(context, lambda: toast(t("mods.remove_complete"), color="success"))
         except Exception as exc:
-            toast(t("mods.remove_failed", error=exc), color="error")
+            run_if_current(context, lambda: toast(t("mods.remove_failed", error=exc), color="error"))
         finally:
             try:
-                local.ue4ss_busy = False
-                if client_query("dom.scopeExists", scope="mods_panel"):
-                    clear("ue4ss_operation")
-                    _render_status(name)
-                    _render_release_controls(name, releases)
+                def finish() -> None:
+                    local.ue4ss_busy = False
+                    if client_query("dom.scopeExists", scope="mods_panel"):
+                        clear("ue4ss_operation")
+                        _render_status(name)
+                        _render_release_controls(name, releases)
+                run_if_current(context, finish)
             except SessionException:
                 return
 
@@ -275,7 +261,7 @@ def _render_mod_table(name: str, kind: str) -> None:
         folder = _icon_button(
             label,
             "📁",
-            lambda path=directory: _open_mod_folder(path),
+            lambda path=directory, pak=not is_lua: _open_mod_folder(path, pak=pak),
             disabled=directory is None,
         )
         put_scope(
@@ -321,10 +307,15 @@ def _render_mod_table(name: str, kind: str) -> None:
         put_table(rows, header=[t("mods.mod_name"), t("mods.enabled"), t("mods.delete")])
 
 
-def _open_mod_folder(path: Path | None) -> None:
+def _open_mod_folder(path: Path | None, *, pak: bool = False) -> None:
     if path is None:
         return
     try:
+        path.mkdir(parents=True, exist_ok=True)
+        if pak:
+            (path / "~mods").mkdir(exist_ok=True)
+            (path / "LogicMods").mkdir(exist_ok=True)
+        print(f"Opening folder: {path}")
         _open_folder(path)
     except Exception as exc:
         toast(t("mods.open_failed", error=exc), color="error")

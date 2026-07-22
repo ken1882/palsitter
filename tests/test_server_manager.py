@@ -1,4 +1,5 @@
 import datetime as dt
+import io
 import subprocess
 import threading
 import time
@@ -196,7 +197,7 @@ def test_windows_start_uses_console_binary_for_detached_file_output(tmp_path, mo
     assert captured["kwargs"]["cwd"] == str(install_dir)
     assert captured["kwargs"]["stderr"] == subprocess.STDOUT
     assert captured["kwargs"]["creationflags"] == subprocess.DETACHED_PROCESS
-    assert captured["kwargs"]["stdout"].name.endswith("palserver-output.log")
+    assert captured["kwargs"]["stdout"] == subprocess.PIPE
 
 
 def test_start_reports_updating_booting_and_running_states(monkeypatch):
@@ -502,7 +503,7 @@ def test_linux_fixed_server_uses_palserver_launcher_script(tmp_path, monkeypatch
 def test_adoption_repairs_linux_launcher_runtime_metadata(tmp_path, monkeypatch):
     executable = tmp_path / "PalServer-Linux-Shipping"
     executable.write_text("stub", encoding="utf-8")
-    output = tmp_path / "palserver-output.log"
+    output = tmp_path / f"palserver-{dt.datetime.now():%Y%m%d}.log"
     output.write_text("", encoding="utf-8")
     saved = []
 
@@ -646,9 +647,7 @@ def test_start_streams_palserver_stdout_and_stderr_to_log(tmp_path, monkeypatch)
 
     def popen(cmd, **kwargs):
         captured.update(kwargs)
-        kwargs["stdout"].write(b"stdout line\n\nstderr line\r\n")
-        kwargs["stdout"].flush()
-        return FakeProc(stdout=None)
+        return FakeProc(stdout=io.BytesIO(b"stdout line\n\nstderr line\r\n"))
 
     monkeypatch.setattr(
         "module.server.manager.psutil.Process", lambda pid: SimpleNamespace(status=lambda: "running")
@@ -666,14 +665,14 @@ def test_start_streams_palserver_stdout_and_stderr_to_log(tmp_path, monkeypatch)
     assert "PalServer: stdout line" in logs
     assert "PalServer: stderr line" in logs
     assert "PalServer: " not in logs
-    assert captured["stdout"].name.endswith("palserver-output.log")
+    assert captured["stdout"] == subprocess.PIPE
     assert captured["stderr"] == subprocess.STDOUT
 
 
 def test_adopt_managed_server_validates_runtime_and_replays_output(tmp_path, monkeypatch):
     exe = tmp_path / "PalServer.exe"
     exe.write_text("stub", encoding="utf-8")
-    output = tmp_path / "palserver-output.log"
+    output = tmp_path / f"palserver-{dt.datetime.now():%Y%m%d}.log"
     output.write_text("missed line\n", encoding="utf-8")
     logs = []
 

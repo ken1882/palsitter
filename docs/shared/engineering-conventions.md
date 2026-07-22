@@ -33,6 +33,15 @@
   Shared navigation owns the frame, menu, status watcher, and page cleanup lifecycle.
 - Background page work registers stop events or cleanup callbacks with
   `module.webui.session`; adding a page must not add another page-specific global stop list.
+- Page-owned workers and page callbacks that perform remote or process I/O use page-scoped
+  cleanup where appropriate and capture the active page context before starting work.
+  Every later UI mutation—including scope writes, PyWebIO output, toasts, popups, and
+  browser bridge calls—must be inside `run_if_current(context, ...)`. The operation may
+  continue after navigation and may write intentional persistent instance logs, but its
+  stale UI result must be ignored rather than appended to the replacement page.
+- Navigation invalidates the previous page before replacing the content frame. Stateful
+  browser widgets must cancel timers, delayed callbacks, observers, and event listeners in
+  their idempotent `destroy` operation so rapid navigation cannot append stale output.
 - Dirty forms register their save callback with the shared form guard. Shared navigation
   must never branch on game-specific form kinds.
 
@@ -55,4 +64,5 @@
   interpolation except PyWebIO's output placeholder.
 - Playwright exercises the real UI path and treats page errors or failed `/static/gui/`
   requests as test failures. Repeated navigation tests cover identity, focus, selection,
-  scroll position, timers, observers, and event-listener cleanup where relevant.
+  scroll position, timers, observers, event-listener cleanup, and delayed-operation stale
+  result suppression where relevant.

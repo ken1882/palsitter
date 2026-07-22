@@ -4,7 +4,8 @@ Reached by selecting a Palworld server in the [Left Sidebar](../../../shared/com
 The instance menu contains `Overview`, [`Players`](./instance-players.md), [`Server
 Settings`](./instance-server-settings.md), [`Auto Restart`](./instance-auto-restart.md),
 [`World Settings`](./instance-world-settings.md), and [`Saves & Backups`](./instance-saves-backups.md).
-It also contains [`Game Map`](./instance-map.md) and [`Audit`](./instance-audit.md).
+It also contains [`Game Map`](./instance-map.md), [`Audit`](./instance-audit.md), and
+[`Tools`](./instance-tools.md).
 REST Actions is not a separate item.
 
 Satisfactory does not inherit this menu or any component on this page; its complete
@@ -91,8 +92,11 @@ adding lifecycle controls to those pages.
   When UE4SS is installed in either supported layout, its `UE4SS.log` is tailed into the
   same Overview log with an `UE4SS:` prefix. Managed launches skip stale PalServer bytes;
   managed adoption resumes from its persisted cursor and replays at most the latest 300
-  missed lines. Missing logs are awaited silently, and UE4SS output does not contribute to
-  PalServer crash diagnostics.
+  missed lines. Raw PalServer output is stored in `logs/palserver-yyyymmdd.log`, and the
+  supervisor log is stored in `logs/overview-yyyymmdd.log`; both writers switch to the
+  next day's file while a server remains running. Dated log files are retained for 30
+  calendar days. Missing logs are awaited silently, and UE4SS output does not contribute
+  to PalServer crash diagnostics.
 - On native Linux, a standard SteamCMD installation launches
   `Pal/Binaries/Linux/PalServer-Linux-Shipping` directly and captures stdout/stderr
   through the supervisor-managed process log. UE4SS log tailing remains unavailable

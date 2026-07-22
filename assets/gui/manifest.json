@@ -30,6 +30,7 @@
     "shared.brand": "gui/html/shared/brand.html",
     "shared.quiet_text": "gui/html/shared/quiet_text.html",
     "shared.restart_overlay": "gui/html/shared/restart_overlay.html",
+    "shared.shutdown_overlay": "gui/html/shared/shutdown_overlay.html",
     "shared.pagination_table": "gui/html/shared/pagination_table.html",
     "shared.datalist": "gui/html/shared/datalist.html",
     "shared.icon_button": "gui/html/shared/icon_button.html",

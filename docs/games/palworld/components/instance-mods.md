@@ -8,10 +8,10 @@ unsupported game adapters.
 - The panel reports UE4SS installation state and the version recorded by Palsitter.
   Manually installed copies are detected from either the flat or nested `ue4ss/` layout
   and display an unknown version.
-- Release choices are loaded live from the newest 10 GitHub releases in
-  `UE4SS-RE/RE-UE4SS`. The selector defaults to `experimental-latest`; a failed lookup
-  disables installation and exposes Retry instead of using a stale fallback.
-- Only non-development runtime archives are offered. Install, version changes, reinstall,
+- The selector offers the fixed `experimental-palworld` release from
+  `Okaetsu/RE-UE4SS`, which contains the Palworld-specific UE4SS runtime required by
+  current Palworld versions. Palsitter does not live-fetch UE4SS release metadata.
+- Only the non-development `UE4SS-Palworld.zip` archive is offered. Install, reinstall,
   and confirmed removal require a fully stopped Windows Palworld server.
 - Native Linux shows the UE4SS summary as unavailable with a Linux-specific explanation.
   UE4SS release/install/remove controls and the Lua (UE4SS) section are hidden. Palsitter
@@ -20,8 +20,9 @@ unsupported game adapters.
 - Installation validates and stages the archive before merging it into
   `Pal/Binaries/Win64`, preserves user mod folders while changing UE4SS layouts, and sets
   `bUseUObjectArrayCache = false` in `UE4SS-settings.ini`.
-- Removal deletes the tracked UE4SS installation, including its Lua Mods folder. It does
-  not delete Pak mods. PalDefender is not installed or managed by Palsitter.
+- Removal deletes the tracked UE4SS loader files but preserves the Lua `Mods` folder so
+  switching UE4SS versions does not require reinstalling Lua mods. It does not delete Pak
+  mods. PalDefender is not installed or managed by Palsitter.
 
 ## Installed mod lists
 
@@ -38,7 +39,7 @@ unsupported game adapters.
   default file browser. Lua rows remain read-only, and the page does not provide browser
   upload controls.
 
-**Tests:** Service tests fake GitHub and download responses and use temporary Palworld
+**Tests:** Service tests fake the fixed release download and use temporary Palworld
 installations. `tests/test_gui_playwright.py` clicks the real Mods page, installs a fake
-release, checks both lists and folder buttons, and confirms removal without contacting
-GitHub or running a real server.
+fixed release, checks both lists and folder buttons, and confirms removal without
+contacting GitHub release APIs or running a real server.

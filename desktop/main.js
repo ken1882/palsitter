@@ -17,6 +17,7 @@ let allowWindowClose = false;
 let controlToken = null;
 let controlPort = null;
 let webPort = null;
+let exitFinished = false;
 
 function applicationRoot() {
   return app.isPackaged ? process.resourcesPath : path.resolve(__dirname, '..');
@@ -153,46 +154,48 @@ async function requestExit() {
   if (result.response !== 1) return;
 
   exiting = true;
-  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.setEnabled(false);
+  showWindow();
+  void performGracefulShutdown();
+}
+
+function waitForBackendExit(timeoutMs = SHUTDOWN_TIMEOUT_MS + 10_000) {
+  return new Promise((resolve, reject) => {
+    const deadline = setTimeout(() => reject(new Error('GUI backend did not exit')), timeoutMs);
+    if (backendExited) {
+      clearTimeout(deadline);
+      resolve();
+    } else if (backend) {
+      backend.once('close', () => {
+        clearTimeout(deadline);
+        resolve();
+      });
+    } else {
+      clearTimeout(deadline);
+      resolve();
+    }
+  });
+}
+
+async function performGracefulShutdown() {
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), SHUTDOWN_TIMEOUT_MS);
-    const response = await fetch(`http://${WEB_HOST}:${controlPort}/desktop/shutdown`, {
-      method: 'POST',
-      headers: { 'X-Palsitter-Token': controlToken },
-      signal: controller.signal,
-    });
-    clearTimeout(timer);
-    const body = await response.json();
-    if (!response.ok || !body.ok) {
-      const names = Object.entries(body.instances || {})
-        .filter(([, item]) => item.status !== 'stopped')
-        .map(([name, item]) => `${name}: ${item.message}`)
-        .join('\n');
-      throw new Error(`${body.error || 'Graceful shutdown failed'}${names ? `\n${names}` : ''}`);
+    let response;
+    try {
+      response = await fetch(`http://${WEB_HOST}:${controlPort}/desktop/shutdown`, {
+        method: 'POST',
+        headers: { 'X-Palsitter-Token': controlToken },
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timer);
     }
-    await new Promise((resolve, reject) => {
-      const deadline = setTimeout(() => reject(new Error('GUI backend did not exit')), 10_000);
-      if (backendExited) {
-        clearTimeout(deadline);
-        resolve();
-      } else if (backend) {
-        backend.once('close', () => {
-          clearTimeout(deadline);
-          resolve();
-        });
-      } else {
-        clearTimeout(deadline);
-        resolve();
-      }
-    });
-    allowWindowClose = true;
-    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.close();
-    if (tray && !tray.isDestroyed()) tray.destroy();
-    app.quit();
+    const body = await response.json();
+    if (!response.ok || !body.ok) throw new Error(body.error || 'Shutdown request failed');
+    await waitForBackendExit();
+    finishExit();
   } catch (error) {
     exiting = false;
-    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.setEnabled(true);
     await dialog.showMessageBox(mainWindow, {
       type: 'error',
       title: 'Palsitter shutdown failed',
@@ -200,6 +203,15 @@ async function requestExit() {
       detail: String(error.message || error),
     });
   }
+}
+
+function finishExit() {
+  if (exitFinished) return;
+  exitFinished = true;
+  allowWindowClose = true;
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.close();
+  if (tray && !tray.isDestroyed()) tray.destroy();
+  app.quit();
 }
 
 async function startBackend() {

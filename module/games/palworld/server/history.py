@@ -57,10 +57,18 @@ class TerminationInfo:
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "TerminationInfo":
+        raw_exit_code = _optional_int(data.get("raw_exit_code"))
+        normalized_code = _optional_str(data.get("normalized_code"))
+        if is_zero_exit_code(raw_exit_code, normalized_code):
+            return cls(
+                kind="unknown",
+                summary_code="unknown",
+                diagnostic_output=tuple(str(line) for line in data.get("diagnostic_output") or ()),
+            )
         return cls(
             kind=str(data.get("kind", "unknown")),
-            raw_exit_code=_optional_int(data.get("raw_exit_code")),
-            normalized_code=_optional_str(data.get("normalized_code")),
+            raw_exit_code=raw_exit_code,
+            normalized_code=normalized_code,
             symbol=_optional_str(data.get("symbol")),
             summary_code=str(data.get("summary_code", "unknown")),
             os_error=dict(data["os_error"]) if isinstance(data.get("os_error"), Mapping) else None,
@@ -124,6 +132,19 @@ def _optional_str(value: object) -> str | None:
     return str(value)
 
 
+def is_zero_exit_code(raw_exit_code: int | None, normalized_code: str | None) -> bool:
+    if raw_exit_code == 0:
+        return True
+    if normalized_code is None:
+        return False
+    text = str(normalized_code).strip().lower()
+    try:
+        value = int(text, 16) if text.startswith("0x") else int(text)
+    except ValueError:
+        return False
+    return value == 0
+
+
 def diagnostic_tail(lines) -> tuple[str, ...]:
     cleaned = [str(line).strip()[:MAX_DIAGNOSTIC_LINE_LENGTH] for line in lines if str(line).strip()]
     return tuple(cleaned[-MAX_DIAGNOSTIC_LINES:])
@@ -137,6 +158,8 @@ def classify_process_exit(
 ) -> TerminationInfo:
     platform = platform or os.name
     tail = diagnostic_tail(output)
+    if int(returncode) == 0:
+        return TerminationInfo("unknown", diagnostic_output=tail)
     if platform == "nt":
         normalized = int(returncode) & 0xFFFFFFFF
         known = WINDOWS_NTSTATUS.get(normalized)
@@ -259,5 +282,6 @@ __all__ = [
     "classify_launch_error",
     "classify_process_exit",
     "diagnostic_tail",
+    "is_zero_exit_code",
     "restart_history_path",
 ]

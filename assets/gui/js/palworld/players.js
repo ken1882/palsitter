@@ -6,6 +6,8 @@
   let compactTimer = null;
   let detailTimer = null;
   let detailController = null;
+  let compactStartTimer = null;
+  let detailStartTimer = null;
 
   const clickRefresh = scopeName => {
     const scope = document.getElementById(`pywebio-scope-${scopeName}`);
@@ -26,15 +28,30 @@
     const timer = setInterval(refresh, interval);
     if (timerKey === "compactTimer") compactTimer = timer;
     else detailTimer = timer;
-    setTimeout(refresh, 0);
+    const startTimerKey = timerKey === "compactTimer" ? "compactStartTimer" : "detailStartTimer";
+    if (startTimerKey === "compactStartTimer" && compactStartTimer) clearTimeout(compactStartTimer);
+    if (startTimerKey === "detailStartTimer" && detailStartTimer) clearTimeout(detailStartTimer);
+    const starter = setTimeout(() => {
+      if (startTimerKey === "compactStartTimer") compactStartTimer = null;
+      else detailStartTimer = null;
+      refresh();
+    }, 0);
+    if (startTimerKey === "compactStartTimer") compactStartTimer = starter;
+    else detailStartTimer = starter;
   };
 
-  api.mountCompact = ({ interval }) => startTimer("compact", "players_auto_refresh", interval || 3000);
+  api.mountCompact = ({ interval, generation }) => {
+    if (generation != null && !root.Palsitter.page.isCurrent(generation)) return;
+    startTimer("compact", "players_auto_refresh", interval || 3000);
+  };
   api.destroyCompact = function () {
     if (compactTimer) clearInterval(compactTimer);
+    if (compactStartTimer) clearTimeout(compactStartTimer);
     compactTimer = null;
+    compactStartTimer = null;
   };
-  api.mountDetail = function ({ interval }) {
+  api.mountDetail = function ({ interval, generation }) {
+    if (generation != null && !root.Palsitter.page.isCurrent(generation)) return;
     startTimer("detail", "players_detail_auto_refresh", interval || 1000);
     detailController?.abort();
     detailController = new AbortController();
@@ -53,7 +70,9 @@
   };
   api.destroyDetail = function () {
     if (detailTimer) clearInterval(detailTimer);
+    if (detailStartTimer) clearTimeout(detailStartTimer);
     detailTimer = null;
+    detailStartTimer = null;
     detailController?.abort();
     detailController = null;
   };

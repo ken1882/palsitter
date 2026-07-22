@@ -10,7 +10,14 @@ from module.webui.i18n import LANGUAGES, set_language, t
 from module.webui.process_manager import ProcessManager
 from module.webui.theme import save_preferred_theme
 from module.webui.game_ui import get_game_ui
-from module.webui.session import cleanup_page, register_stop_event
+from module.webui.session import (
+    begin_page_navigation,
+    navigation_transaction,
+    page_context,
+    register_page_stop_event,
+    request_navigation,
+    run_if_current,
+)
 from module.webui.assets import client_call, put_asset_icon, put_asset_widget
 
 def _add_server(*args, **kwargs):
@@ -105,6 +112,18 @@ def _status_code(active: str) -> int:
         return 3
     return 2
 
+
+def _run_navigation(render):
+    with navigation_transaction() as request:
+        if request is None:
+            return None
+        previous = getattr(local, "navigation_request_override", None)
+        local.navigation_request_override = request
+        try:
+            return render()
+        finally:
+            local.navigation_request_override = previous
+
 @use_scope("header_status", clear=True)
 def _set_status(state: int) -> None:
     if state == 1:
@@ -120,9 +139,14 @@ def _set_status(state: int) -> None:
     elif state == 6:
         _put_loading_text(t("status.stopping"), shape="grow", color="secondary")
 
-def _set_frame(title: str, active: str = "Home") -> None:
+def _set_frame(title: str, active: str = "Home"):
     _clear_dirty_form()
-    cleanup_page()
+    request = getattr(local, "navigation_request_override", None)
+    if request is None:
+        request = request_navigation()
+    context = begin_page_navigation(request)
+    if context is None:
+        return None
     clear("ROOT")
     with use_scope("ROOT"):
         put_scope(
@@ -143,9 +167,11 @@ def _set_frame(title: str, active: str = "Home") -> None:
                 put_scope("main", [put_scope("content")]),
             ],
         )
+    client_call("page.begin", generation=context.generation)
     client_call("dom.resetContent")
     _set_status(_status_code(active))
     _render_aside(active)
+    return context
 
 def _render_aside(active: str) -> None:
     clear("aside")
@@ -199,7 +225,8 @@ def _render_instance_menu(name: str, active: str = "overview") -> None:
 
 def _mount_instance_header_status(name: str) -> None:
     stop_event = threading.Event()
-    register_stop_event(stop_event)
+    register_page_stop_event(stop_event)
+    context = page_context()
     manager = _manager(name)
 
     def refresh() -> None:
@@ -208,7 +235,7 @@ def _mount_instance_header_status(name: str) -> None:
             while not stop_event.wait(1):
                 current = _status_code(name)
                 if current != previous:
-                    _set_status(current)
+                    run_if_current(context, lambda: _set_status(current))
                     previous = current
         except (SessionException, FileNotFoundError):
             return
@@ -218,13 +245,18 @@ def _mount_instance_header_status(name: str) -> None:
     thread.start()
 
 def open_instance(name: str, page_id: str = "overview") -> None:
+    return _run_navigation(lambda: _open_instance(name, page_id))
+
+
+def _open_instance(name: str, page_id: str = "overview") -> None:
     record = load_instance(name)
     webui = get_game_ui(record.game)
     try:
         page = next(page for page in webui.pages if page.id == page_id)
     except StopIteration as exc:
         raise KeyError(f"unknown {record.game} page: {page_id}") from exc
-    _set_frame(t(page.title_key), name)
+    if _set_frame(t(page.title_key), name) is None:
+        return
     _render_instance_menu(name, page.id)
     clear("content")
     page.render(name)

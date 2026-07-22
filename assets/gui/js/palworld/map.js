@@ -4,11 +4,16 @@ const root = window.Palsitter = window.Palsitter || {};
 root.palworld = root.palworld || {};
 const api = root.palworld.map = root.palworld.map || {};
 let refreshTimer = null;
+let refreshStartTimer = null;
+let controller = null;
 
-api.mount = ({mapSize, initialScale, labels}) => {
+api.mount = ({mapSize, initialScale, labels, generation}) => {
+    api.generation = generation;
     const oldDestroy = api.destroy;
     const previousDropdownOpen = api.playerDropdownOpen === true;
     if (oldDestroy) oldDestroy();
+    controller = new AbortController();
+    const signal = controller.signal;
     const viewport = document.getElementById('palworld-map-viewport');
     const world = document.getElementById('palworld-map-world');
     const playerLayer = document.getElementById('palworld-map-players');
@@ -219,25 +224,27 @@ api.mount = ({mapSize, initialScale, labels}) => {
     const onKeyDown = event => {
         if (event.key === 'Escape') closePlayerDropdown();
     };
-    viewport.addEventListener('pointerdown', onPointerDown);
-    viewport.addEventListener('pointermove', onPointerMove);
-    viewport.addEventListener('pointerup', onPointerUp);
-    viewport.addEventListener('pointercancel', onPointerUp);
-    viewport.addEventListener('wheel', onWheel, {passive: false});
+    viewport.addEventListener('pointerdown', onPointerDown, {signal});
+    viewport.addEventListener('pointermove', onPointerMove, {signal});
+    viewport.addEventListener('pointerup', onPointerUp, {signal});
+    viewport.addEventListener('pointercancel', onPointerUp, {signal});
+    viewport.addEventListener('wheel', onWheel, {passive: false, signal});
     playerButton.addEventListener('click', event => {
         event.stopPropagation();
         playerDropdown.hidden ? openPlayerDropdown() : closePlayerDropdown();
-    });
-    mapSelect.addEventListener('change', event => setActiveMap(event.target.value));
-    document.addEventListener('click', onOutsideClick);
-    document.addEventListener('keydown', onKeyDown);
-    document.getElementById('palworld-map-zoom-in').addEventListener('click', () => setScale(mapState.scale * 1.25));
-    document.getElementById('palworld-map-zoom-out').addEventListener('click', () => setScale(mapState.scale * 0.8));
-    for (const control of controls) control.addEventListener('pointerdown', event => event.stopPropagation());
+    }, {signal});
+    mapSelect.addEventListener('change', event => setActiveMap(event.target.value), {signal});
+    document.addEventListener('click', onOutsideClick, {signal});
+    document.addEventListener('keydown', onKeyDown, {signal});
+    document.getElementById('palworld-map-zoom-in').addEventListener('click', () => setScale(mapState.scale * 1.25), {signal});
+    document.getElementById('palworld-map-zoom-out').addEventListener('click', () => setScale(mapState.scale * 0.8), {signal});
+    for (const control of controls) control.addEventListener('pointerdown', event => event.stopPropagation(), {signal});
     api.updatePlayers = updatePlayers;
     api.destroy = () => {
-        document.removeEventListener('click', onOutsideClick);
-        document.removeEventListener('keydown', onKeyDown);
+        controller?.abort();
+        controller = null;
+        if (refreshStartTimer) clearTimeout(refreshStartTimer);
+        refreshStartTimer = null;
         delete api.updatePlayers;
         delete api.destroy;
     };
@@ -255,9 +262,13 @@ api.mount = ({mapSize, initialScale, labels}) => {
 
 api.startRefresh = () => {
     if (refreshTimer) clearInterval(refreshTimer);
+    if (refreshStartTimer) clearTimeout(refreshStartTimer);
     const refresh = () => document.querySelector("#pywebio-scope-map_refresh button")?.click();
     refreshTimer = setInterval(refresh, 1000);
-    setTimeout(refresh, 0);
+    refreshStartTimer = setTimeout(() => {
+        refreshStartTimer = null;
+        refresh();
+    }, 0);
 };
 
 api.destroyPage = () => {
@@ -268,6 +279,8 @@ api.destroyPage = () => {
     document.getElementById("pywebio-scope-content")?.classList.remove("map-content");
 };
 
-api.pushPlayers = ({players, state}) => api.updatePlayers?.(players, state);
+api.pushPlayers = ({players, state, generation}) => {
+    if (generation != null && generation !== api.generation) return;
+    api.updatePlayers?.(players, state);
+};
 })();
-

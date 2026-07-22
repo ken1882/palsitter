@@ -7,7 +7,7 @@ from pywebio.session import local, register_thread
 from module.games import get_game
 from module.instances import list_instances, load_instance
 from module.webui.i18n import language_options, t
-from module.webui.session import register_stop_event
+from module.webui.session import page_context, register_page_stop_event, run_if_current
 from module.webui.assets import client_call, client_query, put_asset_widget
 
 def _add_server(*args, **kwargs):
@@ -46,8 +46,16 @@ def _set_frame(*args, **kwargs):
     from module.webui.instance import _set_frame as implementation
     return implementation(*args, **kwargs)
 
+def _run_navigation(*args, **kwargs):
+    from module.webui.instance import _run_navigation as implementation
+    return implementation(*args, **kwargs)
+
 def _home() -> None:
-    _set_frame(t("nav.home"), "Home")
+    return _run_navigation(_render_home)
+
+def _render_home() -> None:
+    if _set_frame(t("nav.home"), "Home") is None:
+        return
     _render_home_menu()
     clear("content")
     with use_scope("content"):
@@ -223,7 +231,15 @@ def _home_card_data(name: str) -> dict:
     }
 
 
-def _render_home_card(name: str, stop_event: threading.Event | None = None) -> None:
+def _render_home_card(name: str, stop_event: threading.Event | None = None, context=None) -> None:
+    context = context or page_context()
+    return run_if_current(
+        context,
+        lambda: _render_home_card_current(name, stop_event),
+    )
+
+
+def _render_home_card_current(name: str, stop_event: threading.Event | None = None) -> None:
     scope = _home_card_scope(name)
     if not client_query("dom.scopeExists", scope=scope):
         return
@@ -243,12 +259,13 @@ def _start_home_updates() -> None:
         return
     for record in list_instances():
         stop_event = threading.Event()
-        register_stop_event(stop_event)
+        register_page_stop_event(stop_event)
+        context = page_context()
 
-        def refresh(name=record.name, event=stop_event) -> None:
+        def refresh(name=record.name, event=stop_event, page=context) -> None:
             try:
                 while not event.is_set():
-                    _render_home_card(name, event)
+                    _render_home_card(name, event, page)
                     if event.wait(5):
                         return
             except (SessionException, FileNotFoundError):

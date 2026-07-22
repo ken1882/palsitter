@@ -1,0 +1,10 @@
+<div class="shutdown-overlay-card" role="dialog" aria-modal="true" aria-label="{{title}}">
+  <h2>{{title}}</h2>
+  <p>{{message}}</p>
+  {{#instances}}
+  <ul class="shutdown-overlay-instances">
+    {{#items}}<li><b>{{name}}</b>: {{message}}</li>{{/items}}
+  </ul>
+  {{/instances}}
+  {{#force_button}}<div class="shutdown-overlay-action">{{& pywebio_output_parse}}</div>{{/force_button}}
+</div>

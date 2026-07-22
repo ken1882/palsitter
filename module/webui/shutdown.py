@@ -117,6 +117,13 @@ def _save_one(record: Any) -> tuple[str, str | None]:
     return record.name, None
 
 
+def _prepare_one(record: Any) -> None:
+    manager = ProcessManager.get(record.name)
+    prepare = getattr(manager, "prepare_shutdown", None)
+    if prepare is not None and manager.active:
+        prepare()
+
+
 def _stop_one(record: Any) -> tuple[str, str | None]:
     manager = ProcessManager.get(record.name)
     try:
@@ -173,6 +180,9 @@ def shutdown_all(timeout: float = SHUTDOWN_TIMEOUT_SECONDS) -> ShutdownResult:
         if operation_failures:
             return ShutdownResult(False, statuses, "An operation did not finish")
 
+        for record in records:
+            _prepare_one(record)
+
         with ThreadPoolExecutor(max_workers=max(1, len(records))) as executor:
             save_results = executor.map(_save_one, records)
             save_failures = {name: error for name, error in save_results if error}
@@ -226,4 +236,47 @@ def shutdown_all(timeout: float = SHUTDOWN_TIMEOUT_SECONDS) -> ShutdownResult:
         _SHUTDOWN_LOCK.release()
 
 
-__all__ = ["SHUTDOWN_TIMEOUT_SECONDS", "ShutdownResult", "is_shutting_down", "shutdown_all"]
+def force_shutdown_all() -> ShutdownResult:
+    """Force-stop every active managed instance for an explicit desktop request."""
+    records = _active_records()
+    statuses: dict[str, dict[str, str]] = {}
+    failures = False
+    for record in records:
+        manager = ProcessManager.get(record.name)
+        try:
+            if manager.active or manager.alive:
+                if not manager.kill(shutdown=True):
+                    raise RuntimeError("Could not force-stop the instance")
+            elif _agent_running(record):
+                from module.games.palworld.server.agent import AgentClient
+
+                AgentClient.connect_existing(record.name).kill()
+            statuses[record.name] = {
+                "status": "force_stopped",
+                "message": "Force-stopped",
+            }
+        except Exception as exc:
+            failures = True
+            statuses[record.name] = {
+                "status": "force_stop_failed",
+                "message": str(exc),
+            }
+    return ShutdownResult(
+        not failures,
+        statuses,
+        "Could not force-stop every active instance" if failures else None,
+    )
+
+
+def active_records() -> list[Any]:
+    return _active_records()
+
+
+__all__ = [
+    "SHUTDOWN_TIMEOUT_SECONDS",
+    "ShutdownResult",
+    "active_records",
+    "force_shutdown_all",
+    "is_shutting_down",
+    "shutdown_all",
+]

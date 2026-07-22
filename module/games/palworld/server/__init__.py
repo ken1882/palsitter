@@ -4,6 +4,7 @@ from .history import (
     TerminationInfo,
     classify_launch_error,
     classify_process_exit,
+    is_zero_exit_code,
 )
 from .manager import PalServerManager
 from .rest import PalRestClient, RestError
@@ -20,5 +21,6 @@ __all__ = [
     "TerminationInfo",
     "classify_launch_error",
     "classify_process_exit",
+    "is_zero_exit_code",
     "get_pal_rest_cache",
 ]

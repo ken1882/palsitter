@@ -10,7 +10,9 @@ from module.games import get_game
 from module.instances import list_instances
 from module.webui.i18n import t
 from module.webui.restart import load_state, render_overlay, start_workflow
-from module.webui.session import register_stop_event
+from module.webui.shutdown_workflow import render_overlay as render_shutdown_overlay
+from module.webui.shutdown_workflow import start_workflow as start_shutdown_workflow
+from module.webui.session import page_context, register_page_stop_event, run_if_current
 from module.webui.assets import client_call, client_query, put_asset_widget
 
 def _home(*args, **kwargs):
@@ -31,6 +33,10 @@ def _profile_label(*args, **kwargs):
 
 def _set_frame(*args, **kwargs):
     from module.webui.instance import _set_frame as implementation
+    return implementation(*args, **kwargs)
+
+def _run_navigation(*args, **kwargs):
+    from module.webui.instance import _run_navigation as implementation
     return implementation(*args, **kwargs)
 
 def _updater(*args, **kwargs):
@@ -189,6 +195,25 @@ def _confirm_force_restart() -> None:
     start_workflow()
     render_overlay()
 
+
+def _shutdown_palsitter() -> None:
+    with popup(t("utils.shutdown_title"), closable=True):
+        put_warning(t("utils.shutdown_warning"))
+        put_text(t("utils.shutdown_details"))
+        put_row(
+            [
+                put_button(t("common.cancel"), onclick=close_popup, color="secondary"),
+                put_button(t("utils.shutdown_continue"), onclick=_confirm_shutdown, color="danger"),
+            ],
+            size="auto auto",
+        )
+
+
+def _confirm_shutdown() -> None:
+    close_popup()
+    start_shutdown_workflow()
+    render_shutdown_overlay()
+
 def _run_utility_code() -> None:
     last_exec = client_query("storage.get", key="_last_exec") or ""
     code = textarea(
@@ -229,7 +254,8 @@ def _update_utils_log(lines: tuple[str, ...]) -> None:
 
 def _start_utils_updates() -> None:
     stop_event = threading.Event()
-    register_stop_event(stop_event)
+    register_page_stop_event(stop_event)
+    context = page_context()
 
     def update_log() -> None:
         last_lines: tuple[str, ...] | None = None
@@ -238,7 +264,7 @@ def _start_utils_updates() -> None:
                 with UTIL_LOGS_LOCK:
                     lines = tuple(UTIL_LOGS)
                 if lines != last_lines:
-                    _update_utils_log(lines)
+                    run_if_current(context, lambda: _update_utils_log(lines))
                     last_lines = lines
                 stop_event.wait(1)
         except SessionException:
@@ -249,7 +275,11 @@ def _start_utils_updates() -> None:
     thread.start()
 
 def _utils() -> None:
-    _set_frame(t("nav.utils"), "Home")
+    return _run_navigation(_render_utils)
+
+def _render_utils() -> None:
+    if _set_frame(t("nav.utils"), "Home") is None:
+        return
     clear("menu")
     with use_scope("menu"):
         _menu_button(t("nav.home"), _home)
@@ -262,6 +292,7 @@ def _utils() -> None:
         with use_scope("util-buttons"):
             put_button(t("utils.raise_exception"), onclick=_raise_diagnostic_exception)
             put_button(t("utils.force_restart"), onclick=_force_restart)
+            put_button(t("utils.shutdown"), onclick=_shutdown_palsitter)
             put_button(t("utils.run_all"), onclick=_run_all_instances)
             put_button(t("utils.stop_all"), onclick=_stop_all_instances)
             put_button(t("utils.kill_all"), onclick=_kill_all_instances)

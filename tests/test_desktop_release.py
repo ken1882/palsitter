@@ -40,6 +40,15 @@ def test_packaged_data_stays_next_to_the_portable_executable():
     assert "path.join(path.dirname(process.execPath), 'data')" in source
 
 
+def test_exit_uses_the_shared_shutdown_workflow():
+    package = json.loads((DESKTOP / "package.json").read_text(encoding="utf-8"))
+    files = set(package["build"]["files"])
+    source = (DESKTOP / "main.js").read_text(encoding="utf-8")
+
+    assert "main.js" in files
+    assert "http://${WEB_HOST}:${controlPort}/desktop/shutdown" in source
+
+
 def test_runtime_builder_exposes_backend_to_embedded_python():
     script = (DESKTOP / "scripts" / "build-runtime.ps1").read_text(encoding="utf-8")
 

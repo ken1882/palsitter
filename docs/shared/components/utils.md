@@ -2,8 +2,8 @@
 
 - The Utils view is a two-column layout with utility actions on the left and a live
   developer Log on the right.
-- The action column displays `Raise exception`, `Force restart`, `Run all instances`,
-  `Stop all instances`, and `Kill all instances` in that order.
+- The action column displays `Raise exception`, `Force restart`, `Shutdown Palsitter`,
+  `Run all instances`, `Stop all instances`, and `Kill all instances` in that order.
 - `Raise exception` captures a diagnostic stack trace in the developer Log without
   breaking the GUI session.
 - `Force restart` first opens a detailed confirmation popup. The popup explains that
@@ -27,6 +27,12 @@
 - Managed restore connects to an existing agent and requests only `ping`/`status`. It
   never creates a missing restore agent and never sends `start`; an existing idle agent
   remains idle until the user explicitly starts it after reconnect.
+- `Shutdown Palsitter` opens a confirmation popup, then uses a shared full-screen
+  stopping overlay. It immediately exposes the stopping state, saves active instances,
+  requests graceful shutdown, and closes the GUI after every lifecycle instance stops.
+  The overlay enables `Force Shutdown (5)` after five seconds, counts down once per
+  second, removes the counter at zero, and force-kills managed instances only when the
+  operator clicks it. The same workflow is used by the Windows Electron tray exit.
 - Restart state is stored atomically under the configured data directory. Refreshing or
   reconnecting reconstructs the active overlay. The initiating browser connection is
   expected to drop while the GUI child is replaced. A completion or failure overlay is

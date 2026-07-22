@@ -11,6 +11,7 @@ from module.games.palworld.config import PalworldProfile, load_profile, save_pro
 from module.games.palworld.server import PalRestClient
 from module.games.palworld.saves import ManagedWorldService
 from module.webui.i18n import t
+from module.webui.session import page_context, run_if_current
 from module.webui.assets import client_call, client_query, put_asset_widget
 
 def _backup_now(*args, **kwargs):
@@ -231,22 +232,28 @@ def _start_world_switch(name: str, world_id: str) -> None:
     if is_shutting_down():
         return
     close_popup()
+    context = page_context()
 
     def run() -> None:
         try:
             result = _managed_world_service(name).switch_world(world_id)
-            toast(
-                t(
-                    "backups.switch_complete",
-                    world=result.active_world.world_id,
-                    backup=result.safety_backup.name,
-                )
+            run_if_current(
+                context,
+                lambda: toast(
+                    t(
+                        "backups.switch_complete",
+                        world=result.active_world.world_id,
+                        backup=result.safety_backup.name,
+                    )
+                ),
             )
         except Exception as exc:
-            toast(t("backups.switch_failed", error=exc), color="error")
-        if client_query("dom.scopeExists", scope="managed_worlds"):
-            _render_managed_worlds(name)
-            _render_backup_files(name)
+            run_if_current(context, lambda: toast(t("backups.switch_failed", error=exc), color="error"))
+        def finish() -> None:
+            if client_query("dom.scopeExists", scope="managed_worlds"):
+                _render_managed_worlds(name)
+                _render_backup_files(name)
+        run_if_current(context, finish)
 
     task = threading.Thread(target=run, daemon=True)
     register_thread(task)
@@ -446,8 +453,9 @@ def _start_backup_rollback(name: str, path: Path) -> None:
         return
     close_popup()
     toast(t("backups.rollback_started"))
+    context = page_context()
     task = threading.Thread(
-        target=lambda: _run_backup_rollback(name, path, True), daemon=True
+        target=lambda: _run_backup_rollback(name, path, True, context=context), daemon=True
     )
     register_thread(task)
     task.start()
@@ -460,6 +468,7 @@ def _run_backup_rollback(
     manager=None,
     service=None,
     sleep=time.sleep,
+    context=None,
 ) -> None:
     from module.webui.shutdown import is_shutting_down
 
@@ -506,14 +515,16 @@ def _run_backup_rollback(
                 else None
             ),
         )
-        toast(t("backups.rollback_complete", file=path.name))
+        run_if_current(context, lambda: toast(t("backups.rollback_complete", file=path.name)))
         manager.append_log(
             f"Restore completed with safety backup {result.safety_backup_path.name}; "
             f"restarted={result.restarted}"
         )
     except Exception as exc:
         manager.append_log(f"Backup rollback failed: {exc}")
-        toast(t("backups.rollback_failed", error=exc), color="error")
-    if client_query("dom.scopeExists", scope="backup_files"):
-        _render_backup_files(name)
-        _render_managed_worlds(name)
+        run_if_current(context, lambda: toast(t("backups.rollback_failed", error=exc), color="error"))
+    def finish() -> None:
+        if client_query("dom.scopeExists", scope="backup_files"):
+            _render_backup_files(name)
+            _render_managed_worlds(name)
+    run_if_current(context, finish)

@@ -46,6 +46,7 @@ from module.games.palworld.update import PalworldUpdateService
 from module.steamcmd import steamcmd_platform_args
 from module.games.registry import AdapterEvent, UpdateInfo
 from module.instances import (
+    DailyLogWriter,
     clear_runtime,
     load_runtime,
     profile_server_output_path,
@@ -244,6 +245,8 @@ class PalServerManager:
         self.auto_update_idle_since: dt.datetime | None = None
         self._server_output_tail: deque[str] = deque(maxlen=5)
         self._output_thread: threading.Thread | None = None
+        self._capture_output_thread: threading.Thread | None = None
+        self._server_output_writer: DailyLogWriter | None = None
         self._server_output_stop_event: threading.Event | None = None
         self._server_output_path: Path | None = None
         self._ue4ss_output_thread: threading.Thread | None = None
@@ -458,6 +461,30 @@ class PalServerManager:
         for raw_line in output:
             emit(raw_line)
 
+    def _capture_server_output(self, process: subprocess.Popen) -> None:
+        output = process.stdout
+        if output is None:
+            return
+        log_directory = self._server_output_path.parent if self._server_output_path else None
+        writer = DailyLogWriter(
+            lambda: (
+                log_directory / f"palserver-{dt.datetime.now():%Y%m%d}.log"
+                if log_directory is not None
+                else profile_server_output_path(self.profile.name)
+            )
+        )
+        self._server_output_writer = writer
+        try:
+            for chunk in output:
+                if isinstance(chunk, str):
+                    chunk = chunk.encode("utf-8", errors="replace")
+                writer.write(bytes(chunk))
+                writer.flush()
+        finally:
+            writer.close()
+            if self._server_output_writer is writer:
+                self._server_output_writer = None
+
     @staticmethod
     def _file_cursor(path: Path) -> tuple[int, tuple[int, int] | None, bytes]:
         try:
@@ -497,8 +524,10 @@ class PalServerManager:
         active: Callable[[], bool],
         emit: Callable[[str], None],
         replay_limit: int = 0,
-        cursor_callback: Callable[[int, tuple[int, int] | None, bytes], None] | None = None,
+        cursor_callback: Callable[[Path, int, tuple[int, int] | None, bytes], None] | None = None,
+        path_provider: Callable[[], Path] | None = None,
     ) -> None:
+        active_path = path
         offset = self._bounded_replay_offset(path, initial_offset, replay_limit)
         file_id = initial_file_id
         prefix = initial_prefix
@@ -521,27 +550,34 @@ class PalServerManager:
 
         while not stop_event.is_set():
             try:
-                stat = path.stat()
+                next_path = path_provider() if path_provider is not None else active_path
+                if next_path != active_path:
+                    active_path = next_path
+                    offset = 0
+                    file_id = None
+                    prefix = b""
+                    pending = b""
+                stat = active_path.stat()
                 current_id = (stat.st_dev, stat.st_ino)
                 if file_id is not None and current_id != file_id:
-                    offset = self._bounded_replay_offset(path, 0, replay_limit)
+                    offset = self._bounded_replay_offset(active_path, 0, replay_limit)
                     pending = b""
                     prefix = b""
                 elif stat.st_size < offset:
-                    offset = self._bounded_replay_offset(path, 0, replay_limit)
+                    offset = self._bounded_replay_offset(active_path, 0, replay_limit)
                     pending = b""
                     prefix = b""
                 file_id = current_id
 
                 if prefix and offset >= len(prefix) and stat.st_size >= len(prefix):
-                    with path.open("rb") as handle:
+                    with active_path.open("rb") as handle:
                         current_prefix = handle.read(len(prefix))
                     if current_prefix != prefix:
-                        offset = self._bounded_replay_offset(path, 0, replay_limit)
+                        offset = self._bounded_replay_offset(active_path, 0, replay_limit)
                         pending = b""
                         prefix = b""
 
-                with path.open("rb") as handle:
+                with active_path.open("rb") as handle:
                     handle.seek(offset)
                     chunk = handle.read()
                 if chunk:
@@ -549,10 +585,10 @@ class PalServerManager:
                     pending += chunk
                     emit_complete_lines()
                     if not prefix:
-                        with path.open("rb") as handle:
+                        with active_path.open("rb") as handle:
                             prefix = handle.read(min(offset, 4096))
                     if cursor_callback is not None:
-                        cursor_callback(offset, file_id, prefix)
+                        cursor_callback(active_path, offset, file_id, prefix)
                 error_reported = False
             except FileNotFoundError:
                 file_id = None
@@ -583,6 +619,8 @@ class PalServerManager:
     def _start_server_output(self, *, replay_existing: bool) -> None:
         self._stop_server_output()
         path = self._server_output_path or profile_server_output_path(self.profile.name)
+        log_directory = path.parent
+        path_provider = lambda: log_directory / f"palserver-{dt.datetime.now():%Y%m%d}.log"
         runtime = load_runtime(self.profile.name) or {}
         if replay_existing:
             offset = int(runtime.get("output_offset", 0) or 0)
@@ -598,12 +636,13 @@ class PalServerManager:
                 except (ValueError, UnicodeEncodeError):
                     prefix = b""
         else:
-            offset = 0
-            _, file_id, prefix = self._file_cursor(path)
+            current_size, file_id, prefix = self._file_cursor(path)
+            offset = min(int(runtime.get("output_offset", current_size) or 0), current_size)
 
         stop_event = threading.Event()
 
         def persist_cursor(
+            current_path: Path,
             new_offset: int,
             new_file_id: tuple[int, int] | None,
             new_prefix: bytes,
@@ -611,6 +650,7 @@ class PalServerManager:
             try:
                 update_runtime(
                     self.profile.name,
+                    output_path=str(current_path),
                     output_offset=new_offset,
                     output_file_id=list(new_file_id) if new_file_id is not None else None,
                     output_prefix=base64.b64encode(new_prefix).decode("ascii"),
@@ -629,6 +669,7 @@ class PalServerManager:
                 "emit": self._server_output_line,
                 "replay_limit": SERVER_OUTPUT_REPLAY_LINES if replay_existing else 0,
                 "cursor_callback": persist_cursor,
+                "path_provider": path_provider,
             },
             daemon=True,
         )
@@ -952,7 +993,11 @@ class PalServerManager:
                 "create_time": status.get("server_create_time"),
                 "session_id": session_id,
                 "output_path": str(self._server_output_path),
-                "output_offset": 0 if not replay_existing else runtime.get("output_offset", 0),
+                "output_offset": (
+                    runtime.get("output_offset", 0)
+                    if replay_existing
+                    else int(status.get("output_offset", 0) or 0)
+                ),
                 "output_prefix": runtime.get(
                     "output_prefix",
                     base64.b64encode(self._file_cursor(self._server_output_path)[2]).decode("ascii"),
@@ -1085,29 +1130,16 @@ class PalServerManager:
         self._server_output_tail.clear()
         self._server_output_path = profile_server_output_path(self.profile.name)
         self._server_output_path.parent.mkdir(parents=True, exist_ok=True)
-        with self._server_output_path.open("wb") as output_handle:
-            launch_kwargs = {
-                "cwd": str(workdir),
-                "stdout": output_handle,
-                "stderr": subprocess.STDOUT,
-            }
-            if WINDOWS:
-                launch_kwargs["creationflags"] = getattr(subprocess, "DETACHED_PROCESS", 0x00000008)
-            else:
-                launch_kwargs["start_new_session"] = True
-            self.process = self.popen_factory(
-                cmd,
-                **launch_kwargs,
-            )
-        if getattr(self.process, "stdout", None) is not None:
-            # Keep compatibility with injected process doubles that expose a
-            # stream; production launches use the file-backed tailer above.
-            self._output_thread = threading.Thread(
-                target=self._stream_server_output,
-                args=(self.process,),
-                daemon=True,
-            )
-            self._output_thread.start()
+        launch_kwargs = {
+            "cwd": str(workdir),
+            "stdout": subprocess.PIPE,
+            "stderr": subprocess.STDOUT,
+        }
+        if WINDOWS:
+            launch_kwargs["creationflags"] = getattr(subprocess, "DETACHED_PROCESS", 0x00000008)
+        else:
+            launch_kwargs["start_new_session"] = True
+        self.process = self.popen_factory(cmd, **launch_kwargs)
         process = self.process
         self._start_ue4ss_output(
             replay_existing=False,
@@ -1119,7 +1151,7 @@ class PalServerManager:
             create_time = float(self.ps_process.create_time())
         except (AttributeError, OSError, psutil.Error, TypeError, ValueError):
             create_time = None
-        _, file_id, output_prefix = self._file_cursor(self._server_output_path)
+        output_offset, file_id, output_prefix = self._file_cursor(self._server_output_path)
         save_runtime(
             self.profile.name,
             {
@@ -1128,12 +1160,19 @@ class PalServerManager:
                 "executable": str(Path(exe).resolve()),
                 "create_time": create_time,
                 "output_path": str(self._server_output_path),
-                "output_offset": 0,
+                "output_offset": output_offset,
                 "output_file_id": list(file_id) if file_id is not None else None,
                 "output_prefix": base64.b64encode(output_prefix).decode("ascii"),
             },
         )
         self._start_server_output(replay_existing=False)
+        if getattr(self.process, "stdout", None) is not None:
+            self._capture_output_thread = threading.Thread(
+                target=self._capture_server_output,
+                args=(self.process,),
+                daemon=True,
+            )
+            self._capture_output_thread.start()
         self.warning = False
         self.countdown = -1
         self.countdown_reason = None

@@ -126,6 +126,35 @@ textarea.form-control.field-invalid {
 #pywebio-scope-restart_overlay .btn { align-self: end; min-width: 7rem; }
 #pywebio-scope-restart_overlay.restart-overlay-terminal { background: rgba(0, 0, 0, .64); }
 #pywebio-scope-restart_overlay.restart-overlay-terminal .restart-overlay-card { border-color: #7a77bb; }
+#pywebio-scope-shutdown_overlay {
+    display: none;
+    position: fixed;
+    z-index: 2000;
+    inset: 0;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    padding: 1rem;
+    background: rgba(0, 0, 0, .78);
+    color: #d3d3d3;
+}
+#pywebio-scope-shutdown_overlay.shutdown-overlay { display: flex; }
+#pywebio-scope-shutdown_overlay .shutdown-overlay-card {
+    width: min(42rem, 100%);
+    max-height: calc(100vh - 2rem);
+    overflow: auto;
+    padding: 1.5rem;
+    background: #191d21;
+    border: 1px solid #e74c3c;
+    border-radius: .35rem;
+    box-shadow: 0 1rem 3rem rgba(0, 0, 0, .45);
+}
+#pywebio-scope-shutdown_overlay h2 { margin-top: 0; }
+#pywebio-scope-shutdown_overlay .shutdown-overlay-instances { padding-left: 1.25rem; }
+#pywebio-scope-shutdown_overlay .shutdown-overlay-action { text-align: right; }
+#pywebio-scope-shutdown_overlay .btn { min-width: 10rem; }
+#pywebio-scope-shutdown_overlay.shutdown-overlay-complete { background: rgba(0, 0, 0, .64); }
+#pywebio-scope-shutdown_overlay.shutdown-overlay-complete .shutdown-overlay-card { border-color: #7a77bb; }
 #pywebio-scope-header { background: #202225; border-bottom: 1px solid #36393f; display: flex; align-items: center; height: 3rem; }
 #pywebio-scope-brand { display: flex; align-items: center; align-self: stretch; width: 15.5rem; flex-shrink: 0; }
 #pywebio-scope-brand > div:first-child { display: flex; align-items: center; height: 3rem; min-width: 0; }

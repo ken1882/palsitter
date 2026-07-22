@@ -17,6 +17,16 @@
     root.invoke = (path, payload) => resolve(path)(payload || {});
     root.query = (path, payload) => resolve(path)(payload || {});
 
+    let pageGeneration = 0;
+    root.page = {
+        begin({generation}) {
+            pageGeneration = Number(generation || 0);
+        },
+        isCurrent(generation) {
+            return Number(generation || 0) === pageGeneration;
+        },
+    };
+
     root.dom = {
         addClasses({scope, classes}) {
             const element = document.getElementById(`pywebio-scope-${scope}`);

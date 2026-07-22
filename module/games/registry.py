@@ -199,6 +199,7 @@ class GameAdapter:
         progress: Callable[[OperationProgress], None] | None = None,
         *,
         validate: bool | None = None,
+        stop_requested: Callable[[], bool] | None = None,
     ) -> UpdateInfo:
         if not self.capabilities.updates:
             raise RuntimeError(f"{self.display_name} does not support updates")
@@ -208,7 +209,8 @@ class GameAdapter:
         if validate is None:
             validate = bool(profile.steam_validate)
         return PalworldUpdateService(profile, logger=log, progress=progress).install_or_update(
-            validate=validate
+            validate=validate,
+            stop_requested=stop_requested,
         )
 
     def bootstrap(

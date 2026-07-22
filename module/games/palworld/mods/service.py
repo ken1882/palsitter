@@ -10,8 +10,6 @@ import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Iterable
-from urllib.parse import quote
-
 import requests
 
 from module.games.palworld.config import (
@@ -22,19 +20,21 @@ from module.games.palworld.config import (
 from module.games.palworld.server.status import instance_is_running
 
 
-GITHUB_REPOSITORY = "UE4SS-RE/RE-UE4SS"
-GITHUB_API = f"https://api.github.com/repos/{GITHUB_REPOSITORY}"
 GITHUB_HEADERS = {
     "Accept": "application/vnd.github+json",
     "User-Agent": "palsitter",
 }
-RELEASE_LIMIT = 10
 DOWNLOAD_CHUNK_SIZE = 64 * 1024
 
-_RUNTIME_ASSET_RE = re.compile(
-    r"^UE4SS_(?:Standard_)?v?[0-9][A-Za-z0-9_.-]*\.zip$",
-    re.IGNORECASE,
+PALWORLD_UE4SS_RELEASE_TAG = "experimental-palworld"
+PALWORLD_UE4SS_RELEASE_PAGE = (
+    "https://github.com/Okaetsu/RE-UE4SS/releases/tag/experimental-palworld"
 )
+PALWORLD_UE4SS_DOWNLOAD_URL = (
+    "https://github.com/Okaetsu/RE-UE4SS/releases/download/"
+    "experimental-palworld/UE4SS-Palworld.zip"
+)
+
 _SETTING_RE = re.compile(
     r"^(?P<indent>[ \t]*)bUseUObjectArrayCache[ \t]*=.*$",
     re.IGNORECASE,
@@ -52,6 +52,28 @@ class UE4SSRelease:
     @property
     def label(self) -> str:
         return f"{self.tag} — {self.asset_name}"
+
+
+PALWORLD_UE4SS_RELEASE = UE4SSRelease(
+    tag=PALWORLD_UE4SS_RELEASE_TAG,
+    name=PALWORLD_UE4SS_RELEASE_TAG,
+    asset_name="UE4SS-Palworld.zip",
+    download_url=PALWORLD_UE4SS_DOWNLOAD_URL,
+    prerelease=True,
+)
+
+
+def _configured_palworld_release() -> UE4SSRelease:
+    download_url = os.getenv("PALSITTER_TEST_UE4SS_DOWNLOAD_URL")
+    if not download_url:
+        return PALWORLD_UE4SS_RELEASE
+    return UE4SSRelease(
+        tag=PALWORLD_UE4SS_RELEASE.tag,
+        name=PALWORLD_UE4SS_RELEASE.name,
+        asset_name=PALWORLD_UE4SS_RELEASE.asset_name,
+        download_url=download_url,
+        prerelease=PALWORLD_UE4SS_RELEASE.prerelease,
+    )
 
 
 @dataclass(frozen=True)
@@ -95,43 +117,18 @@ class UE4SSService:
             if platform_supported is None
             else platform_supported
         )
-        self.github_api = os.getenv("PALSITTER_UE4SS_GITHUB_API", GITHUB_API).rstrip("/")
         self.root = fixed_palserver_dir(profile.name)
         self.win64 = self.root / "Pal" / "Binaries" / "Win64"
         self.marker_path = self.win64 / ".palsitter-mods.json"
 
-    def list_releases(self, limit: int = RELEASE_LIMIT) -> tuple[UE4SSRelease, ...]:
-        limit = min(RELEASE_LIMIT, max(1, int(limit)))
-        response = self.session.get(
-            f"{self.github_api}/releases",
-            params={"per_page": limit},
-            headers=GITHUB_HEADERS,
-            timeout=15,
-        )
-        response.raise_for_status()
-        payload = response.json()
-        if not isinstance(payload, list):
-            raise ValueError("GitHub returned an invalid UE4SS release list")
-        releases = []
-        for item in payload:
-            release = _parse_release(item)
-            if release is not None:
-                releases.append(release)
-            if len(releases) >= limit:
-                break
-        return tuple(releases)
+    def list_releases(self, limit: int = 1) -> tuple[UE4SSRelease, ...]:
+        del limit
+        return (_configured_palworld_release(),)
 
     def resolve_release(self, tag: str) -> UE4SSRelease:
-        response = self.session.get(
-            f"{self.github_api}/releases/tags/{quote(str(tag), safe='')}",
-            headers=GITHUB_HEADERS,
-            timeout=15,
-        )
-        response.raise_for_status()
-        release = _parse_release(response.json())
-        if release is None:
-            raise ValueError(f"UE4SS release {tag!r} has no supported runtime archive")
-        return release
+        if str(tag).casefold() != PALWORLD_UE4SS_RELEASE_TAG.casefold():
+            raise ValueError(f"Unsupported Palworld UE4SS release: {tag!r}")
+        return _configured_palworld_release()
 
     def status(self) -> ModsStatus:
         server_installed = fixed_executable_path(self.profile.name).is_file()
@@ -163,7 +160,7 @@ class UE4SSService:
             ue4ss_layout=layout,
             lua_mods=self._list_lua_mods(lua_dir),
             pak_mods=self._list_pak_mods(pak_dir),
-            lua_dir=lua_dir if lua_dir and lua_dir.is_dir() else None,
+            lua_dir=lua_dir,
             pak_dir=pak_dir,
         )
 
@@ -214,7 +211,7 @@ class UE4SSService:
         if not isinstance(paths, list) or not all(isinstance(item, str) for item in paths):
             paths = _fallback_paths(layout)
         for relative in paths:
-            self._remove_relative_path(relative)
+            self._remove_relative_path(relative, preserve_mods=True)
         try:
             self.marker_path.unlink()
         except FileNotFoundError:
@@ -319,16 +316,31 @@ class UE4SSService:
             if relative not in new_paths:
                 self._remove_relative_path(relative)
 
-    def _remove_relative_path(self, relative: str) -> None:
+    def _remove_relative_path(self, relative: str, *, preserve_mods: bool = False) -> None:
         normalized = str(relative).replace("\\", "/").strip("/")
         if not normalized or "/" in normalized or normalized in (".", ".."):
+            return
+        if preserve_mods and normalized.casefold() == "mods":
             return
         target = (self.win64 / normalized).resolve()
         root = self.win64.resolve()
         if target.parent != root:
             return
         if target.is_dir() and not target.is_symlink():
-            shutil.rmtree(target)
+            if not preserve_mods:
+                shutil.rmtree(target)
+                return
+            for child in target.iterdir():
+                if child.name.casefold() == "mods" and child.is_dir():
+                    continue
+                if child.is_dir() and not child.is_symlink():
+                    shutil.rmtree(child)
+                else:
+                    child.unlink()
+            try:
+                target.rmdir()
+            except OSError:
+                pass
         else:
             try:
                 target.unlink()
@@ -407,7 +419,7 @@ class UE4SSService:
 def default_release_tag(releases: Iterable[UE4SSRelease]) -> str | None:
     choices = tuple(releases)
     for release in choices:
-        if release.tag.casefold() == "experimental-latest":
+        if release.tag.casefold() == PALWORLD_UE4SS_RELEASE_TAG.casefold():
             return release.tag
     for release in choices:
         if release.prerelease:
@@ -427,34 +439,6 @@ def patch_object_cache_setting(text: str) -> str:
             return "".join(lines)
     stripped = text.rstrip("\r\n")
     return f"{stripped}{newline if stripped else ''}bUseUObjectArrayCache = false{newline}"
-
-
-def _parse_release(payload: Any) -> UE4SSRelease | None:
-    if not isinstance(payload, dict) or payload.get("draft"):
-        return None
-    tag = payload.get("tag_name")
-    assets = payload.get("assets")
-    if not isinstance(tag, str) or not isinstance(assets, list):
-        return None
-    matches = [asset for asset in assets if _runtime_asset(asset)]
-    if not matches:
-        return None
-    asset = max(matches, key=lambda item: str(item.get("updated_at") or item.get("created_at") or ""))
-    return UE4SSRelease(
-        tag=tag,
-        name=str(payload.get("name") or tag),
-        asset_name=str(asset["name"]),
-        download_url=str(asset["browser_download_url"]),
-        prerelease=bool(payload.get("prerelease")),
-    )
-
-
-def _runtime_asset(asset: Any) -> bool:
-    if not isinstance(asset, dict):
-        return False
-    name = asset.get("name")
-    url = asset.get("browser_download_url")
-    return isinstance(name, str) and isinstance(url, str) and bool(_RUNTIME_ASSET_RE.fullmatch(name))
 
 
 def _safe_archive_name(name: str) -> bool:

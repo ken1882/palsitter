@@ -4,6 +4,7 @@ import datetime as dt
 import os
 import queue
 import re
+import subprocess
 import threading
 import time
 from pathlib import Path
@@ -99,12 +100,14 @@ class PalworldUpdateService:
         progress: Callable[[OperationProgress], None] | None = None,
         pty_process_factory: Callable[..., PtyProcessLike] = spawn_pty_process,
         now: Callable[[], dt.datetime] | None = None,
+        stop_requested: Callable[[], bool] | None = None,
     ) -> None:
         self.profile = profile
         self.log = logger
         self.progress = progress
         self.pty_process_factory = pty_process_factory
         self.now = now or (lambda: dt.datetime.now(dt.timezone.utc))
+        self.stop_requested = stop_requested or (lambda: False)
 
     @property
     def installed(self) -> bool:
@@ -192,7 +195,14 @@ class PalworldUpdateService:
                 self._emit("check_update", "failed", None, "Update check failed", str(exc))
                 return info
 
-    def install_or_update(self, *, validate: bool = False) -> UpdateInfo:
+    def install_or_update(
+        self,
+        *,
+        validate: bool = False,
+        stop_requested: Callable[[], bool] | None = None,
+    ) -> UpdateInfo:
+        if stop_requested is not None:
+            self.stop_requested = stop_requested
         was_installed = self.installed
         kind = "validate" if validate else ("update" if was_installed else "install")
         self._emit(kind, "preparing", 0.0, "Preparing SteamCMD")
@@ -316,6 +326,16 @@ class PalworldUpdateService:
                     except queue.Empty:
                         break
                 return returncode, last_line, "\n".join(all_lines)
+            if self.stop_requested():
+                self.log("SteamCMD stop requested")
+                process.terminate()
+                try:
+                    process.wait(timeout=3)
+                except (OSError, TimeoutError, subprocess.TimeoutExpired):
+                    process.kill()
+                    process.wait(timeout=3)
+                returncode = process.poll()
+                return returncode if returncode is not None else -1, last_line, "\n".join(all_lines)
             try:
                 handle_line(output_lines.get(timeout=1))
                 continue

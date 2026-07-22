@@ -17,17 +17,27 @@ directory instead of `%APPDATA%`: configuration is under `data/config`, instance
 under `data/profile`, and logs under `data/logs`. The extracted release directory must be
 writable by the current user.
 
-Tray Exit is a full graceful shutdown. It saves active instances, requests graceful
-shutdown through every active supervisor and agent, waits for game servers and agents to
-exit, stops the PyWebIO server, and then quits Electron. If any component does not stop
-within 60 seconds, Palsitter stays open and reports the affected instance. Exit never
-calls the force-kill path automatically.
+Tray Exit requests the shared Home → Utils shutdown workflow. The web UI immediately
+shows an undismissable stopping dialog, saves active instances, requests graceful
+shutdown through every active supervisor and agent, waits for game servers and agents
+to exit, stops the PyWebIO server, and then quits Electron. The dialog enables `Force
+Shutdown` after five seconds; that explicit action kills managed processes instead of
+waiting for graceful shutdown. If any component does not stop within 60 seconds, the
+dialog remains available so the operator can force shutdown.
 
 The desktop backend control endpoint is loopback-only and authenticated with the
 per-launch `PALSITTER_DESKTOP_TOKEN`:
 
 ```text
 POST /desktop/shutdown
+X-Palsitter-Token: <token>
+```
+
+The executable starts the shared workflow through the authenticated control endpoint.
+The explicit force path uses the same token and shared workflow:
+
+```text
+POST /desktop/force-shutdown
 X-Palsitter-Token: <token>
 ```
 

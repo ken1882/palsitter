@@ -7,6 +7,7 @@ import pytest
 from module.games.palworld.server.history import (
     LifecycleEvent,
     RestartHistoryStore,
+    TerminationInfo,
     WINDOWS_NTSTATUS,
     classify_launch_error,
     classify_process_exit,
@@ -40,6 +41,16 @@ def test_unknown_windows_exit_retains_decimal_and_hex():
     assert info.raw_exit_code == 3
     assert info.normalized_code == "0x00000003"
     assert info.summary_code == "unrecognized_exit_code"
+
+
+def test_zero_exit_code_is_ignored():
+    info = classify_process_exit(0, platform="nt", output=["final output"])
+
+    assert info.kind == "unknown"
+    assert info.raw_exit_code is None
+    assert info.normalized_code is None
+    assert info.summary_code == "unknown"
+    assert info.diagnostic_output == ("final output",)
 
 
 @pytest.mark.parametrize(
@@ -144,6 +155,30 @@ def test_schedule_events_are_not_persisted(tmp_path, monkeypatch):
     store.append(LifecycleEvent(dt.datetime.now(), "planned_restart", "scheduled"))
 
     assert store.load() == ()
+
+
+def test_persisted_zero_exit_code_is_ignored_on_load(tmp_path, monkeypatch):
+    monkeypatch.setenv("PALSITTER_CONFIG_DIR", str(tmp_path))
+    store = RestartHistoryStore("test")
+
+    store.append(
+        LifecycleEvent(
+            dt.datetime.now(),
+            "crash",
+            "restarted",
+            termination=TerminationInfo(
+                "exit_code",
+                raw_exit_code=0,
+                normalized_code="0x0",
+                summary_code="unrecognized_exit_code",
+            ),
+        )
+    )
+
+    loaded = store.load()
+    assert loaded[0].termination.kind == "unknown"
+    assert loaded[0].termination.raw_exit_code is None
+    assert loaded[0].termination.normalized_code is None
 
 
 def test_malformed_history_is_reported(tmp_path, monkeypatch):

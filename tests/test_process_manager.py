@@ -8,6 +8,7 @@ import pytest
 
 from module.config import Profile, fixed_executable_path, profile_log_path, save_profile
 from module.games import OperationProgress, UpdateInfo
+from module.instances import DailyLogWriter, profile_server_output_path, prune_dated_log_files
 from module.webui.process_manager import ProcessManager, _PROCESS_CONTEXT, _run_profile
 
 
@@ -214,7 +215,9 @@ def test_start_installs_steamcmd_before_spawning_supervisor(tmp_path, monkeypatc
         def is_alive(self):
             return True
 
-    def fake_install(adapter, record, log=print, progress=None, *, validate=False):
+    def fake_install(
+        adapter, record, log=print, progress=None, *, validate=False, stop_requested=None
+    ):
         calls.append(f"install-{record.name}")
         log("installed")
         if progress:
@@ -249,6 +252,36 @@ def test_start_exposes_installing_state_while_bootstrap_is_running(tmp_path, mon
     assert manager.state == "installing"
     release.set()
     manager._bootstrap_thread.join(timeout=1)
+
+
+def test_stop_cancels_inflight_bootstrap_without_warning(tmp_path, monkeypatch):
+    monkeypatch.setenv("PALSITTER_CONFIG_DIR", str(tmp_path))
+    save_profile(Profile(name="test"))
+    started = threading.Event()
+    release = threading.Event()
+
+    def fake_install(
+        adapter, record, log=print, progress=None, *, validate=False, stop_requested=None
+    ):
+        started.set()
+        assert stop_requested is not None
+        release.wait(timeout=1)
+        assert stop_requested()
+        raise RuntimeError("SteamCMD stopped")
+
+    monkeypatch.setattr("module.games.registry.GameAdapter.install_or_update", fake_install)
+    manager = ProcessManager("test")
+
+    manager.start()
+    assert started.wait(timeout=1)
+    assert manager.state == "installing"
+    assert manager.stop() is True
+    release.set()
+    manager._bootstrap_thread.join(timeout=1)
+
+    assert manager.state == "inactive"
+    assert manager.warning is False
+    assert any("Start cancelled" in line for line in manager.logs)
 
 
 def test_start_skips_steamcmd_bootstrap_when_server_is_already_reachable(tmp_path, monkeypatch):
@@ -326,7 +359,9 @@ def test_start_does_not_spawn_when_steamcmd_install_fails(tmp_path, monkeypatch)
     save_profile(Profile(name="test"))
     calls = []
 
-    def fake_install(adapter, record, log=print, progress=None, *, validate=False):
+    def fake_install(
+        adapter, record, log=print, progress=None, *, validate=False, stop_requested=None
+    ):
         calls.append(f"install-{record.name}")
         raise RuntimeError("download failed")
 
@@ -587,7 +622,9 @@ def test_explicit_update_is_async_and_leaves_server_inactive(
     save_profile(Profile(name="test"))
     calls = []
 
-    def fake_update(adapter, record, log=print, progress=None, *, validate=False):
+    def fake_update(
+        adapter, record, log=print, progress=None, *, validate=False, stop_requested=None
+    ):
         calls.append(validate)
         progress(OperationProgress(kind, "updating", 25.0, "updating"))
         return UpdateInfo("200", "200", status="up_to_date")
@@ -737,7 +774,60 @@ def test_append_log_writes_overview_log_file(tmp_path, monkeypatch):
 
     log_path = profile_log_path("test")
     assert log_path.exists()
+    assert log_path.name == f"overview-{dt.datetime.now():%Y%m%d}.log"
     assert "hello file log" in log_path.read_text(encoding="utf-8")
+
+
+def test_daily_log_writer_switches_files_when_the_date_changes(tmp_path, monkeypatch):
+    monkeypatch.setenv("PALSITTER_CONFIG_DIR", str(tmp_path / "config"))
+    current = [dt.datetime(2026, 7, 22, 23, 59, 59)]
+    writer = DailyLogWriter(
+        lambda: profile_server_output_path("test", current[0])
+    )
+
+    writer.write(b"before midnight\n")
+    writer.flush()
+    current[0] = dt.datetime(2026, 7, 23, 0, 0, 1)
+    writer.write(b"after midnight\n")
+    writer.close()
+
+    assert profile_server_output_path("test", current[0]).name == "palserver-20260723.log"
+    assert (
+        profile_server_output_path("test", dt.date(2026, 7, 22)).read_bytes()
+        == b"before midnight\n"
+    )
+    assert (
+        profile_server_output_path("test", dt.date(2026, 7, 23)).read_bytes()
+        == b"after midnight\n"
+    )
+
+
+def test_dated_log_retention_removes_files_older_than_thirty_days(tmp_path, monkeypatch):
+    monkeypatch.setenv("PALSITTER_CONFIG_DIR", str(tmp_path / "config"))
+    today = dt.date(2026, 7, 22)
+    logs_dir = profile_log_path("test", today).parent
+    logs_dir.mkdir(parents=True)
+
+    old_date = today - dt.timedelta(days=30)
+    retained_date = today - dt.timedelta(days=29)
+    for path in (
+        profile_log_path("test", old_date),
+        profile_server_output_path("test", old_date),
+        profile_log_path("test", retained_date),
+        profile_server_output_path("test", retained_date),
+    ):
+        path.write_text("log", encoding="utf-8")
+    (logs_dir / "overview.log").write_text("legacy", encoding="utf-8")
+    (logs_dir / "palserver-output.log").write_text("legacy", encoding="utf-8")
+
+    prune_dated_log_files(logs_dir, today)
+
+    assert not profile_log_path("test", old_date).exists()
+    assert not profile_server_output_path("test", old_date).exists()
+    assert profile_log_path("test", retained_date).exists()
+    assert profile_server_output_path("test", retained_date).exists()
+    assert (logs_dir / "overview.log").exists()
+    assert (logs_dir / "palserver-output.log").exists()
 
 
 def test_read_logs_drains_queued_messages(tmp_path, monkeypatch):

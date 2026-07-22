@@ -20,7 +20,12 @@ from pywebio.pin import pin
 from pywebio.session import local, register_thread
 
 from module.games.palworld.config import PalworldProfile, load_profile, save_profile
-from module.games.palworld.server import LifecycleEvent, RestartHistoryStore, TerminationInfo
+from module.games.palworld.server import (
+    LifecycleEvent,
+    RestartHistoryStore,
+    TerminationInfo,
+    is_zero_exit_code,
+)
 from module.games.palworld.webui.forms import (
     _settings_field,
     _settings_select,
@@ -29,7 +34,7 @@ from module.games.palworld.webui.forms import (
 )
 from module.webui.forms import _clear_dirty_form, _register_dirty_form, _settings_label
 from module.webui.i18n import t
-from module.webui.session import register_stop_event
+from module.webui.session import page_context, register_page_stop_event, run_if_current
 from module.webui.assets import client_call, put_asset_widget
 
 
@@ -241,6 +246,8 @@ def _next_restart(name: str, profile: Profile) -> dt.datetime | None:
 def _termination_label(info: TerminationInfo | None) -> str:
     if info is None:
         return "-"
+    if is_zero_exit_code(info.raw_exit_code, info.normalized_code):
+        return t("restart_history.cause.unknown")
     label = t(f"restart_history.cause.{info.summary_code}")
     codes = []
     if info.symbol:
@@ -360,7 +367,8 @@ def _render_restart_history(name: str) -> None:
 
 def _start_history_updates(name: str) -> None:
     stop_event = threading.Event()
-    register_stop_event(stop_event)
+    register_page_stop_event(stop_event)
+    context = page_context()
     path = RestartHistoryStore(name).path
 
     def refresh() -> None:
@@ -380,7 +388,7 @@ def _start_history_updates(name: str) -> None:
                     manager.active,
                 )
                 if signature != previous:
-                    _render_restart_history(name)
+                    run_if_current(context, lambda: _render_restart_history(name))
                     previous = signature
         except (SessionException, FileNotFoundError):
             return

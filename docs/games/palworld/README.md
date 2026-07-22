@@ -7,6 +7,7 @@ Palworld is the fully supported game integration.
 - [Instance Overview](./components/instance-overview.md)
 - [Game Map](./components/instance-map.md)
 - [Audit](./components/instance-audit.md)
+- [Tools](./components/instance-tools.md)
 - [Players](./components/instance-players.md)
 - [Server Settings](./components/instance-server-settings.md)
 - [Auto Restart](./components/instance-auto-restart.md)

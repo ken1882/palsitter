@@ -7,7 +7,7 @@ from pywebio.exceptions import SessionException
 from pywebio.output import clear, put_button, put_loading, put_row, put_scope, put_table, put_text, use_scope
 from pywebio.session import local, register_thread
 from module.webui.i18n import t
-from module.webui.session import register_stop_event
+from module.webui.session import page_context, register_page_stop_event, run_if_current
 from module.webui.assets import put_asset_widget
 from module.webui.restart import start_workflow
 
@@ -21,6 +21,10 @@ def _menu_button(*args, **kwargs):
 
 def _set_frame(*args, **kwargs):
     from module.webui.instance import _set_frame as implementation
+    return implementation(*args, **kwargs)
+
+def _run_navigation(*args, **kwargs):
+    from module.webui.instance import _run_navigation as implementation
     return implementation(*args, **kwargs)
 
 def _utils(*args, **kwargs):
@@ -142,7 +146,8 @@ def _check_updater() -> None:
         return
     _render_updater_state("checking")
     stop_event = threading.Event()
-    register_stop_event(stop_event)
+    register_page_stop_event(stop_event)
+    context = page_context()
 
     def check() -> None:
         try:
@@ -163,8 +168,13 @@ def _check_updater() -> None:
         if stop_event.is_set():
             return
         try:
-            _render_updater_state(1 if available else 0)
-            _render_updater_tables()
+            run_if_current(
+                context,
+                lambda: (
+                    _render_updater_state(1 if available else 0),
+                    _render_updater_tables(),
+                ),
+            )
         except SessionException:
             return
 
@@ -193,16 +203,17 @@ def _run_updater() -> None:
         return
     _render_updater_state("updating")
     stop_event = threading.Event()
-    register_stop_event(stop_event)
+    register_page_stop_event(stop_event)
+    context = page_context()
 
     def update() -> None:
         succeeded = _pull_update()
         if not stop_event.is_set():
             try:
                 if not succeeded:
-                    _render_updater_state("failed")
+                    run_if_current(context, lambda: _render_updater_state("failed"))
                     return
-                _render_updater_state("finish")
+                run_if_current(context, lambda: _render_updater_state("finish"))
                 start_workflow()
             except SessionException:
                 return
@@ -212,7 +223,11 @@ def _run_updater() -> None:
     thread.start()
 
 def _updater() -> None:
-    _set_frame(t("nav.updater"), "Home")
+    return _run_navigation(_render_updater)
+
+def _render_updater() -> None:
+    if _set_frame(t("nav.updater"), "Home") is None:
+        return
     clear("menu")
     with use_scope("menu"):
         _menu_button(t("nav.home"), _home)

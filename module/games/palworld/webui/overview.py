@@ -11,12 +11,17 @@ from pywebio.pin import pin, put_input
 from pywebio.session import local, register_thread
 from module.games.palworld.backup import BackupService
 from module.instances import load_instance, load_runtime
-from module.games.palworld.config import PalworldProfile, fixed_palserver_dir, load_profile
+from module.games.palworld.config import (
+    PalworldProfile,
+    fixed_executable_path,
+    fixed_palserver_dir,
+    load_profile,
+)
 from module.games.palworld.server import PalRestClient, get_pal_rest_cache
 from module.games.palworld.audit import AuditEvent, AuditStore, utc_now
 from module.games.palworld.server.status import endpoint_status, instance_is_running
 from module.webui.i18n import t
-from module.webui.session import register_stop_event
+from module.webui.session import page_context, register_page_cleanup, register_page_stop_event, run_if_current
 from module.webui.assets import client_call, client_query, put_asset_widget
 
 
@@ -142,6 +147,7 @@ def render(name: str) -> None:
         _render_players(name)
         _render_log_area(name)
     _start_overview_updates(name)
+    register_page_cleanup(lambda: client_call("palworld.overview.destroy"))
 
 
 def _auto_attach_running_server(name: str) -> None:
@@ -208,8 +214,12 @@ def _render_scheduler(name: str) -> None:
 
 
 def _open_scheduler_folder(name: str) -> None:
+    folder = fixed_palserver_dir(name)
+    if not folder.is_dir() or not fixed_executable_path(name).is_file():
+        toast(t("scheduler.server_not_installed"), color="error")
+        return
     try:
-        _open_folder(fixed_palserver_dir(name))
+        _open_folder(folder)
     except Exception as exc:
         toast(t("scheduler.open_failed", error=exc), color="error")
 
@@ -269,7 +279,16 @@ def _update_scheduler_backup_info(profile: Profile) -> None:
 def _update_scheduler_toggle(name: str) -> None:
     manager = _manager(name)
     if manager.operation_busy:
-        put_button(t("scheduler.start"), onclick=lambda: None, disabled=True)
+        operation = manager.operation_progress
+        if (
+            manager.state in ("installing", "updating")
+            and operation is not None
+            and operation.phase == "updating"
+            and operation.kind in ("install", "update", "validate")
+        ):
+            put_button(t("scheduler.stop"), onclick=lambda: _toggle_server(name), color="danger")
+        else:
+            put_button(t("scheduler.start"), onclick=lambda: None, disabled=True)
     elif manager.state in ("stopping", "killing") and manager.ownership == "managed":
         put_button(t("scheduler.kill"), onclick=lambda: _toggle_server(name), color="danger")
     elif manager.state in ("stopping", "killing"):
@@ -443,7 +462,13 @@ def _render_log_area(name: str) -> None:
 
 
 def _reset_overview_log_filter() -> None:
-    client_call("palworld.overview.mountLog", types=list(LOG_TYPES), emptyText=t("log.empty"))
+    context = page_context()
+    client_call(
+        "palworld.overview.mountLog",
+        types=list(LOG_TYPES),
+        emptyText=t("log.empty"),
+        generation=context.generation if context else None,
+    )
 
 
 @use_scope("overview_log_filter_btn", clear=True)
@@ -487,11 +512,13 @@ def _open_overview_log_filter() -> None:
             },
         )
         put_button(t("common.close"), onclick=close_popup, color="secondary")
-    client_call("palworld.overview.mountFilter")
+    context = page_context()
+    client_call("palworld.overview.mountFilter", generation=context.generation if context else None)
 
 
 def _enable_console_input() -> None:
-    client_call("palworld.overview.mountConsole")
+    context = page_context()
+    client_call("palworld.overview.mountConsole", generation=context.generation if context else None)
 
 @use_scope("overview_log_scroll_btn", clear=True)
 def _update_overview_scroll_button() -> None:
@@ -556,7 +583,8 @@ def _update_metrics_output(name: str, row: list[str]) -> None:
 
 def _start_overview_updates(name: str) -> None:
     stop_event = threading.Event()
-    register_stop_event(stop_event)
+    register_page_stop_event(stop_event)
+    context = page_context()
     manager = _manager(name)
 
     def update_log() -> None:
@@ -576,14 +604,22 @@ def _start_overview_updates(name: str) -> None:
                                 overlap = size
                                 break
                     if last_lines is None or (last_lines and not overlap):
-                        _update_log_output(lines)
+                        run_if_current(context, lambda: _update_log_output(lines))
                     else:
-                        _append_log_output(lines[overlap:], len(last_lines) - overlap)
+                        run_if_current(
+                            context,
+                            lambda: _append_log_output(lines[overlap:], len(last_lines) - overlap),
+                        )
                     last_lines = lines
                 current_state = manager.display_state
                 if current_state != last_state:
-                    _set_status(_status_code(name))
-                    _update_scheduler_backup_info(load_profile(name))
+                    run_if_current(
+                        context,
+                        lambda: (
+                            _set_status(_status_code(name)),
+                            _update_scheduler_backup_info(load_profile(name)),
+                        ),
+                    )
                     last_state = current_state
                 operation = manager.operation_progress
                 operation_signature = (
@@ -598,8 +634,13 @@ def _start_overview_updates(name: str) -> None:
                     getattr(operation, "error", None),
                 )
                 if operation_signature != last_operation:
-                    _update_scheduler_controls(name)
-                    _render_overview_check_update_button(name)
+                    run_if_current(
+                        context,
+                        lambda: (
+                            _update_scheduler_controls(name),
+                            _render_overview_check_update_button(name),
+                        ),
+                    )
                     last_operation = operation_signature
                 stop_event.wait(1)
         except SessionException:
@@ -611,7 +652,7 @@ def _start_overview_updates(name: str) -> None:
                 row = _dashboard_row(name)
                 if stop_event.is_set():
                     return
-                _update_metrics_output(name, row)
+                run_if_current(context, lambda: _update_metrics_output(name, row))
                 stop_event.wait(3)
         except SessionException:
             return
@@ -628,7 +669,7 @@ def _start_overview_updates(name: str) -> None:
                 )
                 if stop_event.is_set():
                     return
-                _update_scheduler_endpoints(statuses)
+                run_if_current(context, lambda: _update_scheduler_endpoints(statuses))
                 ready = statuses.get("udp") == "open" and statuses.get("rest") == "open"
                 if not running:
                     startup_probes_remaining = 10

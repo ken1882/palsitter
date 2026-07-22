@@ -7,6 +7,7 @@ from module.webui.assets import asset_urls
 from module.webui.i18n import init_language
 from module.webui.session import cleanup_session, initialize_page_lifecycle
 from module.webui.restart import mount_overlay
+from module.webui.shutdown_workflow import mount_overlay as mount_shutdown_overlay
 
 def _home(*args, **kwargs):
     from module.webui.pages.home import _home as implementation
@@ -28,6 +29,7 @@ def app() -> None:
     _home()
     with use_scope("ROOT"):
         mount_overlay()
+        mount_shutdown_overlay()
 
 
 __all__ = ["app"]

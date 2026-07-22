@@ -18,7 +18,7 @@ from module.games.palworld.map import (
 from module.games.palworld.server import get_pal_rest_cache
 from module.webui.assets import client_call, put_asset_widget
 from module.webui.i18n import get_language, t
-from module.webui.session import register_page_cleanup
+from module.webui.session import page_context, register_page_cleanup, run_if_current
 
 
 _TILE_NAME = re.compile(r"^z4x(\d+)y(\d+)\.webp$")
@@ -156,6 +156,7 @@ def _map_data() -> dict:
 
 
 def render(name: str) -> None:
+    context = page_context()
     local.map_snapshot_signature = None
     get_pal_rest_cache(name).ensure_started()
     with use_scope("content"):
@@ -163,7 +164,7 @@ def render(name: str) -> None:
             "map_page",
             [
                 put_asset_widget("palworld.map", _map_data()),
-                put_scope("map_refresh", [put_button("", onclick=lambda: _refresh(name))]),
+                put_scope("map_refresh", [put_button("", onclick=lambda: _refresh(name, context))]),
             ],
         )
     client_call("dom.addClasses", scope="content", classes=["map-content"])
@@ -171,6 +172,7 @@ def render(name: str) -> None:
         "palworld.map.mount",
         mapSize=MAP_SIZE,
         initialScale=_INITIAL_SCALE,
+        generation=context.generation,
         labels={
             "player_count": t("map.players", count="{count}"),
             "player_aria": t("map.player_aria", name="{name}"),
@@ -185,7 +187,8 @@ def render(name: str) -> None:
     register_page_cleanup(lambda: client_call("palworld.map.destroyPage"))
 
 
-def _refresh(name: str) -> None:
+def _refresh(name: str, context=None) -> None:
+    context = context or page_context()
     snapshot = get_pal_rest_cache(name).snapshot()
     result = snapshot.players if isinstance(snapshot.players, dict) else {}
     rows = result.get("players", []) if isinstance(result, dict) else []
@@ -207,10 +210,27 @@ def _refresh(name: str) -> None:
     if snapshot.players is None and not snapshot.session_active:
         state = "unavailable"
     signature = (json.dumps(players, sort_keys=True), state)
+    run_if_current(
+        context,
+        lambda: _apply_map_players(
+            signature,
+            players,
+            state,
+            context.generation if context else None,
+        ),
+    )
+
+
+def _apply_map_players(signature, players: list, state: str, generation=None) -> None:
     if signature == getattr(local, "map_snapshot_signature", None):
         return
     local.map_snapshot_signature = signature
-    client_call("palworld.map.pushPlayers", players=players, state=state)
+    client_call(
+        "palworld.map.pushPlayers",
+        players=players,
+        state=state,
+        generation=generation,
+    )
 
 
 __all__ = ["render"]

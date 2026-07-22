@@ -7,7 +7,12 @@ import pytest
 import requests
 
 from module.games.palworld.config import PalworldProfile, fixed_executable_path, fixed_palserver_dir
-from module.games.palworld.mods import UE4SSService, default_release_tag, patch_object_cache_setting
+from module.games.palworld.mods import (
+    PALWORLD_UE4SS_RELEASE,
+    UE4SSService,
+    default_release_tag,
+    patch_object_cache_setting,
+)
 
 
 class FakeResponse:
@@ -39,23 +44,6 @@ class FakeSession:
         return response
 
 
-def _release(tag, *assets, prerelease=False, draft=False):
-    return {
-        "tag_name": tag,
-        "name": tag,
-        "prerelease": prerelease,
-        "draft": draft,
-        "assets": [
-            {
-                "name": name,
-                "browser_download_url": f"https://downloads.invalid/{name}",
-                "updated_at": updated,
-            }
-            for name, updated in assets
-        ],
-    }
-
-
 def _zip_bytes(entries):
     output = io.BytesIO()
     with zipfile.ZipFile(output, "w") as archive:
@@ -72,48 +60,22 @@ def _installed_profile(tmp_path, monkeypatch, name="default"):
     return PalworldProfile(name=name)
 
 
-def test_release_probe_limits_results_defaults_experimental_and_selects_newest_asset(tmp_path, monkeypatch):
+def test_fixed_palworld_release_is_available_without_github_lookup(tmp_path, monkeypatch):
     profile = _installed_profile(tmp_path, monkeypatch)
-    payload = [
-        _release(
-            "experimental-latest",
-            ("zDEV-UE4SS_v3.0.1.zip", "2026-01-03"),
-            ("UE4SS_v3.0.1-100.zip", "2026-01-01"),
-            ("UE4SS_v3.0.1-101.zip", "2026-01-02"),
-            prerelease=True,
-        )
-    ]
-    payload.extend(
-        _release(f"v3.0.{number}", (f"UE4SS_v3.0.{number}.zip", f"2025-01-{number:02d}"))
-        for number in range(1, 12)
-    )
-    session = FakeSession([FakeResponse(payload=payload)])
+    session = FakeSession([FakeResponse(status=503)])
 
     releases = UE4SSService(profile, session=session, platform_supported=True).list_releases()
 
-    assert len(releases) == 10
-    assert releases[0].asset_name == "UE4SS_v3.0.1-101.zip"
-    assert default_release_tag(releases) == "experimental-latest"
-    assert session.calls[0][1]["params"] == {"per_page": 10}
-    assert session.calls[0][1]["timeout"] == 15
+    assert releases == (PALWORLD_UE4SS_RELEASE,)
+    assert default_release_tag(releases) == "experimental-palworld"
+    assert session.calls == []
 
 
-def test_release_probe_skips_drafts_and_non_runtime_assets(tmp_path, monkeypatch):
+def test_fixed_palworld_release_ignores_requested_release_limit(tmp_path, monkeypatch):
     profile = _installed_profile(tmp_path, monkeypatch)
-    payload = [
-        _release("draft", ("UE4SS_v3.0.1.zip", "2026"), draft=True),
-        _release("extras", ("zCustomGameConfigs.zip", "2026")),
-        _release("old", ("UE4SS_Xinput_v2.5.2.zip", "2026")),
-        _release("stable", ("UE4SS_Standard_v2.5.2.zip", "2026")),
-    ]
+    releases = UE4SSService(profile, platform_supported=True).list_releases(limit=10)
 
-    releases = UE4SSService(
-        profile,
-        session=FakeSession([FakeResponse(payload=payload)]),
-        platform_supported=True,
-    ).list_releases()
-
-    assert [release.tag for release in releases] == ["stable"]
+    assert [release.tag for release in releases] == ["experimental-palworld"]
 
 
 @pytest.mark.parametrize(
@@ -150,15 +112,9 @@ def test_install_nested_release_patches_settings_and_records_marker(tmp_path, mo
             "ue4ss/Mods/Builtin/Scripts/main.lua": b"print('ok')",
         }
     )
-    release = _release(
-        "experimental-latest",
-        ("UE4SS_v3.0.1-101.zip", "2026-01-01"),
-        prerelease=True,
-    )
     session = FakeSession(
         {
-            "https://api.github.com/repos/UE4SS-RE/RE-UE4SS/releases/tags/experimental-latest": FakeResponse(payload=release),
-            "https://downloads.invalid/UE4SS_v3.0.1-101.zip": FakeResponse(content=archive),
+            PALWORLD_UE4SS_RELEASE.download_url: FakeResponse(content=archive),
         }
     )
     service = UE4SSService(
@@ -168,15 +124,15 @@ def test_install_nested_release_patches_settings_and_records_marker(tmp_path, mo
         platform_supported=True,
     )
 
-    installed = service.install("experimental-latest")
+    installed = service.install(PALWORLD_UE4SS_RELEASE.tag)
 
     win64 = fixed_palserver_dir("default") / "Pal" / "Binaries" / "Win64"
     settings = (win64 / "ue4ss" / "UE4SS-settings.ini").read_bytes()
     marker = json.loads((win64 / ".palsitter-mods.json").read_text(encoding="utf-8"))
-    assert installed.tag == "experimental-latest"
+    assert installed.tag == "experimental-palworld"
     assert settings == b"Other = 1\r\nbUseUObjectArrayCache = false\r\n"
     assert marker["layout"] == "nested"
-    assert marker["version"] == "experimental-latest"
+    assert marker["version"] == "experimental-palworld"
     assert marker["paths"] == ["dwmapi.dll", "ue4ss"]
 
 
@@ -206,20 +162,18 @@ def test_layout_change_preserves_user_mods_and_removes_old_core(tmp_path, monkey
             "ue4ss/Mods/Builtin/main.lua": b"builtin",
         }
     )
-    release = _release("experimental-latest", ("UE4SS_v3.0.1-101.zip", "2026"))
     service = UE4SSService(
         profile,
         session=FakeSession(
             {
-                "https://api.github.com/repos/UE4SS-RE/RE-UE4SS/releases/tags/experimental-latest": FakeResponse(payload=release),
-                "https://downloads.invalid/UE4SS_v3.0.1-101.zip": FakeResponse(content=archive),
+                PALWORLD_UE4SS_RELEASE.download_url: FakeResponse(content=archive),
             }
         ),
         running_probe=lambda _: False,
         platform_supported=True,
     )
 
-    service.install("experimental-latest")
+    service.install(PALWORLD_UE4SS_RELEASE.tag)
 
     assert (win64 / "ue4ss" / "Mods" / "UserMod" / "Scripts" / "main.lua").read_text() == "user"
     assert not (win64 / "UE4SS.dll").exists()
@@ -288,7 +242,7 @@ def test_linux_status_keeps_pak_management_available_and_ue4ss_unsupported(tmp_p
     assert (disabled.name, disabled.enabled) == ("LinuxPak.pak.disabled", False)
     assert (paks / "LinuxPak.pak.disabled").exists()
     with pytest.raises(RuntimeError, match="native Linux"):
-        service.install("experimental-latest")
+        service.install(PALWORLD_UE4SS_RELEASE.tag)
 
 
 def test_pak_toggle_renames_disabled_suffix_and_delete_is_scoped(tmp_path, monkeypatch):
@@ -343,7 +297,7 @@ def test_pak_toggle_rejects_collisions_game_files_and_unsafe_paths(tmp_path, mon
         service.delete_pak("../outside.pak")
 
 
-def test_uninstall_removes_ue4ss_and_lua_mods_but_preserves_paks(tmp_path, monkeypatch):
+def test_uninstall_removes_ue4ss_loader_but_preserves_lua_mods_and_paks(tmp_path, monkeypatch):
     profile = _installed_profile(tmp_path, monkeypatch)
     root = fixed_palserver_dir("default")
     win64 = root / "Pal" / "Binaries" / "Win64"
@@ -351,7 +305,7 @@ def test_uninstall_removes_ue4ss_and_lua_mods_but_preserves_paks(tmp_path, monke
     (win64 / "ue4ss" / "UE4SS.dll").write_bytes(b"dll")
     (win64 / "dwmapi.dll").write_bytes(b"proxy")
     (win64 / ".palsitter-mods.json").write_text(
-        json.dumps({"version": "experimental-latest", "layout": "nested", "paths": ["dwmapi.dll", "ue4ss"]}),
+        json.dumps({"version": PALWORLD_UE4SS_RELEASE.tag, "layout": "nested", "paths": ["dwmapi.dll", "ue4ss"]}),
         encoding="utf-8",
     )
     pak = root / "Pal" / "Content" / "Paks" / "Keep.pak"
@@ -361,7 +315,8 @@ def test_uninstall_removes_ue4ss_and_lua_mods_but_preserves_paks(tmp_path, monke
 
     service.uninstall()
 
-    assert not (win64 / "ue4ss").exists()
+    assert (win64 / "ue4ss" / "Mods" / "UserMod").is_dir()
+    assert not (win64 / "ue4ss" / "UE4SS.dll").exists()
     assert not (win64 / "dwmapi.dll").exists()
     assert not (win64 / ".palsitter-mods.json").exists()
     assert pak.read_bytes() == b"keep"
@@ -378,7 +333,7 @@ def test_install_rejects_running_server_before_network_access(tmp_path, monkeypa
     )
 
     with pytest.raises(RuntimeError, match="Stop"):
-        service.install("experimental-latest")
+        service.install(PALWORLD_UE4SS_RELEASE.tag)
 
     assert session.calls == []
 
@@ -386,13 +341,11 @@ def test_install_rejects_running_server_before_network_access(tmp_path, monkeypa
 def test_install_rejects_unsafe_archive_without_writing_server_files(tmp_path, monkeypatch):
     profile = _installed_profile(tmp_path, monkeypatch)
     archive = _zip_bytes({"../escape.txt": b"bad", "UE4SS.dll": b"dll", "UE4SS-settings.ini": b"x"})
-    release = _release("v3.0.1", ("UE4SS_v3.0.1.zip", "2026"))
     service = UE4SSService(
         profile,
         session=FakeSession(
             {
-                "https://api.github.com/repos/UE4SS-RE/RE-UE4SS/releases/tags/v3.0.1": FakeResponse(payload=release),
-                "https://downloads.invalid/UE4SS_v3.0.1.zip": FakeResponse(content=archive),
+                PALWORLD_UE4SS_RELEASE.download_url: FakeResponse(content=archive),
             }
         ),
         running_probe=lambda _: False,
@@ -400,35 +353,26 @@ def test_install_rejects_unsafe_archive_without_writing_server_files(tmp_path, m
     )
 
     with pytest.raises(ValueError, match="unsafe"):
-        service.install("v3.0.1")
+        service.install(PALWORLD_UE4SS_RELEASE.tag)
 
     assert not (fixed_palserver_dir("default") / "escape.txt").exists()
     assert not (fixed_palserver_dir("default") / "Pal" / "Binaries" / "Win64" / "UE4SS.dll").exists()
 
 
-def test_release_and_download_http_failures_are_reported(tmp_path, monkeypatch):
+def test_download_http_failures_are_reported(tmp_path, monkeypatch):
     profile = _installed_profile(tmp_path, monkeypatch)
-    with pytest.raises(requests.HTTPError):
-        UE4SSService(
-            profile,
-            session=FakeSession([FakeResponse(status=503)]),
-            platform_supported=True,
-        ).list_releases()
-
-    release = _release("v3.0.1", ("UE4SS_v3.0.1.zip", "2026"))
     service = UE4SSService(
         profile,
         session=FakeSession(
             {
-                "https://api.github.com/repos/UE4SS-RE/RE-UE4SS/releases/tags/v3.0.1": FakeResponse(payload=release),
-                "https://downloads.invalid/UE4SS_v3.0.1.zip": FakeResponse(status=500),
+                PALWORLD_UE4SS_RELEASE.download_url: FakeResponse(status=500),
             }
         ),
         running_probe=lambda _: False,
         platform_supported=True,
     )
     with pytest.raises(requests.HTTPError):
-        service.install("v3.0.1")
+        service.install(PALWORLD_UE4SS_RELEASE.tag)
 
 
 def test_object_cache_patch_is_case_insensitive_and_preserves_newlines():

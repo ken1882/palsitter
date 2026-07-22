@@ -9,7 +9,7 @@ from module.games.palworld.config import load_profile
 from module.games.palworld.players_cache import PalworldBanList, PlayerCache
 from module.games.palworld.server import PalRestClient, get_pal_rest_cache
 from module.webui.i18n import t
-from module.webui.session import register_page_cleanup
+from module.webui.session import page_context, register_page_cleanup, run_if_current
 from module.webui.assets import client_call, client_query, put_asset_icon, put_asset_widget
 
 def _render_instance_menu(*args, **kwargs):
@@ -51,6 +51,7 @@ def _player_name(name: str, userid: str) -> str:
 
 
 def _render_players(name: str) -> None:
+    context = page_context()
     local.players_compact_rows = set()
     local.players_compact_list_initialized = False
     local.players_compact_snapshot_signature = None
@@ -64,16 +65,20 @@ def _render_players(name: str) -> None:
                 ),
                 put_scope(
                     "players_auto_refresh",
-                    [put_button("Auto refresh players", onclick=lambda: _refresh_players(name))],
+                    [put_button("Auto refresh players", onclick=lambda: _refresh_players(name, context))],
                 ),
                 put_scope("players_list", [put_text(t("players.loading"))]),
             ],
         )
         client_call("dom.addClasses", scope="players_panel", classes=["panel"])
-        client_call("palworld.players.mountCompact", interval=3000)
-        register_page_cleanup(lambda: client_call("palworld.players.destroyCompact"))
+    client_call("palworld.players.mountCompact", interval=3000, generation=context.generation)
+    register_page_cleanup(lambda: client_call("palworld.players.destroyCompact"))
 
-def _refresh_players(name: str) -> None:
+def _refresh_players(name: str, context=None) -> None:
+    context = context or page_context()
+    return run_if_current(context, lambda: _refresh_players_current(name))
+
+def _refresh_players_current(name: str) -> None:
     profile = load_profile(name)
     snapshot = get_pal_rest_cache(name).snapshot()
     result = snapshot.players or {}
@@ -218,6 +223,7 @@ def render(name: str) -> None:
     local.players_detail_list_initialized = False
     local.players_detail_snapshot_signature = None
     local.players_banned_signature = None
+    context = page_context()
     with use_scope("content"):
         put_scope(
             "players_detail_panel",
@@ -226,7 +232,7 @@ def render(name: str) -> None:
                 put_scope("players_detail_error"),
                 put_scope(
                     "players_detail_auto_refresh",
-                    [put_button(t("players.refresh"), onclick=lambda: _refresh_players_page(name))],
+                    [put_button(t("players.refresh"), onclick=lambda: _refresh_players_page(name, context))],
                 ),
                 put_scope("players_detail_list", [put_text(t("players.loading"))]),
                 put_asset_widget("palworld.players_section_title", {"title": t("players.banned_title")}),
@@ -234,7 +240,7 @@ def render(name: str) -> None:
             ],
         )
         client_call("dom.addClasses", scope="players_detail_panel", classes=["panel", "players-detail"])
-    client_call("palworld.players.mountDetail", interval=1000)
+    client_call("palworld.players.mountDetail", interval=1000, generation=context.generation)
     register_page_cleanup(lambda: client_call("palworld.players.destroyDetail"))
 
 
@@ -242,7 +248,15 @@ def _players_page(name: str) -> None:
     from module.webui.instance import open_instance
     open_instance(name, "players")
 
-def _refresh_players_page(name: str, *, force: bool = False) -> None:
+def _refresh_players_page(name: str, context=None, *, force: bool = False) -> None:
+    context = context or page_context()
+    return run_if_current(
+        context,
+        lambda: _refresh_players_page_current(name, force=force),
+    )
+
+
+def _refresh_players_page_current(name: str, *, force: bool = False) -> None:
     snapshot = get_pal_rest_cache(name).snapshot()
     signature = (
         snapshot.session_active,

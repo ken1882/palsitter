@@ -173,6 +173,11 @@ Frontend maintainability rules:
   Browser APIs live under `window.Palsitter`; do not add private window globals.
 - Stateful widgets implement repeatable `mount`, `update`, and `destroy` operations and
   release timers, observers, and listeners during page cleanup.
+- Any page callback or worker that can outlive navigation must capture `page_context()`
+  before blocking or asynchronous work and guard every later UI mutation (`use_scope`,
+  `clear`, PyWebIO output, `toast`, or `client_call`) with `run_if_current()`. The
+  operation may finish and write intentional persistent instance logs, but stale UI
+  results must never append to the replacement page.
 - Keep shared assets under shared ownership and game-specific assets under their game.
   Preserve manifest load order and never use inline-style marker hacks.
 - Match existing shared UI styling before adding new styles. Reuse standard buttons and table tokens
@@ -183,4 +188,7 @@ Frontend maintainability rules:
   Do not add per-page width constants unless a spec explicitly requires them.
 - Architecture tests enforce asset registration, passive autoescaped templates, and the
   Python/frontend boundary. Playwright must fail on page errors and failed GUI assets.
+- GUI tests for delayed operations must click the real action, navigate away before the
+  result returns, and assert that no result, error, popup, toast, or status rows appear
+  on the replacement page.
 

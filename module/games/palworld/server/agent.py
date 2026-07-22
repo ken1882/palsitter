@@ -36,6 +36,7 @@ from module.games.palworld.config import (
     windows_console_executable_path,
 )
 from module.instances import (
+    DailyLogWriter,
     clear_agent_state,
     load_agent_state,
     load_runtime,
@@ -704,6 +705,7 @@ class ServerAgent:
         self.server_pid: int | None = None
         self.server_create_time: float | None = None
         self.server_executable: str | None = None
+        self.output_offset = 0
         self.output_path = str(profile_server_output_path(profile.name))
 
     def _write_state(self, **changes: Any) -> None:
@@ -724,6 +726,7 @@ class ServerAgent:
                 "server_pid": self.server_pid,
                 "server_create_time": self.server_create_time,
                 "server_executable": self.server_executable,
+                "output_offset": self.output_offset,
                 "exit_code": self.exit_code,
                 "exit_reason": self.exit_reason,
                 "heartbeat": time.time(),
@@ -772,7 +775,13 @@ class ServerAgent:
             self.session_id = uuid.uuid4().hex
             self.output_path = str(profile_server_output_path(self.name))
             Path(self.output_path).parent.mkdir(parents=True, exist_ok=True)
-            self.output_handle = open(self.output_path, "wb")
+            try:
+                self.output_offset = Path(self.output_path).stat().st_size
+            except OSError:
+                self.output_offset = 0
+            self.output_handle = DailyLogWriter(
+                lambda: profile_server_output_path(self.name)
+            )
             workdir = Path(
                 executable_workdir(self.profile.executable) or self.profile.workdir
             ).resolve()
@@ -820,6 +829,10 @@ class ServerAgent:
                 raw = chunk.encode("utf-8", errors="replace") if isinstance(chunk, str) else bytes(chunk)
                 handle.write(raw)
                 handle.flush()
+                current_path = str(handle.path)
+                if current_path != self.output_path:
+                    self.output_path = current_path
+                    self._write_state()
                 bytes_since_flush += len(raw)
                 now = time.monotonic()
                 if bytes_since_flush >= 4096 or now - last_flush >= 0.25:
@@ -895,6 +908,7 @@ class ServerAgent:
                 "server_state": self.server_state,
                 "session_id": self.session_id,
                 "output_path": self.output_path,
+                "output_offset": self.output_offset,
                 "exit_code": self.exit_code,
                 "exit_reason": self.exit_reason,
             }

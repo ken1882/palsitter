@@ -8,9 +8,23 @@
     owner.controller = new AbortController();
     return owner.controller.signal;
   };
+  const later = (owner, callback) => {
+    owner.timers = owner.timers || new Set();
+    const timer = setTimeout(() => {
+      owner.timers.delete(timer);
+      callback();
+    }, 0);
+    owner.timers.add(timer);
+    return timer;
+  };
+  const clearTimers = owner => {
+    for (const timer of owner.timers || []) clearTimeout(timer);
+    owner.timers?.clear();
+  };
 
   const server = palworld.serverSettings = palworld.serverSettings || {};
-  server.mount = function () {
+  server.mount = function ({generation} = {}) {
+    if (generation != null && !palsitter.page.isCurrent(generation)) return;
     const form = document.getElementById("pywebio-scope-settings_form");
     const toolbar = document.getElementById("pywebio-scope-settings_filter_toolbar");
     if (!form || !toolbar) return;
@@ -63,7 +77,10 @@
     }, { signal });
     apply();
   };
-  server.destroy = () => server.controller?.abort();
+  server.destroy = () => {
+    server.controller?.abort();
+    clearTimers(server);
+  };
 
   const world = palworld.worldSettings = palworld.worldSettings || {};
   world.decorateField = function ({ scope, category, search }) {
@@ -83,7 +100,8 @@
       if (input) input.step = "1";
     }
   };
-  world.mount = function ({ changedPrefix }) {
+  world.mount = function ({ changedPrefix, generation }) {
+    if (generation != null && !palsitter.page.isCurrent(generation)) return;
     const form = document.getElementById("pywebio-scope-world_settings_form");
     const toolbar = document.getElementById("pywebio-scope-world_settings_toolbar");
     if (!form || !toolbar) return;
@@ -125,8 +143,8 @@
       updateCount();
       apply();
     };
-    world.syncByKey = ({ key }) => setTimeout(() =>
-      sync(document.getElementById(`pywebio-scope-world_field_${key}`)), 0);
+    world.syncByKey = ({ key }) => later(world, () =>
+      sync(document.getElementById(`pywebio-scope-world_field_${key}`)));
     scopes().forEach(sync);
     form.addEventListener("input", event => sync(event.target.closest(".world-field-scope")), { signal });
     form.addEventListener("change", event => sync(event.target.closest(".world-field-scope")), { signal });
@@ -148,7 +166,7 @@
     apply();
   };
   world.mountPassword = function ({ name, showLabel, hideLabel }) {
-    setTimeout(() => {
+    later(world, () => {
       const input = document.querySelector(`input[name="${CSS.escape(name)}"]`);
       const button = input?.closest(".settings-field-control")?.querySelector(".password-eye")
         || input?.parentElement?.parentElement?.querySelector(".password-eye");
@@ -159,10 +177,11 @@
         input.type = show ? "text" : "password";
         button.setAttribute("aria-label", show ? hideLabel : showLabel);
       });
-    }, 0);
+    });
   };
   world.destroy = function () {
     world.controller?.abort();
+    clearTimers(world);
     delete world.syncByKey;
   };
 })(window);

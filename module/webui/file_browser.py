@@ -29,6 +29,7 @@ from pywebio.session import local, register_thread
 
 from module.webui.assets import client_call, client_query, put_asset_icon, put_asset_widget
 from module.webui.i18n import t
+from module.webui.session import page_context, register_page_cleanup, run_if_current
 
 ENTRY_LIMIT = 500
 BROWSE_TIMEOUT_SECONDS = 3
@@ -326,7 +327,10 @@ def open_browser(
         "active": True,
         "worker_slots": threading.BoundedSemaphore(2),
         "lock": threading.Lock(),
+        "page_context": page_context(),
     }
+    state = local.browse
+    register_page_cleanup(lambda: _browse_deactivate(state))
     with popup(t("settings.browse_title", field=label), size="large", closable=True) as scope:
         put_scope("browse_address", scope=scope)
         put_scope("browse_options", scope=scope)
@@ -584,7 +588,23 @@ def _browse_request(path: str | Path, *, preserve_selection: bool = False) -> No
     receiver.start()
 
 
+def _browse_deactivate(state: dict) -> None:
+    state["active"] = False
+    with state["lock"]:
+        state["latest_request_id"] += 1
+    _autocomplete_cleanup(BROWSE_ADDRESS_AUTOCOMPLETE_ID)
+    if getattr(local, "browse", None) is state:
+        close_popup()
+
+
 def _browse_apply_result(state: dict, result: dict, preserve_selection: bool) -> None:
+    return run_if_current(
+        state.get("page_context"),
+        lambda: _browse_apply_result_current(state, result, preserve_selection),
+    )
+
+
+def _browse_apply_result_current(state: dict, result: dict, preserve_selection: bool) -> None:
     if not state["active"] or getattr(local, "browse", None) is not state:
         return
     with state["lock"]:
