@@ -60,6 +60,16 @@ def test_startup_handles_port_conflicts_with_kill_and_alternate_port_prompts():
     assert "class StartupCancelledError" in source
 
 
+def test_electron_reloads_after_the_shared_restart_exit():
+    source = (DESKTOP / "main.js").read_text(encoding="utf-8")
+
+    assert "async function restartBackend()" in source
+    assert "reserveRestartPort" in source
+    assert "backend.on('close', (code)" in source
+    assert "if (code === 75 && !exiting && !backendRestarting)" in source
+    assert "await mainWindow.loadURL(`http://${WEB_HOST}:${webPort}/`)" in source
+
+
 def test_runtime_builder_exposes_backend_to_embedded_python():
     script = (DESKTOP / "scripts" / "build-runtime.ps1").read_text(encoding="utf-8")
 

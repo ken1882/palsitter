@@ -9,7 +9,6 @@ from pywebio.session import local, register_thread
 from module.webui.i18n import t
 from module.webui.session import page_context, register_page_stop_event, run_if_current
 from module.webui.assets import put_asset_widget
-from module.webui.restart import start_workflow
 
 def _home(*args, **kwargs):
     from module.webui.pages.home import _home as implementation
@@ -29,6 +28,10 @@ def _run_navigation(*args, **kwargs):
 
 def _utils(*args, **kwargs):
     from module.webui.pages.utils import _utils as implementation
+    return implementation(*args, **kwargs)
+
+def _force_restart(*args, **kwargs):
+    from module.webui.pages.utils import _force_restart as implementation
     return implementation(*args, **kwargs)
 
 UPDATER_REMOTE = "https://github.com/ken1882/palsitter.git"
@@ -213,8 +216,11 @@ def _run_updater() -> None:
                 if not succeeded:
                     run_if_current(context, lambda: _render_updater_state("failed"))
                     return
-                run_if_current(context, lambda: _render_updater_state("finish"))
-                start_workflow()
+                def finish_update() -> None:
+                    _render_updater_state("finish")
+                    _force_restart()
+
+                run_if_current(context, finish_update)
             except SessionException:
                 return
 

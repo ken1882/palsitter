@@ -13,6 +13,7 @@ let mainWindow = null;
 let tray = null;
 let backend = null;
 let backendExited = false;
+let backendRestarting = false;
 let exiting = false;
 let allowWindowClose = false;
 let controlToken = null;
@@ -63,6 +64,15 @@ function reservePort(preferred) {
       server.close(() => resolve(port));
     });
   });
+}
+
+async function reserveRestartPort(preferred) {
+  try {
+    return await reservePort(preferred);
+  } catch (error) {
+    if (error.code !== 'EADDRINUSE') throw error;
+    return reservePort(0);
+  }
 }
 
 class StartupCancelledError extends Error {}
@@ -291,9 +301,14 @@ function finishExit() {
   app.quit();
 }
 
-async function startBackend() {
-  webPort = await reservePortWithPrompt(Number(process.env.PALSITTER_PORT || DEFAULT_WEB_PORT));
-  controlPort = await reservePortWithPrompt(Number(process.env.PALSITTER_CONTROL_PORT || DEFAULT_CONTROL_PORT));
+async function startBackend({ restarting = false } = {}) {
+  const reserve = restarting ? reserveRestartPort : reservePortWithPrompt;
+  webPort = await reserve(
+    Number(restarting ? webPort : (process.env.PALSITTER_PORT || DEFAULT_WEB_PORT)),
+  );
+  controlPort = await reserve(
+    Number(restarting ? controlPort : (process.env.PALSITTER_CONTROL_PORT || DEFAULT_CONTROL_PORT)),
+  );
   controlToken = require('crypto').randomBytes(32).toString('hex');
   const dataRoot = app.getPath('userData');
   const args = [
@@ -310,11 +325,35 @@ async function startBackend() {
     stdio: ['ignore', 'ignore', 'ignore'],
   });
   backendExited = false;
-  backend.on('close', () => { backendExited = true; });
+  const child = backend;
+  backend.on('close', (code) => {
+    if (backend !== child) return;
+    backendExited = true;
+    if (code === 75 && !exiting && !backendRestarting) {
+      void restartBackend();
+    }
+  });
   backend.on('error', (error) => {
     if (!exiting) dialog.showErrorBox('Palsitter backend failed', String(error));
   });
   await waitForBackend(`http://${WEB_HOST}:${webPort}/`);
+}
+
+async function restartBackend() {
+  if (exiting || backendRestarting) return;
+  backendRestarting = true;
+  try {
+    await startBackend({ restarting: true });
+    await mainWindow.loadURL(`http://${WEB_HOST}:${webPort}/`);
+  } catch (error) {
+    dialog.showErrorBox(
+      startupText('errorTitle'),
+      String(error.message || error),
+    );
+    app.exit(1);
+  } finally {
+    backendRestarting = false;
+  }
 }
 
 async function main() {

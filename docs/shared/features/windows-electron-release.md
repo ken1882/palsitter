@@ -41,6 +41,11 @@ POST /desktop/force-shutdown
 X-Palsitter-Token: <token>
 ```
 
+When the updater restart is confirmed, the backend exits with the shared restart exit code.
+Electron recognizes that intentional exit, starts a fresh backend using the updated source,
+and reloads the BrowserWindow. Only that intentional exit code triggers this replacement
+path.
+
 At startup, if the preferred web or control port is already in use, the executable asks
 whether to stop the process listening on that port. If stopping it does not free the port,
 or the operator declines, it asks whether to choose another available loopback port. Declining

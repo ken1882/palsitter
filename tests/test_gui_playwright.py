@@ -565,12 +565,53 @@ def test_updater_matches_state_tables_styles_and_git_behavior(tmp_path, monkeypa
         page.get_by_text("New version available", exact=True).wait_for(timeout=10000)
         page.get_by_role("button", name="Click to update", exact=True).click()
         page.get_by_text("Update finished", exact=True).wait_for(timeout=10000)
+        restart_modal = page.locator(".modal.show")
+        restart_modal.get_by_text("Restart Palsitter?", exact=True).wait_for(timeout=5000)
+        restart_modal.get_by_role("button", name="Cancel", exact=True).click()
+        restart_modal.wait_for(state="hidden", timeout=5000)
 
         calls = git_calls.read_text(encoding="ascii")
         assert "remote set-url origin https://github.com/ken1882/palsitter.git" in calls
         assert "fetch origin main" in calls
         assert "rev-list --count HEAD..origin/main" in calls
         assert "pull --ff-only origin main" in calls
+
+
+@pytest.mark.playwright
+def test_updater_confirmed_restart_reconnects_the_python_gui(tmp_path, monkeypatch):
+    available = tmp_path / "update-available.flag"
+    available.write_text("", encoding="ascii")
+    mock_git = tmp_path / "git-mock.cmd"
+    mock_git.write_text(
+        "\n".join(
+            [
+                '@if "%1"=="log" @echo abc1234---Tester---2026-07-09 12:00:00 +0800---test commit',
+                '@if "%1"=="fetch" @exit /b 0',
+                f'@if "%1"=="rev-list" @if exist "{available}" (@echo 1) else (@echo 0)',
+                '@if "%1"=="rev-list" @exit /b 0',
+                '@if "%1"=="pull" @exit /b 0',
+                '@exit /b 0',
+            ]
+        ),
+        encoding="ascii",
+    )
+
+    with _gui_page(
+        tmp_path,
+        monkeypatch,
+        extra_env={"PALSITTER_GIT": str(mock_git)},
+        seed_profile=False,
+    ) as (page, config_dir):
+        page.locator("#pywebio-scope-menu").get_by_text("Updater").click()
+        page.get_by_text("New version available", exact=True).wait_for(timeout=10000)
+        page.get_by_role("button", name="Click to update", exact=True).click()
+        page.get_by_text("Update finished", exact=True).wait_for(timeout=10000)
+        page.locator(".modal.show").get_by_role("button", name="Continue", exact=True).click()
+
+        page.locator("#pywebio-scope-restart_overlay").get_by_text(
+            "Palsitter restart complete", exact=True
+        ).wait_for(timeout=20000)
+        assert (config_dir / "webui" / "restart-state.json").is_file()
 
 
 @pytest.mark.playwright
