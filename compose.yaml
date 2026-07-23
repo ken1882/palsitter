@@ -1,0 +1,22 @@
+services:
+  palsitter:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: palsitter:local
+    init: true
+    restart: unless-stopped
+    stop_signal: SIGINT
+    stop_grace_period: 90s
+    network_mode: host
+    environment:
+      PALSITTER_DATA_DIR: /var/lib/palsitter
+      PALSITTER_CONFIG_DIR: /var/lib/palsitter/config
+      PALSITTER_PROFILE_DIR: /var/lib/palsitter/profile
+      PALSITTER_LOG_DIR: /var/lib/palsitter/logs
+      PALSITTER_HOST: ${PALSITTER_HOST:-127.0.0.1}
+      PALSITTER_PORT: ${PALSITTER_PORT:-22368}
+    volumes:
+      - ./docker-volumns/config:/var/lib/palsitter/config
+      - ./docker-volumns/profile:/var/lib/palsitter/profile
+      - ./docker-volumns/logs:/var/lib/palsitter/logs

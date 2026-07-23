@@ -1821,7 +1821,7 @@ def test_palworld_tools_checks_and_repairs_windows_firewall(tmp_path, monkeypatc
 
         tools_panel.get_by_role("button", name="Check", exact=True).click()
         modal = page.locator(".modal.show")
-        modal.get_by_text("Fix Windows Firewall", exact=True).wait_for(timeout=5000)
+        modal.get_by_text("Fix Firewall", exact=True).wait_for(timeout=5000)
         modal.get_by_text("Administrator approval is required", exact=False).wait_for(
             timeout=5000
         )
@@ -1834,6 +1834,70 @@ def test_palworld_tools_checks_and_repairs_windows_firewall(tmp_path, monkeypatc
         assert page.evaluate(
             "() => document.documentElement.scrollWidth <= document.documentElement.clientWidth"
         )
+
+
+@pytest.mark.playwright
+def test_palworld_tools_requests_root_password_after_permission_denied(tmp_path, monkeypatch):
+    firewall_state = tmp_path / "firewall-state.txt"
+    firewall_state.write_text("blocked", encoding="utf-8")
+    with _gui_page(
+        tmp_path,
+        monkeypatch,
+        extra_env={
+            "PALSITTER_TEST_FIREWALL_STATE": str(firewall_state),
+            "PALSITTER_TEST_FIREWALL_REQUIRE_PASSWORD": "1",
+        },
+    ) as (page, _):
+        page.locator("#pywebio-scope-aside").get_by_text("default", exact=True).click()
+        page.locator("#pywebio-scope-menu").get_by_text("Tools", exact=True).click()
+        tools_panel = page.locator("#pywebio-scope-tools_panel")
+        tools_panel.get_by_role("button", name="Check", exact=True).click()
+
+        fix_modal = page.locator(".modal.show")
+        fix_modal.get_by_role("button", name="Fix", exact=True).click()
+        password_modal = page.locator(".modal.show")
+        password_modal.get_by_text("Administrator authentication", exact=True).wait_for(
+            timeout=5000
+        )
+        password_modal.get_by_label("Root password", exact=True).fill("root-secret")
+        password_modal.get_by_role("button", name="Fix", exact=True).click()
+
+        page.locator("#pywebio-scope-tools_status").get_by_text(
+            "Open", exact=True
+        ).wait_for(timeout=5000)
+        assert firewall_state.read_text(encoding="utf-8") == "open"
+
+
+@pytest.mark.playwright
+def test_palworld_tools_requests_root_password_when_check_is_denied(tmp_path, monkeypatch):
+    firewall_state = tmp_path / "firewall-state.txt"
+    firewall_state.write_text("open", encoding="utf-8")
+    with _gui_page(
+        tmp_path,
+        monkeypatch,
+        extra_env={
+            "PALSITTER_TEST_FIREWALL_STATE": str(firewall_state),
+            "PALSITTER_TEST_FIREWALL_CHECK_REQUIRE_PASSWORD": "1",
+        },
+    ) as (page, _):
+        page.locator("#pywebio-scope-aside").get_by_text("default", exact=True).click()
+        page.locator("#pywebio-scope-menu").get_by_text("Tools", exact=True).click()
+        tools_panel = page.locator("#pywebio-scope-tools_panel")
+        tools_panel.get_by_role("button", name="Check", exact=True).click()
+
+        password_modal = page.locator(".modal.show")
+        password_modal.get_by_text("Administrator authentication", exact=True).wait_for(
+            timeout=5000
+        )
+        password_modal.get_by_text(
+            "sudo firewall-cmd --get-active-zones", exact=False
+        ).wait_for(timeout=5000)
+        password_modal.get_by_label("Root password", exact=True).fill("root-secret")
+        password_modal.get_by_role("button", name="Check", exact=True).click()
+
+        page.locator("#pywebio-scope-tools_status").get_by_text(
+            "Open", exact=True
+        ).wait_for(timeout=5000)
 
 
 @pytest.mark.playwright

@@ -102,7 +102,7 @@
 				},
 				"BuildObjectDeteriorationDamageRate": {
 					"id": null,
-					"value": 1.0,
+					"value": 0.0,
 					"type": "FloatProperty"
 				},
 				"PalStomachDecreaceRate": {
@@ -560,7 +560,7 @@
 				},
 				"AutoSaveSpan": {
 					"id": null,
-					"value": 30,
+					"value": 60,
 					"type": "IntProperty"
 				},
 				"bIsUseBackupSaveData": {

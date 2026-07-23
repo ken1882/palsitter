@@ -36,6 +36,9 @@ npm-debug.log*
 *.tsbuildinfo
 /desktop/assets/*.original
 
+# Docker runtime data
+/docker-volumns/
+
 # OS/editor files
 .DS_Store
 Thumbs.db

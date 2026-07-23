@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import shlex
 import threading
 
 from pywebio.output import (
@@ -16,13 +17,14 @@ from pywebio.output import (
     toast,
     use_scope,
 )
-from pywebio.pin import pin, put_select
+from pywebio.pin import pin, put_input, put_select
 from pywebio.session import register_thread
 
 from module.games.palworld.backup import BackupService
 from module.games.palworld.config import load_profile
 from module.games.palworld.firewall import (
     FirewallError,
+    FirewallPermissionDenied,
     FirewallRepairUnavailable,
     FirewallService,
     FirewallStatus,
@@ -70,14 +72,20 @@ def _render_status(status: FirewallStatus) -> None:
             put_warning(t("tools.blocked"))
         put_row(
             [
-                put_text(t("tools.executable_status")),
-                put_text(t("tools.allowed") if status.executable_allowed else t("tools.not_allowed")),
+                put_text(t("tools.executable_status")+': '),
+                put_text(
+                    t("tools.not_applicable")
+                    if not status.executable_supported
+                    else t("tools.allowed")
+                    if status.executable_allowed
+                    else t("tools.not_allowed")
+                ),
             ],
             size="auto 1fr",
         )
         put_row(
             [
-                put_text(t("tools.port_status")),
+                put_text(t("tools.port_status")+': '),
                 put_text(t("tools.allowed") if status.port_allowed else t("tools.not_allowed")),
             ],
             size="auto 1fr",
@@ -89,7 +97,18 @@ def _render_status(status: FirewallStatus) -> None:
 def _check(name: str, *, ask_to_fix: bool = True, context=None) -> None:
     context = context or page_context()
     profile = load_profile(name)
-    status = _service().check(profile)
+    try:
+        status = _service().check(profile)
+    except FirewallPermissionDenied as exc:
+        _log(name, "check requires administrator authentication")
+        command = exc.command
+        run_if_current(
+            context,
+            lambda: _request_check_root_password(
+                name, ask_to_fix, context, command
+            ),
+        )
+        return
     if status.error:
         _log(name, f"check failed: {status.error}")
     elif status.allowed:
@@ -129,6 +148,14 @@ def _fix(name: str, status: FirewallStatus, context=None) -> None:
     close_popup()
     try:
         _service().fix(load_profile(name), status)
+    except FirewallPermissionDenied as exc:
+        _log(name, "repair requires administrator authentication")
+        command = exc.command
+        run_if_current(
+            context,
+            lambda: _request_root_password(name, status, context, command),
+        )
+        return
     except FirewallRepairUnavailable as exc:
         _log(name, f"repair unavailable: {exc}")
         run_if_current(
@@ -143,6 +170,131 @@ def _fix(name: str, status: FirewallStatus, context=None) -> None:
             lambda: _render_fix_error("tools.fix_failed", exc),
         )
         return
+    _log(name, "repair completed")
+    run_if_current(context, lambda: toast(t("tools.fixed")))
+    _check(name, ask_to_fix=False, context=context)
+
+
+def _root_command_text(command: tuple[str, ...]) -> str:
+    return shlex.join(("sudo", *command)) if command else "sudo <firewall command>"
+
+
+def _request_root_password(
+    name: str,
+    status: FirewallStatus,
+    context,
+    command: tuple[str, ...] = (),
+) -> None:
+    with popup(t("tools.root_password_title"), closable=True):
+        put_text(t("tools.root_password_description"))
+        put_text(t("tools.root_password_command", command=_root_command_text(command)))
+        put_input(
+            "tools_root_password",
+            type="password",
+            label=t("tools.root_password_label"),
+        )
+        put_row(
+            [
+                put_button(t("common.cancel"), onclick=close_popup, color="secondary"),
+                put_button(
+                    t("tools.fix"),
+                    onclick=lambda: _retry_fix_with_password(name, status, context),
+                    color="warning",
+                ),
+            ],
+            size="1fr auto",
+        )
+
+
+def _request_check_root_password(
+    name: str,
+    ask_to_fix: bool,
+    context,
+    command: tuple[str, ...] = (),
+) -> None:
+    with popup(t("tools.root_password_title"), closable=True):
+        put_text(t("tools.root_password_description"))
+        put_text(t("tools.root_password_command", command=_root_command_text(command)))
+        put_input(
+            "tools_root_password",
+            type="password",
+            label=t("tools.root_password_label"),
+        )
+        put_row(
+            [
+                put_button(t("common.cancel"), onclick=close_popup, color="secondary"),
+                put_button(
+                    t("tools.check"),
+                    onclick=lambda: _retry_check_with_password(name, ask_to_fix, context),
+                    color="warning",
+                ),
+            ],
+            size="1fr auto",
+        )
+
+
+def _retry_check_with_password(name: str, ask_to_fix: bool, context) -> None:
+    password = str(getattr(pin, "tools_root_password", "") or "")
+    close_popup()
+    if not password:
+        run_if_current(
+            context,
+            lambda: _render_fix_error("tools.root_password_required", ""),
+        )
+        return
+    try:
+        status = _service().check(load_profile(name), root_password=password)
+    except FirewallPermissionDenied:
+        _log(name, "check failed: administrator authentication was rejected")
+        run_if_current(
+            context,
+            lambda: _render_fix_error(
+                "tools.check_failed", "administrator authentication was rejected"
+            ),
+        )
+        return
+    except (FirewallError, OSError) as exc:
+        _log(name, f"check failed: {exc}")
+        run_if_current(context, lambda: _render_fix_error("tools.check_failed", exc))
+        return
+    finally:
+        password = ""
+    if status.allowed:
+        _log(name, "check passed")
+    else:
+        _log(name, "check blocked")
+    run_if_current(
+        context,
+        lambda: _apply_check_result(name, status, ask_to_fix, context),
+    )
+
+
+def _retry_fix_with_password(name: str, status: FirewallStatus, context) -> None:
+    password = str(getattr(pin, "tools_root_password", "") or "")
+    close_popup()
+    if not password:
+        run_if_current(
+            context,
+            lambda: _render_fix_error("tools.root_password_required", ""),
+        )
+        return
+    try:
+        _service().fix(load_profile(name), status, root_password=password)
+    except FirewallPermissionDenied:
+        _log(name, "repair failed: administrator authentication was rejected")
+        run_if_current(
+            context,
+            lambda: _render_fix_error(
+                "tools.fix_failed", "administrator authentication was rejected"
+            ),
+        )
+        return
+    except (FirewallError, OSError) as exc:
+        _log(name, f"repair failed: {exc}")
+        run_if_current(context, lambda: _render_fix_error("tools.fix_failed", exc))
+        return
+    finally:
+        password = ""
     _log(name, "repair completed")
     run_if_current(context, lambda: toast(t("tools.fixed")))
     _check(name, ask_to_fix=False, context=context)
