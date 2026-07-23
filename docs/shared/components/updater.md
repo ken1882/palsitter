@@ -12,6 +12,8 @@
   the same restart confirmation popup used by Utils → Force restart.
 - Check Update configures `origin` as `https://github.com/ken1882/palsitter.git`, fetches
   `origin/main`, and compares it with `HEAD`.
+- Updater Git operations read the public upstream without using inherited credential
+  helpers or opening an interactive GitHub login prompt.
 - Click to update performs a fast-forward-only pull from `origin/main`.
 - A successful pull waits for the operator to confirm the restart. Confirming starts the
   persisted GUI replacement workflow. Dismissing the popup leaves the updated files in

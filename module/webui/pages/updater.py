@@ -62,12 +62,25 @@ def _git_commit(ref: str = "HEAD", count: int = 1) -> list[list[str]]:
         return [["", "", "", t("updater.unavailable")]]
 
 def _run_git(*args: str, timeout: float = 10) -> subprocess.CompletedProcess:
+    env = os.environ.copy()
+    env.update(
+        {
+            # The updater only reads the public upstream repository. Do not let
+            # a user's global credential helper open an interactive login flow.
+            "GIT_CONFIG_COUNT": "1",
+            "GIT_CONFIG_KEY_0": "credential.helper",
+            "GIT_CONFIG_VALUE_0": "",
+            "GIT_TERMINAL_PROMPT": "0",
+            "GCM_INTERACTIVE": "Never",
+        }
+    )
     return subprocess.run(
             [os.getenv("PALSITTER_GIT", "git"), *args],
             cwd=Path(__file__).parent,
             capture_output=True,
             text=True,
             timeout=timeout,
+            env=env,
         )
 
 def _render_updater_tables() -> None:
