@@ -77,12 +77,11 @@ The repository includes a Linux image and Compose configuration. Build and start
 with:
 
 ```bash
-mkdir -p docker-volumns/config docker-volumns/profile docker-volumns/logs
-docker compose up -d --build
+./script/linux/start-docker.sh
 ```
 
-The Compose setup uses host networking so each managed Palworld instance can receive
-its allocated game, query, and REST ports. Runtime data is kept outside the image:
+The Compose setup publishes the Palsitter web UI on the Docker host at port `22368`.
+Runtime data is kept outside the image:
 
 | Host path | Contents |
 | --- | --- |
@@ -98,8 +97,9 @@ sudo chown -R 1000:1000 docker-volumns
 ```
 
 Open [http://127.0.0.1:22368/](http://127.0.0.1:22368/) on the Docker host. To change
-the bind address or port, set `PALSITTER_HOST` or `PALSITTER_PORT` in the Compose
-environment.
+the container bind address or port, set `PALSITTER_HOST` or `PALSITTER_PORT` in the
+Compose environment. The host-side port is bound to localhost by default; change the
+host mapping in `compose.yaml` if it must be reachable from other machines.
 
 ### systemd
 

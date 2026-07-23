@@ -15,7 +15,7 @@ WORKDIR /opt/palsitter
 COPY requirements-runtime.txt script/linux/install-dependencies.sh /tmp/
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates git \
+    && apt-get install -y --no-install-recommends ca-certificates git g++ \
     && chmod +x /tmp/install-dependencies.sh \
     && /tmp/install-dependencies.sh \
     && python -m venv /opt/venv \

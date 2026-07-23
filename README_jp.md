@@ -76,13 +76,11 @@ PALSITTER_PYTHON_MANAGER=uv ./script/linux/palsitter.sh run
 Linux イメージと Compose 設定が含まれています。ビルドして起動するには：
 
 ```bash
-mkdir -p docker-volumns/config docker-volumns/profile docker-volumns/logs
-docker compose up -d --build
+./script/linux/start-docker.sh
 ```
 
-Compose はホストネットワークを使用します。これにより、管理対象の各 Palworld インスタンスが
-割り当てられたゲーム、クエリ、REST ポートを受け取れます。実行時データはイメージの外部に
-保存されます：
+Compose は Palsitter の Web UI を Docker ホストの 22368 ポートに公開します。実行時データは
+イメージの外部に保存されます：
 
 | ホストパス | 内容 |
 | --- | --- |
@@ -97,9 +95,10 @@ Compose はホストネットワークを使用します。これにより、管
 sudo chown -R 1000:1000 docker-volumns
 ```
 
-Docker ホストで [http://127.0.0.1:22368/](http://127.0.0.1:22368/) を開きます。バインド
+Docker ホストで [http://127.0.0.1:22368/](http://127.0.0.1:22368/) を開きます。コンテナのバインド
 アドレスやポートを変更するには、Compose 環境で `PALSITTER_HOST` または `PALSITTER_PORT`
-を設定してください。
+を設定してください。ホスト側ポートはデフォルトで localhost のみにバインドされます。他の
+マシンから接続する場合は `compose.yaml` のホスト側マッピングを変更してください。
 
 ### systemd
 
