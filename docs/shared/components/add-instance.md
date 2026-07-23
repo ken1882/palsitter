@@ -12,11 +12,28 @@ Opened from the `Add` item in the [Left Sidebar](./left-sidebar.md).
   when confirming.
 - Palworld adds an optional file browser for `Level.sav`; leaving it empty creates a new
   instance, while selecting a valid save automatically imports its containing world folder.
+  Sources under `Pal/Saved/SaveGames/<SteamID64>/<WORLD_ID>/` are detected as local
+  single-player or co-op saves; sources under `Pal/Saved/SaveGames/0/<WORLD_ID>/` are
+  detected as dedicated-server saves. A local save with only
+  `Players/00000000000000000000000000000001.sav` is treated as single-player; multiple
+  or non-host player saves are treated as co-op. A host-only co-op save cannot be
+  distinguished from single-player using files alone.
+  A sibling `WorldOption.sav` inside the selected
+  `Pal/Saved/SaveGames/<SAVE_ROOT>/<WORLD_ID>/` is decoded into the new profile's
+  `PalWorldSettings.ini` and removed from the managed copy when present. The imported
+  world settings receive the profile's newly allocated network ports and REST secret.
+  If no SAV is present, a companion `PalWorldSettings.ini` from
+  `Pal/Saved/Config/WindowsServer/PalWorldSettings.ini` or
+  `Pal/Saved/Config/LinuxServer/PalWorldSettings.ini` is imported as a fallback.
+  Nested `backup` folders are excluded from the managed copy. A bare `/mnt/Level.sav`
+  (or any `Level.sav` whose parent is not a 32-character world-ID folder) is rejected
+  without creating an instance because its world identity and companion save files are
+  unavailable.
   Satisfactory exposes no import fields.
 - The Palworld file browser shows folders and only the exact `Level.sav` file.
-- If the selected world contains only
-  `Players/00000000000000000000000000000001.sav`, Palworld import opens an unsupported
-  single-player-world modal and leaves the Add Instance modal open.
+- Local single-player and co-op worlds are imported, but the resulting warning explains
+  that player identity migration may still be required before the original characters
+  can be used on the dedicated server.
 - Confirming an import creates a normal managed Palworld profile with newly allocated
   ports and secrets, copies only the selected world through a staging directory, and
   atomically activates it. It never changes or deletes the source and never adopts an

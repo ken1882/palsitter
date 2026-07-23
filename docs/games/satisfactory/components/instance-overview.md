@@ -11,8 +11,9 @@ Reached by selecting a Satisfactory profile from the
 - It exposes no Start, Stop, Kill, Install, update check, update, Validate/Repair,
   SteamCMD, import, ports, REST, metrics, logs, players, server settings, world settings,
   save switching, or backup controls, and opening it creates no process manager.
-- A red `Delete instance` action uses the shared exact-name confirmation flow and removes
-  only the profile reference.
+- A red `Delete instance` action uses the shared exact-name confirmation flow. Its
+  optional `Wipe data` confirmation permanently removes the instance directory; leaving
+  it unchecked removes only the profile reference.
 - Shared bulk lifecycle actions skip the profile and report it by name; Instance Status
   shows `Unsupported` with `-` server metrics.
 - Its Home card is populated only through the Satisfactory adapter's Unsupported summary;

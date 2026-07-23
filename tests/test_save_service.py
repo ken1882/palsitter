@@ -4,7 +4,13 @@ import pytest
 
 from module.config import Profile
 from module.games.palworld.backup import BackupResult, BackupService
-from module.games.palworld.saves import ManagedWorldService, scan_dedicated_worlds
+from module.games.palworld.saves import (
+    ManagedWorldService,
+    find_import_world_settings_ini,
+    import_world_settings_ini,
+    inspect_import_source,
+    scan_dedicated_worlds,
+)
 
 
 WORLD_A = "A1" * 16
@@ -69,6 +75,9 @@ def test_scan_dedicated_worlds_ignores_symlinked_worlds_and_files(tmp_path):
 def test_import_world_uses_staging_preserves_source_and_activates(tmp_path):
     source_root = tmp_path / "source"
     source = _world(source_root, WORLD_B, players=1)
+    (source / "WorldOption.sav").write_bytes(b"world options")
+    (source / "backup" / "world" / "old" / "Level.sav").parent.mkdir(parents=True)
+    (source / "backup" / "world" / "old" / "Level.sav").write_bytes(b"old level")
     source_snapshot = {
         path.relative_to(source): path.read_bytes()
         for path in source.rglob("*")
@@ -91,12 +100,66 @@ def test_import_world_uses_staging_preserves_source_and_activates(tmp_path):
     assert profile.dedicated_server_name == WORLD_B
     assert saved_ids == [WORLD_B]
     assert (target / "Level.sav").read_bytes() == b"level"
+    assert (target / "WorldOption.sav").read_bytes() == b"world options"
+    assert not (target / "backup").exists()
     assert {
         path.relative_to(source): path.read_bytes()
         for path in source.rglob("*")
         if path.is_file()
     } == source_snapshot
     assert list(Path(profile.backup_source).glob(".import-*.tmp")) == []
+
+
+def test_import_world_settings_ini_uses_windows_or_linux_server_relative_path(
+    tmp_path, monkeypatch
+):
+    server_root = tmp_path / "source-server"
+    level = server_root / "Pal" / "Saved" / "SaveGames" / "0" / WORLD_B / "Level.sav"
+    level.parent.mkdir(parents=True)
+    level.write_bytes(b"level")
+    linux_ini = server_root / "Pal" / "Saved" / "Config" / "LinuxServer" / "PalWorldSettings.ini"
+    linux_ini.parent.mkdir(parents=True)
+    linux_ini.write_text("linux", encoding="utf-8")
+    profile = _profile(tmp_path)
+
+    monkeypatch.setattr("module.games.palworld.config.WINDOWS", False)
+
+    assert find_import_world_settings_ini(level) == linux_ini
+    target = import_world_settings_ini(profile, level)
+
+    assert target == (
+        Path(profile.workdir)
+        / "Pal"
+        / "Saved"
+        / "Config"
+        / "LinuxServer"
+        / "PalWorldSettings.ini"
+    )
+    assert target.read_text(encoding="utf-8") == "linux"
+
+
+@pytest.mark.parametrize(
+    ("save_root_name", "players", "expected"),
+    [
+        ("76561198170852193", ["00000000000000000000000000000001.sav"], "single_player"),
+        ("76561198170852193", ["00000000000000000000000000000001.sav", f"{'A' * 32}.sav"], "coop"),
+        ("0", ["76561198170852193.sav"], "dedicated"),
+    ],
+)
+def test_inspect_import_source_classifies_local_and_dedicated_layouts(
+    tmp_path, save_root_name, players, expected
+):
+    world = tmp_path / "Pal" / "Saved" / "SaveGames" / save_root_name / WORLD_B
+    (world / "Players").mkdir(parents=True)
+    (world / "Level.sav").write_bytes(b"level")
+    for player in players:
+        (world / "Players" / player).write_bytes(b"player")
+
+    info = inspect_import_source(world / "Level.sav")
+
+    assert info.kind == expected
+    assert info.world.world_id == WORLD_B
+    assert info.missing_files == ("LevelMeta.sav", "LocalData.sav")
 
 
 def test_import_world_requires_selection_for_multiple_candidates(tmp_path):

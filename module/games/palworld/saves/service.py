@@ -12,11 +12,17 @@ from module.games.palworld.backup import BackupResult, BackupService
 from module.games.palworld.config import (
     DEDICATED_SERVER_NAME_RE,
     PalworldProfile,
+    server_config_dir_name,
     save_profile,
 )
 
 
 LEVEL_FILENAME = "Level.sav"
+HOST_PLAYER_FILENAME = "00000000000000000000000000000001.sav"
+PALWORLD_SETTINGS_RELATIVE_PATHS = (
+    Path("Pal") / "Saved" / "Config" / "WindowsServer" / "PalWorldSettings.ini",
+    Path("Pal") / "Saved" / "Config" / "LinuxServer" / "PalWorldSettings.ini",
+)
 
 
 @dataclass(frozen=True)
@@ -33,6 +39,14 @@ class WorldSaveInfo:
 class WorldImportResult:
     world: WorldSaveInfo
     activated: bool
+
+
+@dataclass(frozen=True)
+class ImportSourceInfo:
+    kind: str
+    world: WorldSaveInfo
+    player_files: tuple[Path, ...]
+    missing_files: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -119,9 +133,104 @@ def scan_dedicated_worlds(
     )
 
 
+def inspect_import_source(level_path: str | Path) -> ImportSourceInfo:
+    """Classify a Palworld world save without changing the source files."""
+    level = Path(level_path)
+    if level.name != LEVEL_FILENAME or not level.is_file() or level.is_symlink():
+        raise ValueError(f"Expected a regular {LEVEL_FILENAME} file")
+    world = _describe_world(level.parent)
+    players_dir = level.parent / "Players"
+    player_files = tuple(
+        sorted(
+            path
+            for path in players_dir.iterdir()
+            if path.is_file() and not path.is_symlink() and path.suffix.casefold() == ".sav"
+        )
+    ) if players_dir.is_dir() and not players_dir.is_symlink() else ()
+
+    save_root = level.parent.parent
+    is_dedicated = (
+        save_root.name == "0"
+        and save_root.parent.name == "SaveGames"
+        and save_root.parent.parent.name == "Saved"
+        and save_root.parent.parent.parent.name == "Pal"
+    )
+    is_local = (
+        save_root.name.isdigit()
+        and save_root.parent.name == "SaveGames"
+        and save_root.parent.parent.name == "Saved"
+        and save_root.parent.parent.parent.name == "Pal"
+    )
+    if is_dedicated:
+        kind = "dedicated"
+    elif is_local and len(player_files) == 1 and player_files[0].name == HOST_PLAYER_FILENAME:
+        kind = "single_player"
+    elif is_local and player_files:
+        kind = "coop"
+    else:
+        kind = "unknown"
+
+    missing = tuple(
+        filename
+        for filename in ("LevelMeta.sav", "LocalData.sav", "Players")
+        if not (level.parent / filename).exists()
+    )
+    return ImportSourceInfo(kind, world, player_files, missing)
+
+
+def find_import_world_settings_ini(level_path: str | Path) -> Optional[Path]:
+    """Find the server-level settings file associated with an imported Level.sav."""
+    level = Path(level_path)
+    for save_root in level.parents:
+        if (
+            save_root.name == "0"
+            and save_root.parent.name == "SaveGames"
+            and save_root.parent.parent.name == "Saved"
+            and save_root.parent.parent.parent.name == "Pal"
+        ):
+            server_root = save_root.parent.parent.parent.parent
+            preferred = server_config_dir_name()
+            relative_paths = sorted(
+                PALWORLD_SETTINGS_RELATIVE_PATHS,
+                key=lambda path: path.parts[-2] != preferred,
+            )
+            return next(
+                (
+                    server_root / relative
+                    for relative in relative_paths
+                    if (server_root / relative).is_file()
+                    and not (server_root / relative).is_symlink()
+                ),
+                None,
+            )
+    return None
+
+
+def import_world_settings_ini(profile: PalworldProfile, source: str | Path) -> Optional[Path]:
+    """Copy a detected source PalWorldSettings.ini into the new profile."""
+    source_path = find_import_world_settings_ini(source)
+    if source_path is None:
+        return None
+    target = (
+        Path(profile.workdir)
+        / "Pal"
+        / "Saved"
+        / "Config"
+        / server_config_dir_name()
+        / "PalWorldSettings.ini"
+    )
+    target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source_path, target)
+    return target
+
+
 def _ignore_symlinks(directory: str, names: list[str]) -> set[str]:
     base = Path(directory)
-    return {name for name in names if (base / name).is_symlink()}
+    return {
+        name
+        for name in names
+        if name.casefold() == "backup" or (base / name).is_symlink()
+    }
 
 
 def _copy_world_tree(source: Path, target: Path) -> None:

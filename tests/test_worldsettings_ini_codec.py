@@ -1,4 +1,5 @@
 from module.worldsettings.ini_codec import (
+    coerce_integer,
     coerce_ini_value,
     format_ini_value,
     parse_option_settings,
@@ -48,6 +49,13 @@ def test_coerce_and_format_round_trip_each_ftype():
         value = coerce_ini_value(field_, raw)
         assert value == expected
         assert coerce_ini_value(field_, format_ini_value(field_, value)) == value
+
+
+def test_integer_settings_accept_whole_numbers_with_decimal_formatting():
+    field_ = WORLD_OPTION_FIELDS_BY_KEY["BaseCampMaxNum"]
+
+    assert coerce_integer("600.000000") == 600
+    assert coerce_ini_value(field_, "600.000000") == 600
 
 
 def test_coerce_unknown_key_kept_as_raw_string():

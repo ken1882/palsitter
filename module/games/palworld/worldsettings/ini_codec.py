@@ -2,6 +2,7 @@ from __future__ import annotations
 
 """Palworld INI world-settings codec."""
 
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -10,6 +11,18 @@ from .schema import WorldOptionField, WORLD_OPTION_FIELDS, WORLD_OPTION_FIELDS_B
 
 SECTION = "[/Script/Pal.PalGameWorldSettings]"
 OPTION_PREFIX = "OptionSettings="
+
+
+def coerce_integer(value: Any) -> int:
+    """Parse an integer setting, including whole numbers formatted as decimals."""
+    raw = str(value).strip()
+    try:
+        number = Decimal(raw)
+    except (InvalidOperation, TypeError, ValueError):
+        raise ValueError(f"invalid literal for int() with base 10: {value!r}") from None
+    if not number.is_finite() or number != number.to_integral_value():
+        raise ValueError(f"invalid literal for int() with base 10: {value!r}")
+    return int(number)
 
 
 def split_top_level(text: str) -> list[str]:
@@ -82,7 +95,7 @@ def coerce_ini_value(field_: Optional[WorldOptionField], raw: str) -> Any:
     if field_.ftype == "bool":
         return raw == "True"
     if field_.ftype == "int":
-        return int(raw)
+        return coerce_integer(raw)
     if field_.ftype == "float":
         return float(raw)
     if field_.ftype in ("string", "enum"):

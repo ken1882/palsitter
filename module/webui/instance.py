@@ -2,7 +2,7 @@ from __future__ import annotations
 import threading
 from pywebio.exceptions import SessionException
 from pywebio.output import clear, close_popup, popup, put_button, put_loading, put_row, put_scope, put_text, put_warning, toast, use_scope
-from pywebio.pin import pin, put_input
+from pywebio.pin import pin, put_checkbox, put_input
 from pywebio.session import local, register_thread
 from module.games import get_game
 from module.instances import delete_instance, list_instances, load_instance
@@ -67,6 +67,7 @@ def _dashboard_row(name: str) -> list[str]:
         str(data.get("days", "-")),
         str(data.get("cpu", "-")),
         str(data.get("game_version", "-")),
+        str(data.get("palbox", "-")),
     ]
 
 def _format_uptime(value) -> str:
@@ -308,6 +309,12 @@ def _delete_instance(name: str) -> None:
             scope=scope,
         )
         put_input("delete_confirm_name", label=t("settings.delete_confirm_label", name=label), scope=scope)
+        put_checkbox(
+            "delete_wipe_data",
+            options=[{"label": t("settings.delete_wipe_data"), "value": "wipe"}],
+            value=[],
+            scope=scope,
+        )
         put_scope("delete_error", scope=scope)
         put_scope("delete_confirm", scope=scope)
         with use_scope("delete_confirm"):
@@ -325,11 +332,38 @@ def _confirm_delete_instance(name: str) -> None:
         clear("delete_error")
         put_warning(t("settings.delete_mismatch"), scope="delete_error")
         return
+    if bool(pin.delete_wipe_data):
+        close_popup()
+        with popup(t("settings.delete_wipe_title"), closable=True) as scope:
+            put_warning(t("settings.delete_wipe_warning"), scope=scope)
+            put_scope("delete_wipe_error", scope=scope)
+            put_row(
+                [
+                    put_button(t("common.cancel"), onclick=close_popup, color="secondary"),
+                    None,
+                    put_button(
+                        t("settings.delete_wipe_yes"),
+                        onclick=lambda: _delete_instance_now(
+                            name, wipe_data=True, error_scope="delete_wipe_error"
+                        ),
+                        color="danger",
+                    ),
+                ],
+                size="auto .5rem auto",
+            )
+        return
+    _delete_instance_now(name)
+
+
+def _delete_instance_now(
+    name: str, *, wipe_data: bool = False, error_scope: str = "delete_error"
+) -> None:
+    label = _profile_label(name)
     try:
-        delete_instance(name)
+        delete_instance(name, wipe_data=wipe_data)
     except Exception as exc:
-        clear("delete_error")
-        put_warning(t("settings.delete_failed", error=exc), scope="delete_error")
+        clear(error_scope)
+        put_warning(t("settings.delete_failed", error=exc), scope=error_scope)
         return
     close_popup()
     toast(t("settings.deleted", name=label))

@@ -3,13 +3,19 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from pywebio.output import close_popup, popup, put_button, put_row, put_scope, put_text, use_scope
+from pywebio.output import put_button, put_row, put_scope, toast, use_scope
 from pywebio.pin import pin, put_input
 from pywebio.session import local
 
 from module.games.palworld.backup import BackupService
-from module.games.palworld.config import load_profile
-from module.games.palworld.saves import LEVEL_FILENAME, ManagedWorldService, scan_dedicated_worlds
+from module.games.palworld.config import DEDICATED_SERVER_NAME_RE, load_profile, save_profile
+from module.games.palworld.saves import (
+    LEVEL_FILENAME,
+    ManagedWorldService,
+    import_world_settings_ini,
+    inspect_import_source,
+)
+from module.games.palworld.worldsettings import migrate_world_option_sav_to_ini
 from module.instances import create_instance, delete_instance, profile_dir
 from module.webui.game_ui import InstanceCreationUI
 from module.webui.i18n import t
@@ -83,26 +89,6 @@ def _reopen_import_add_server() -> None:
     local.add_import_reopen_path = None
 
 
-def _is_single_player_world(level_path: Path) -> bool:
-    players = level_path.parent / "Players"
-    if not players.is_dir() or players.is_symlink():
-        return False
-    player_saves = [
-        path
-        for path in players.iterdir()
-        if path.is_file() and not path.is_symlink()
-    ]
-    return len(player_saves) == 1 and player_saves[0].name == (
-        "00000000000000000000000000000001.sav"
-    )
-
-
-def _show_single_player_warning() -> None:
-    with popup(t("add.single_player_title"), closable=True):
-        put_text(t("add.single_player_message"))
-        put_button(t("common.close"), onclick=close_popup, color="secondary")
-
-
 def create(name: str, origin: str) -> bool | None:
     import_source = str(pin.add_import_path or "").strip()
     if not import_source:
@@ -114,13 +100,10 @@ def create(name: str, origin: str) -> bool | None:
         raise RuntimeError(t("add.select_level_save"))
     if level_path.name != LEVEL_FILENAME or not level_path.is_file():
         raise RuntimeError(t("add.select_level_save"))
-    worlds = scan_dedicated_worlds(level_path.parent)
-    if len(worlds) != 1 or worlds[0].path != level_path.parent:
-        raise RuntimeError(t("add.no_dedicated_worlds"))
-    world_id = worlds[0].world_id
-    if _is_single_player_world(level_path):
-        _show_single_player_warning()
-        return False
+    source_info = inspect_import_source(level_path)
+    world_id = source_info.world.world_id
+    if DEDICATED_SERVER_NAME_RE.fullmatch(world_id) is None:
+        raise RuntimeError(t("add.invalid_import_layout"))
     created = False
     try:
         create_instance(name, "palworld", "template")
@@ -131,6 +114,13 @@ def create(name: str, origin: str) -> bool | None:
             backup_service=BackupService(profile),
             is_server_active=lambda: False,
         ).import_world(level_path.parent, world_id=world_id, activate=True)
+        if migrate_world_option_sav_to_ini(profile) is None:
+            import_world_settings_ini(profile, level_path)
+        save_profile(profile)
+        if source_info.kind == "single_player":
+            toast(t("add.single_player_message"), color="warning")
+        elif source_info.kind == "coop":
+            toast(t("add.coop_message"), color="warning")
     except Exception:
         if created:
             try:

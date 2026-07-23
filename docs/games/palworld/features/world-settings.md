@@ -11,11 +11,11 @@ always connects to `localhost` using the fixed account `admin`.
 
 The full field list, grouped by category, lives in `module/worldsettings/schema.py` as a
 single data-driven table (key, category, type, default, i18n key) - that table is the
-only place field metadata is defined; the ini codec, the `.sav` codec, and the
-[World Settings page](../components/instance-world-settings.md) all iterate it rather
-than hand-coding each field.
+only place field metadata is defined; the INI codec and the [World Settings
+page](../components/instance-world-settings.md) both iterate it rather than hand-coding
+each field.
 
-## Two on-disk formats
+## On-disk format
 
 - **`PalWorldSettings.ini`** - lives at
   `<workdir>/Pal/Saved/Config/WindowsServer/PalWorldSettings.ini` on Windows and
@@ -23,41 +23,24 @@ than hand-coding each field.
   Existing files are preserved when only the other platform's path exists. Palsitter
   parses and rewrites only the single
   `OptionSettings=(...)` line, preserving every other line and the file's existing
-  newline style untouched.
-- **`WorldOption.sav`** - a binary Unreal Engine save file. When present, it overrides
-  `PalWorldSettings.ini` entirely. It lives inside the world's own save folder under
-  `profile.backup_source` at
-  `Pal/Saved/SaveGames/0/<DedicatedServerName>/WorldOption.sav`.
-  Palsitter reads and writes it using the `palworld-save-tools` library.
+  newline style untouched. This is the only format exposed by the World Settings page
+  and the only format written for an active managed world.
 
-## Auto-detect on load, explicit choice on save
+## Imported save migration
 
-Opening the World Settings page checks the save folder named by the profile's stable
-`DedicatedServerName` for `WorldOption.sav`. If it exists, its values are loaded and the format selector defaults
-to `WorldOption.sav`; otherwise the ini is loaded and the selector defaults to
-`PalWorldSettings.ini`. The user can switch the selector to the other format at any
-time - `Save` always writes to whichever format is currently selected, independent of
-which one was auto-detected. Saving as `WorldOption.sav` creates the dedicated save
-folder when necessary; saving as ini always works regardless.
+When importing a world containing `WorldOption.sav`, Palsitter decodes its option values
+into the new profile's `PalWorldSettings.ini`, replaces `PublicPort`, `RESTAPIPort`, and
+the REST admin password with the newly allocated profile values, and removes the active
+SAV override. A malformed or undecodable SAV aborts the import without changing the
+source. If no SAV is present, a companion server INI is imported as a fallback.
 
 Every successful save also stores the normalized settings dictionary in the Palsitter
 profile as a synchronized fallback copy. If neither target file exists, the World
 Settings page loads this profile copy before falling back to schema defaults.
 
 `CrossplayPlatforms` is edited as Steam/Xbox/PS5/Mac checkboxes. The profile copy stores
-the selected values as a list, while Palworld's INI and SAV formats receive the required
-parenthesized representation such as `(Steam,PS5,Mac)`.
-
-## Valid stale-`.sav` warning
-
-Because a `WorldOption.sav` overrides the ini unconditionally, switching the format
-selector to `PalWorldSettings.ini` and saving does **not** make the ini take effect while
-a `WorldOption.sav` still exists - the game keeps reading the `.sav`. The page shows a
-warning banner explaining this whenever a `WorldOption.sav` was loaded. Palsitter never
-deletes or otherwise touches that file automatically; per this project's
-destructive-action conventions, that stays a manual, deliberate action for the operator
-outside of Palsitter (the ini edit is still saved to disk, so it's ready and correct for
-whenever the `.sav` is removed).
+the selected values as a list, while Palworld's INI receives the required parenthesized
+representation such as `(Steam,PS5,Mac)`.
 
 ## Guided recovery
 
@@ -66,30 +49,13 @@ whenever the `.sav` is removed).
   makes a timestamped sibling copy, regenerates the managed `OptionSettings=(...)` line
   from the synchronized profile copy or schema defaults, and preserves other readable
   lines. Failure leaves the original path unchanged.
-- If `WorldOption.sav` cannot be decoded, Palsitter never applies a template over it.
-  With the server inactive, a separate confirmed recovery atomically renames it with a
-  timestamped `.disabled` suffix and reloads INI mode. Failure leaves the override in
-  place and reports the error.
-- A valid `WorldOption.sav` has no in-app disable/delete action. Normal successful SAV
-  writes retain the mandatory safety-backup rule below.
-
-## Safety backup before writing `.sav`
-
-A `WorldOption.sav` write is a save-data write, not a config edit, so every `.sav` save
-first runs [`BackupService.create_backup()`](./scheduled-backups.md) - the same rule that
-governs the crash self-heal rollback. Saving as ini never triggers a backup (it isn't
-save data). When saving as `.sav` for a world that has never had one, Palsitter starts
-from a bundled template GVAS structure (`module/games/palworld/worldsettings/template/`) and applies
-only the edited option values on top of it, rather than fabricating a save file from
-scratch.
+There is no active-world SAV write or SAV recovery action in the World Settings page.
 
 **Tests:** `tests/test_worldsettings_ini_codec.py` (parse/serialize round-trip,
 unknown-key preservation, newline preservation), `tests/test_worldsettings_sav_codec.py`
-(GVAS wrapper with faked and real `palworld-save-tools` calls),
-`tests/test_worldsettings_service.py` (auto-detect, format selection, backup-before-`.sav`
-rule, timestamped recovery, failure preservation), `tests/test_gui_playwright.py` (menu
-placement, filters and dirty-state preservation, field types round-tripping to ini,
-auto-detect, recovery, stale-`.sav` warning behavior, and help-tooltip content).
+(import decoder), `tests/test_worldsettings_service.py` (INI loading and SAV-to-INI
+migration), and `tests/test_gui_playwright.py` (INI-only page, filters, dirty-state
+preservation, field types, import migration, recovery, and help-tooltip content).
 
 ## Help tooltips
 

@@ -18,7 +18,7 @@ import pytest
 import psutil
 
 from module.config import Profile, game_user_settings_path, list_profiles, load_profile, save_profile
-from module.instances import create_instance, load_instance, profile_log_path
+from module.instances import create_instance, load_instance, profile_dir, profile_log_path
 from module.games.palworld.server.history import (
     LifecycleEvent,
     RestartHistoryStore,
@@ -180,6 +180,7 @@ def _mock_metrics_server(
                         "serverfpsaverage": 59.25,
                         "days": 4,
                         "uptime": 120,
+                        "basecampnum": 3,
                     }
                 )
                 return
@@ -665,7 +666,7 @@ def test_utils_matches_actions_live_log_css_and_gated_code(tmp_path, monkeypatch
 
 @pytest.mark.playwright
 def test_force_restart_overlay_rebuilds_and_terminal_state_persists(tmp_path, monkeypatch):
-    with _gui_page(tmp_path, monkeypatch) as (page, config_dir):
+    with _gui_page(tmp_path, monkeypatch) as (page, _):
         state_path = config_dir / "webui" / "restart-state.json"
         state_path.write_text(
             json.dumps(
@@ -1176,7 +1177,7 @@ def test_open_rest_without_matching_process_stays_inactive_and_unpolled(tmp_path
             ).wait_for(timeout=5000)
             scheduler = page.locator("#pywebio-scope-scheduler_panel")
             scheduler.locator('[data-endpoint="rest"]').get_by_text(
-                "Closed", exact=True
+                f"Closed ({rest_port})", exact=True
             ).wait_for(timeout=5000)
             page.wait_for_timeout(3500)
             assert page.locator('[data-metric="fps"] .metric-value').inner_text() == "-"
@@ -1313,7 +1314,7 @@ def test_scheduler_consolidates_instance_operations_without_persistent_strip(tmp
 
 
 @pytest.mark.playwright
-def test_scheduler_stops_attached_external_server_and_controls_next_backup(tmp_path, monkeypatch):
+def test_scheduler_stops_attached_external_server_and_refreshes_controls(tmp_path, monkeypatch):
     with _running_palserver_process(tmp_path) as external_process, _mock_metrics_server() as (rest_port, calls):
         with _gui_page(
             tmp_path,
@@ -1325,10 +1326,6 @@ def test_scheduler_stops_attached_external_server_and_controls_next_backup(tmp_p
             scheduler = page.locator("#pywebio-scope-scheduler_panel")
             scheduler.get_by_role("button", name="Stop", exact=True).wait_for(timeout=5000)
             assert scheduler.get_by_role("button", name="Start", exact=True).count() == 0
-            scheduler.get_by_text(
-                re.compile(r"Next backup: \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}")
-            ).wait_for(timeout=5000)
-
             scheduler.get_by_role("button", name="Stop", exact=True).click()
             page.locator("#pywebio-scope-header_status").get_by_text(
                 "Stopping", exact=True
@@ -1339,7 +1336,6 @@ def test_scheduler_stops_attached_external_server_and_controls_next_backup(tmp_p
             external_process.terminate()
             external_process.wait(timeout=3)
             scheduler.get_by_role("button", name="Start", exact=True).wait_for(timeout=10000)
-            scheduler.get_by_text("Next backup: -", exact=True).wait_for(timeout=5000)
 
             deadline = time.time() + 5
             while "/v1/api/stop" not in [path for path, _ in calls] and time.time() < deadline:
@@ -1378,9 +1374,9 @@ def test_scheduler_endpoint_statuses_retry_during_startup(tmp_path, monkeypatch)
             rest = scheduler.locator('[data-endpoint="rest"]')
             rcon = scheduler.locator('[data-endpoint="rcon"]')
 
-            udp.get_by_text("Closed", exact=True).wait_for(timeout=5000)
-            rest.get_by_text("Open", exact=True).wait_for(timeout=15000)
-            rcon.get_by_text("Disabled", exact=True).wait_for(timeout=5000)
+            udp.get_by_text(f"Closed ({game_port})", exact=True).wait_for(timeout=5000)
+            rest.get_by_text(f"Open ({rest_port})", exact=True).wait_for(timeout=15000)
+            rcon.get_by_text("Disabled (25575)", exact=True).wait_for(timeout=5000)
             assert scheduler.locator("#pywebio-scope-scheduler_state").count() == 0
             metrics = page.locator("#pywebio-scope-metrics")
             metrics.locator('[data-metric="fps"]').get_by_text(
@@ -1395,13 +1391,19 @@ def test_scheduler_endpoint_statuses_retry_during_startup(tmp_path, monkeypatch)
             metrics.locator('[data-metric="game-version"]').get_by_text(
                 "v1.2.3", exact=True
             ).wait_for(timeout=5000)
+            metrics.locator('[data-metric="palbox"]').get_by_text(
+                "3 / 128", exact=True
+            ).wait_for(timeout=5000)
+            assert metrics.locator('[data-metric="palbox"]').get_by_text(
+                "Palbox", exact=True
+            ).count() == 1
             assert scheduler.locator('[data-scheduler-metric]').count() == 0
             assert scheduler.locator("hr").count() == 0
 
             listener = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             try:
                 listener.bind(("127.0.0.1", game_port))
-                udp.get_by_text("Open", exact=True).wait_for(timeout=5000)
+                udp.get_by_text(f"Open ({game_port})", exact=True).wait_for(timeout=5000)
             finally:
                 listener.close()
 
@@ -1415,7 +1417,6 @@ def test_scheduler_backup_skips_empty_save_source(tmp_path, monkeypatch):
         page.locator("#pywebio-scope-aside").get_by_text("default").click()
         scheduler = page.locator("#pywebio-scope-scheduler_panel")
         backup = scheduler.get_by_role("button", name="Backup", exact=True)
-        scheduler.get_by_text("Next backup: -", exact=True).wait_for(timeout=5000)
         backup.click()
 
         page.get_by_text("Backup skipped: no save files found.", exact=True).wait_for(timeout=5000)
@@ -1858,6 +1859,142 @@ def test_palworld_tools_check_does_not_update_after_navigation(tmp_path, monkeyp
 
         assert page.get_by_text("Executable rule", exact=True).count() == 0
         assert page.get_by_text("UDP port rule", exact=True).count() == 0
+
+
+@pytest.mark.playwright
+def test_palworld_tools_player_migration_uses_real_selection_and_confirmation(
+    tmp_path, monkeypatch
+):
+    world_id = "D" * 32
+    source = _fixed_backup_source(tmp_path)
+    world = source / world_id
+    players = world / "Players"
+    players.mkdir(parents=True)
+    (world / "Level.sav").write_bytes(b"fake level")
+    old_player = "00000000000000000000000000000001.sav"
+    new_player = "8E910AC2000000000000000000000000.sav"
+    (players / old_player).write_bytes(b"fake old player")
+    (players / new_player).write_bytes(b"fake new player")
+    (world / ".palsitter-player-names.json").write_text(
+        json.dumps({old_player[:-4]: "Original", new_player[:-4]: "New"}),
+        encoding="utf-8",
+    )
+
+    with _gui_page(
+        tmp_path,
+        monkeypatch,
+        profile_overrides={
+            "dedicated_server_name": world_id,
+        },
+    ) as (page, _):
+        page.locator("#pywebio-scope-aside").get_by_text("default", exact=True).click()
+        page.locator("#pywebio-scope-menu").get_by_text("Tools", exact=True).click()
+        migration = page.locator("#pywebio-scope-tools_migration")
+        migration.get_by_text("Palworld player ID migration", exact=True).wait_for(
+            timeout=5000
+        )
+        assert migration.get_by_label(
+            "Original player save", exact=True
+        ).locator("option").all_text_contents() == [
+            f"Original — {old_player}",
+            f"New — {new_player}",
+        ]
+        page.get_by_label("Original player save", exact=True).select_option(
+            label=f"Original — {old_player}"
+        )
+        page.get_by_label("New server player save", exact=True).select_option(
+            label=f"New — {new_player}"
+        )
+        migration.get_by_role("button", name="Migrate player ID", exact=True).click()
+
+        modal = page.locator(".modal.show")
+        modal.get_by_text(old_player, exact=False).wait_for(timeout=5000)
+        modal.get_by_text(new_player, exact=False).wait_for(timeout=5000)
+        modal.get_by_role("button", name="Cancel", exact=True).click()
+        modal.wait_for(state="hidden", timeout=5000)
+
+        migration.get_by_role("button", name="Migrate player ID", exact=True).click()
+        page.locator(".modal.show").get_by_role(
+            "button", name="Migrate player ID", exact=True
+        ).click()
+        migration.get_by_text(
+            re.compile("(Player migration is unavailable|Could not migrate the player ID)"),
+            exact=False,
+        ).wait_for(timeout=10000)
+
+
+@pytest.mark.playwright
+def test_palworld_tools_build_player_name_cache_uses_confirmation_flow(
+    tmp_path, monkeypatch
+):
+    world_id = "D" * 32
+    source = _fixed_backup_source(tmp_path)
+    world = source / world_id
+    players = world / "Players"
+    players.mkdir(parents=True)
+    (world / "Level.sav").write_bytes(b"fake level")
+    (players / "00000000000000000000000000000001.sav").write_bytes(b"old")
+
+    with _gui_page(
+        tmp_path,
+        monkeypatch,
+        profile_overrides={"dedicated_server_name": world_id},
+    ) as (page, _):
+        page.locator("#pywebio-scope-aside").get_by_text(
+            "default", exact=True
+        ).click()
+        page.locator("#pywebio-scope-menu").get_by_text(
+            "Tools", exact=True
+        ).click()
+        migration = page.locator("#pywebio-scope-tools_migration")
+        migration.get_by_role(
+            "button", name="Build player name cache", exact=True
+        ).click()
+        modal = page.locator(".modal.show")
+        modal.get_by_text(
+            "This reads Level.sav and creates an ID-to-name cache", exact=False
+        ).wait_for(timeout=5000)
+        modal.get_by_role(
+            "button", name="Build player name cache", exact=True
+        ).click()
+        migration.get_by_text(
+            re.compile("(Could not build the player name cache|Player name cache is unavailable)"),
+            exact=False,
+        ).wait_for(timeout=10000)
+
+
+@pytest.mark.playwright
+def test_palworld_tools_disables_player_migration_while_server_runs(
+    tmp_path, monkeypatch
+):
+    world_id = "D" * 32
+    source = _fixed_backup_source(tmp_path)
+    world = source / world_id
+    players = world / "Players"
+    players.mkdir(parents=True)
+    (world / "Level.sav").write_bytes(b"fake level")
+    (players / "00000000000000000000000000000001.sav").write_bytes(b"old")
+    (players / "8E910AC2000000000000000000000000.sav").write_bytes(b"new")
+
+    with _running_palserver_process(tmp_path):
+        with _gui_page(
+            tmp_path,
+            monkeypatch,
+            profile_overrides={"dedicated_server_name": world_id},
+        ) as (page, _):
+            page.locator("#pywebio-scope-aside").get_by_text(
+                "default", exact=True
+            ).click()
+            page.locator("#pywebio-scope-menu").get_by_text(
+                "Tools", exact=True
+            ).click()
+            migration = page.locator("#pywebio-scope-tools_migration")
+            migration.get_by_text(
+                "Palworld player ID migration", exact=True
+            ).wait_for(timeout=5000)
+            assert migration.get_by_role(
+                "button", name="Migrate player ID", exact=True
+            ).is_disabled()
 
 
 @pytest.mark.playwright
@@ -2566,7 +2703,7 @@ def test_server_settings_are_embedded_and_save(tmp_path, monkeypatch):
 
 @pytest.mark.playwright
 def test_server_settings_auto_update_dependencies_and_persistence(tmp_path, monkeypatch):
-    with _gui_page(tmp_path, monkeypatch) as (page, config_dir):
+    with _gui_page(tmp_path, monkeypatch) as (page, _):
         page.locator("#pywebio-scope-aside").get_by_text("default", exact=True).click()
         page.locator("#pywebio-scope-menu").get_by_text("Server Settings", exact=True).click()
         page.locator("#pywebio-scope-settings_form").wait_for(timeout=5000)
@@ -3262,10 +3399,15 @@ def test_server_settings_reset_next_to_save_and_delete_instance(tmp_path, monkey
         assert hr_box["y"] < del_box["y"]
 
         # Confirmation modal: Yes stays disabled until the exact instance name is typed.
+        data_file = profile_dir("server2") / "server-data" / "save.sav"
+        data_file.parent.mkdir()
+        data_file.write_text("save-data", encoding="utf-8")
         delete_btn.click()
         confirm = page.get_by_role("button", name="Yes, delete", exact=True)
         confirm.wait_for(timeout=5000)
         assert confirm.is_disabled()
+        wipe = page.get_by_label("Wipe data", exact=True)
+        assert not wipe.is_checked()
         page.locator('input[name="delete_confirm_name"]').fill("wrong")
         assert confirm.is_disabled()
         page.locator('input[name="delete_confirm_name"]').fill("server2")
@@ -3274,7 +3416,22 @@ def test_server_settings_reset_next_to_save_and_delete_instance(tmp_path, monkey
             ".find((x) => x.innerText.trim() === 'Yes, delete'); return b && !b.disabled; }",
             timeout=5000,
         )
+        wipe.check()
         confirm.click()
+        wipe_confirm = page.get_by_role("button", name="Yes, wipe data", exact=True)
+        wipe_confirm.wait_for(timeout=5000)
+        page.get_by_role("button", name="Cancel", exact=True).click()
+        assert page.locator("#pywebio-scope-aside").get_by_text("server2", exact=True).count() >= 1
+        assert data_file.exists()
+
+        delete_btn = page.locator("#pywebio-scope-settings_delete").get_by_role(
+            "button", name="Delete instance", exact=True
+        )
+        delete_btn.click()
+        page.locator('input[name="delete_confirm_name"]').fill("server2")
+        page.get_by_label("Wipe data", exact=True).check()
+        page.get_by_role("button", name="Yes, delete", exact=True).click()
+        page.get_by_role("button", name="Yes, wipe data", exact=True).click()
 
         # Instance removed from the sidebar; the default instance remains.
         page.locator("#pywebio-scope-aside").get_by_text(
@@ -3284,6 +3441,7 @@ def test_server_settings_reset_next_to_save_and_delete_instance(tmp_path, monkey
 
         monkeypatch.setenv("PALSITTER_CONFIG_DIR", str(config_dir))
         assert "server2" not in list_profiles()
+        assert not data_file.exists()
 
 
 @pytest.mark.playwright
@@ -3427,6 +3585,27 @@ def test_world_settings_numeric_fields_have_working_spinner_step(tmp_path, monke
 
 
 @pytest.mark.playwright
+def test_world_settings_accept_decimal_format_for_integer_ini_fields(tmp_path, monkeypatch):
+    workdir = _fixed_palserver_dir(tmp_path)
+
+    with _gui_page(tmp_path, monkeypatch) as (page, _):
+        ini_path = resolve_ini_path(Profile(name="default", workdir=str(workdir)))
+        ini_path.parent.mkdir(parents=True, exist_ok=True)
+        ini_path.write_text(
+            "[/Script/Pal.PalGameWorldSettings]\n"
+            "OptionSettings=(BaseCampMaxNum=600.000000)\n",
+            encoding="utf-8",
+        )
+
+        page.locator("#pywebio-scope-aside").get_by_text("default").click()
+        page.locator("#pywebio-scope-menu").get_by_text("World Settings").click()
+        page.locator("#pywebio-scope-world_settings_form").wait_for(timeout=5000)
+
+        assert page.locator('input[name="world_BaseCampMaxNum"]').input_value() == "600"
+        assert page.locator("#pywebio-scope-world_settings_warning").count() == 0
+
+
+@pytest.mark.playwright
 def test_world_settings_validation_and_unsaved_save_leave(tmp_path, monkeypatch):
     workdir = _fixed_palserver_dir(tmp_path)
 
@@ -3504,11 +3683,8 @@ def test_world_settings_menu_position_and_field_types_save_to_ini(tmp_path, monk
             "Game Map",
             "Audit",
         ]
-        # put_select JSON-encodes option values in the DOM, so compare by the
-        # visible label text (selected via option:checked) rather than raw value.
-        format_select = page.locator('select[name="world_settings_format"]')
-        assert format_select.locator("option:checked").inner_text() == "PalWorldSettings.ini"
-        assert page.locator("#pywebio-scope-world_settings_warning").inner_text().strip() == ""
+        assert page.locator('select[name="world_settings_format"]').count() == 0
+        assert page.locator("#pywebio-scope-world_settings_warning").count() == 0
 
         # One field of each editable type.
         bool_toggle = page.locator("#pywebio-scope-world_toggle_bIsPvP")
@@ -3842,18 +4018,21 @@ def test_world_filters_structured_launch_and_auto_restart_settings(tmp_path, mon
 def test_dedicated_save_import_preview_and_managed_world_switch(tmp_path, monkeypatch):
     first_id = "A" * 32
     second_id = "B" * 32
-    source_root = tmp_path / "source-worlds"
-    first = source_root / first_id
+    source_root = tmp_path / "source-server"
+    first = source_root / "Pal" / "Saved" / "SaveGames" / "0" / first_id
     (first / "Players").mkdir(parents=True)
     (first / "Level.sav").write_text("original", encoding="utf-8")
     (first / "Players" / "one.sav").write_text("player", encoding="utf-8")
     (first / "Level.sav.bak").write_text("backup", encoding="utf-8")
     (first / "notes.txt").write_text("notes", encoding="utf-8")
+    config_directory = "WindowsServer" if os.name == "nt" else "LinuxServer"
+    source_ini = source_root / "Pal" / "Saved" / "Config" / config_directory / "PalWorldSettings.ini"
+    source_ini.parent.mkdir(parents=True, exist_ok=True)
+    source_ini.write_text("source world settings", encoding="utf-8")
 
     with _gui_page(tmp_path, monkeypatch) as (page, config_dir):
         page.locator("#pywebio-scope-aside").get_by_text("Add", exact=True).click()
         page.get_by_label("Profile name", exact=True).fill("imported")
-        page.get_by_label("Import dedicated save", exact=True).check()
         import_path = first / "Level.sav"
         page.get_by_label("Level.sav file", exact=True).fill(str(import_path))
         page.locator("#pywebio-scope-add_import_panel").get_by_role(
@@ -3880,6 +4059,15 @@ def test_dedicated_save_import_preview_and_managed_world_switch(tmp_path, monkey
         assert imported.dedicated_server_name == first_id
         managed_first = Path(imported.backup_source) / first_id
         assert (managed_first / "Level.sav").read_text(encoding="utf-8") == "original"
+        imported_ini = (
+            Path(imported.workdir)
+            / "Pal"
+            / "Saved"
+            / "Config"
+            / config_directory
+            / "PalWorldSettings.ini"
+        )
+        assert imported_ini.read_text(encoding="utf-8") == "source world settings"
         assert (first / "Level.sav").read_text(encoding="utf-8") == "original"
 
         second = Path(imported.backup_source) / second_id
@@ -3905,19 +4093,23 @@ def test_dedicated_save_import_preview_and_managed_world_switch(tmp_path, monkey
 
 
 @pytest.mark.playwright
-def test_single_player_save_import_is_blocked_with_modal(tmp_path, monkeypatch):
+def test_single_player_save_import_starts_migration_workflow(tmp_path, monkeypatch):
     world_id = "C" * 32
-    world = tmp_path / "single-player" / world_id
+    world = tmp_path / "Pal" / "Saved" / "SaveGames" / "76561198170852193" / world_id
     (world / "Players").mkdir(parents=True)
     (world / "Level.sav").write_text("level", encoding="utf-8")
     (world / "Players" / "00000000000000000000000000000001.sav").write_text(
         "player", encoding="utf-8"
     )
+    codec = WorldOptionSavCodec()
+    codec.write(
+        world / "WorldOption.sav",
+        merge_option_values(codec.load_template(), {"ServerName": "Imported single-player world"}),
+    )
 
     with _gui_page(tmp_path, monkeypatch) as (page, config_dir):
         page.locator("#pywebio-scope-aside").get_by_text("Add", exact=True).click()
         page.get_by_label("Profile name", exact=True).fill("singleplayer-import")
-        page.get_by_label("Import dedicated save", exact=True).check()
         level_path = world / "Level.sav"
         page.get_by_label("Level.sav file", exact=True).fill(str(level_path))
         page.locator("#pywebio-scope-add_import_panel").get_by_role(
@@ -3930,16 +4122,23 @@ def test_single_player_save_import_is_blocked_with_modal(tmp_path, monkeypatch):
         ).click()
         page.get_by_role("button", name="Confirm", exact=True).click()
 
-        warning = page.locator(".modal.show")
-        warning.get_by_text("Single-player world unsupported", exact=True).wait_for(
-            timeout=5000
-        )
-        assert page.get_by_text(
-            "Single-player world import is not supported yet.", exact=False
-        ).count() == 1
-        assert load_profile("default")
+        page.locator("#pywebio-scope-menu .menu-active").get_by_text(
+            "Overview", exact=True
+        ).wait_for(timeout=5000)
+        page.get_by_text("Single-player world imported", exact=False).wait_for(timeout=5000)
         monkeypatch.setenv("PALSITTER_CONFIG_DIR", str(config_dir))
-        assert not (Path(config_dir) / "profile" / "singleplayer-import").exists()
+        imported = load_profile("singleplayer-import")
+        assert (Path(imported.backup_source) / world_id / "Level.sav").read_text(
+            encoding="utf-8"
+        ) == "level"
+        imported_world = Path(imported.backup_source) / world_id
+        assert not (imported_world / "WorldOption.sav").exists()
+        imported_ini = resolve_ini_path(imported)
+        imported_values = read_ini_option_settings(imported_ini)
+        assert imported_values["ServerName"] == "Imported single-player world"
+        assert imported_values["PublicPort"] == imported.game_port
+        assert imported_values["RESTAPIPort"] == imported.rest_port
+        assert (world / "WorldOption.sav").exists()
 
 
 @pytest.mark.playwright
@@ -3963,7 +4162,7 @@ def test_saves_removes_test_schedule_and_keeps_manual_flush(tmp_path, monkeypatc
 
 
 @pytest.mark.playwright
-def test_guided_ini_and_sav_recovery_click_paths(tmp_path, monkeypatch):
+def test_guided_ini_recovery_click_path(tmp_path, monkeypatch):
     config_dir = "WindowsServer" if os.name == "nt" else "LinuxServer"
     ini_path = (
         _fixed_palserver_dir(tmp_path)
@@ -3976,7 +4175,7 @@ def test_guided_ini_and_sav_recovery_click_paths(tmp_path, monkeypatch):
     ini_path.parent.mkdir(parents=True)
     ini_path.write_text("[/Script/Pal.PalGameWorldSettings]\nOptionSettings=(broken", encoding="utf-8")
 
-    with _gui_page(tmp_path, monkeypatch) as (page, config_dir):
+    with _gui_page(tmp_path, monkeypatch) as (page, _):
         page.locator("#pywebio-scope-aside").get_by_text("default", exact=True).click()
         page.locator("#pywebio-scope-menu").get_by_text("World Settings", exact=True).click()
         recovery = page.locator("#pywebio-scope-world_recovery_panel")
@@ -3991,29 +4190,6 @@ def test_guided_ini_and_sav_recovery_click_paths(tmp_path, monkeypatch):
         ).click()
         page.locator("#pywebio-scope-world_settings_form").wait_for(timeout=5000)
         assert list(ini_path.parent.glob("PalWorldSettings.ini.malformed-*.bak"))
-
-        monkeypatch.setenv("PALSITTER_CONFIG_DIR", str(config_dir))
-        profile = load_profile("default")
-        sav = Path(profile.backup_source) / profile.dedicated_server_name / "WorldOption.sav"
-        sav.parent.mkdir(parents=True, exist_ok=True)
-        sav.write_bytes(b"not a decodable sav")
-        page.locator("#pywebio-scope-menu").get_by_text("Server Settings", exact=True).click()
-        page.locator("#pywebio-scope-settings_form").wait_for(timeout=5000)
-        page.locator("#pywebio-scope-menu").get_by_text("World Settings", exact=True).click()
-        recovery = page.locator("#pywebio-scope-world_recovery_panel")
-        recovery.get_by_text("WorldOption.sav cannot be decoded", exact=True).wait_for(
-            timeout=5000
-        )
-        recovery.get_by_role(
-            "button", name="Rename & disable SAV override", exact=True
-        ).click()
-        page.locator(".modal.show").get_by_role(
-            "button", name="Rename & disable SAV override", exact=True
-        ).click()
-        page.locator("#pywebio-scope-world_settings_form").wait_for(timeout=5000)
-        assert not sav.exists()
-        assert list(sav.parent.glob("WorldOption.sav.disabled-*"))
-
 
 @pytest.mark.playwright
 def test_390px_responsive_overview_navigation_without_action_strip(tmp_path, monkeypatch):
@@ -4044,7 +4220,7 @@ def test_390px_responsive_overview_navigation_without_action_strip(tmp_path, mon
 
 
 @pytest.mark.playwright
-def test_world_settings_autodetects_sav_and_shows_stale_override_warning(tmp_path, monkeypatch):
+def test_world_settings_uses_ini_only_when_legacy_sav_exists(tmp_path, monkeypatch):
     backup_source = _fixed_backup_source(tmp_path)
     dedicated_name = "C3" * 16
     save_dir = backup_source / dedicated_name
@@ -4064,26 +4240,18 @@ def test_world_settings_autodetects_sav_and_shows_stale_override_warning(tmp_pat
         page.locator("#pywebio-scope-menu").get_by_text("World Settings").click()
         page.locator("#pywebio-scope-world_settings_form").wait_for(timeout=5000)
 
-        page.locator("#pywebio-scope-world_settings_warning").get_by_text(
-            "WorldOption.sav"
-        ).first.wait_for(timeout=5000)
-        format_select = page.locator('select[name="world_settings_format"]')
-        assert format_select.locator("option:checked").inner_text() == "WorldOption.sav"
+        assert page.locator('select[name="world_settings_format"]').count() == 0
+        assert page.locator("#pywebio-scope-world_settings_warning").count() == 0
         randomizer_select = page.locator('select[name="world_RandomizerType"]')
-        assert randomizer_select.locator("option:checked").inner_text() == "Region"
+        assert randomizer_select.locator("option:checked").inner_text() == "None"
 
-        format_select.select_option(label="PalWorldSettings.ini")
         page.locator('input[name="world_ServerDescription"]').fill("Changed via ini")
         page.locator("#pywebio-scope-world_settings_actions").get_by_role(
             "button", name="Save", exact=True
         ).click()
         page.get_by_text("World settings saved", exact=True).wait_for(timeout=5000)
 
-        # The stale WorldOption.sav still wins on reload; Palsitter warns rather than
-        # silently deleting it or letting the ini edit take effect.
-        page.locator("#pywebio-scope-world_settings_warning").get_by_text(
-            "WorldOption.sav"
-        ).first.wait_for(timeout=5000)
+        assert page.locator('select[name="world_settings_format"]').count() == 0
 
     reread = extract_option_values(codec.read(sav_path))
     assert reread["RandomizerType"] == "Region"

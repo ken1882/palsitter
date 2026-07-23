@@ -83,6 +83,8 @@ class InstanceStatusSummary(Mapping[str, object]):
     cpu_percent: float | None = None
     memory_bytes: int | None = None
     game_version: str | None = None
+    basecamp_num: int | None = None
+    basecamp_max_num: int | None = None
     installed_build_id: str | None = None
     available_build_id: str | None = None
     latest_backup: str | None = None
@@ -92,7 +94,7 @@ class InstanceStatusSummary(Mapping[str, object]):
 
     _LEGACY_KEYS: ClassVar[tuple[str, ...]] = (
         "server_name", "state", "players", "fps", "uptime", "memory",
-        "latest_backup", "days", "cpu", "game_version",
+        "latest_backup", "days", "cpu", "game_version", "palbox",
     )
 
     def _legacy_value(self, key: str) -> object:
@@ -115,6 +117,12 @@ class InstanceStatusSummary(Mapping[str, object]):
         if key in ("days", "game_version", "latest_backup"):
             value = getattr(self, key)
             return "-" if value is None else str(value)
+        if key == "palbox":
+            current = self.basecamp_num
+            maximum = self.basecamp_max_num
+            if current is None and maximum is None:
+                return "-"
+            return f"{current if current is not None else '-'} / {maximum if maximum is not None else '-'}"
         if key in ("server_name", "state"):
             return getattr(self, key)
         raise KeyError(key)
@@ -363,6 +371,8 @@ class GameAdapter:
             endpoints = {}
         current_players = max_players = uptime_seconds = days = None
         current_fps = average_fps = None
+        basecamp_num = None
+        basecamp_max_num = None
         game_version = None
         rest_snapshot = rest_cache.snapshot()
         if running and endpoints.get("rest") == "open":
@@ -392,6 +402,14 @@ class GameAdapter:
                     days = int(metrics.get("days"))
                 except (TypeError, ValueError):
                     pass
+                try:
+                    basecamp_num = int(metrics.get("basecampnum"))
+                except (TypeError, ValueError):
+                    pass
+        try:
+            basecamp_max_num = int(profile.world_settings.get("BaseCampMaxNum"))
+        except (TypeError, ValueError):
+            pass
         info = rest_snapshot.info
         if info is not None:
             version = info.get("version")
@@ -427,6 +445,8 @@ class GameAdapter:
                 else None
             ),
             game_version=game_version,
+            basecamp_num=basecamp_num,
+            basecamp_max_num=basecamp_max_num,
             latest_backup=latest.name if latest else None,
             latest_backup_at=latest_at,
             endpoint_states=endpoints,

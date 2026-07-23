@@ -51,8 +51,8 @@ adding lifecycle controls to those pages.
 
 ## Operations and reliability (left column)
 
-- The Operations card shows lifecycle/ownership state, UDP/REST/RCON endpoint states, and
-  latest/next backup. Endpoint status retries once per second for up to ten seconds while
+- The Operations card shows lifecycle/ownership state and UDP/REST/RCON endpoint states,
+  including each endpoint's configured port. Endpoint status retries once per second for up to ten seconds while
   a newly detected process binds UDP and REST, then refreshes independently every ten
   seconds.
 - Process identity is checked before any endpoint probe. When the matching executable is
@@ -61,8 +61,6 @@ adding lifecycle controls to those pages.
 - UDP is Open when the configured game UDP port is locally bound. REST is Open when its
   configured TCP endpoint accepts a connection. RCON is Disabled when its effective world
   setting is off, otherwise Closed or Open according to its configured TCP port.
-- `Next backup: yyyy-mm-dd hh:mm:ss` is shown only while a Palsitter-owned supervisor and
-  backup schedule are active; otherwise it is `-`.
 - Automatic restart settings, next planned restart, and restart history live only on the
   separate Auto Restart page.
 - The compact Players card reads the shared REST cache every three seconds, retains the
@@ -134,7 +132,9 @@ adding lifecycle controls to those pages.
   save during shutdown. If the save request fails, the shutdown request is not sent.
 - Metrics start as placeholders and read the shared REST cache every three seconds: current and
   average FPS, uptime, day, PalServer process CPU, PalServer process-tree RSS memory, and
-  game version. When a check reports an available update, `<b>(↑)</b>` follows the game
+  game version. The Palbox metric shows the REST `basecampnum` count as
+  `<current> / <world-settings BaseCampMaxNum>`. When a check reports an available update,
+  `<b>(↑)</b>` follows the game
   version and its hover/focus tooltip displays the localized `update available: {current_version}
   → {new_version}` message. CPU and memory use the exact instance executable path and remain available
   for a detected external server before Palsitter attaches its watcher. Slow or failed REST

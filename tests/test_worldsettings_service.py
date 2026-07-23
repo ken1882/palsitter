@@ -5,12 +5,13 @@ import pytest
 
 from module.config import Profile
 from module.worldsettings.ini_codec import read_ini_option_settings
-from module.worldsettings.sav_codec import WorldOptionSavCodec, extract_option_values
+from module.worldsettings.sav_codec import WorldOptionSavCodec, extract_option_values, merge_option_values
 from module.worldsettings.schema import WORLD_OPTION_FIELDS_BY_KEY
 from module.worldsettings.service import (
     find_world_sav_path,
     ensure_world_settings,
     load_world_settings,
+    migrate_world_option_sav_to_ini,
     resolve_ini_path,
     save_world_settings,
 )
@@ -158,16 +159,48 @@ def test_load_world_settings_syncs_rest_credentials_and_ports(tmp_path):
     assert profile.rest_password == "effective-password"
 
 
-def test_load_world_settings_prefers_sav_when_present(tmp_path):
+def test_load_world_settings_ignores_legacy_sav_when_present(tmp_path):
     profile = _make_profile(tmp_path)
     save_dir = Path(profile.backup_source) / profile.dedicated_server_name
     save_dir.mkdir()
     codec = WorldOptionSavCodec()
-    codec.write(save_dir / "WorldOption.sav", codec.load_template())
+    codec.write(
+        save_dir / "WorldOption.sav",
+        codec.load_template(),
+    )
+    save_world_settings(profile, {"ServerName": "INI settings"}, "ini")
 
     loaded = load_world_settings(profile)
-    assert loaded.source_format == "sav"
-    assert loaded.sav_path == save_dir / "WorldOption.sav"
+    assert loaded.source_format == "ini"
+    assert loaded.sav_path is None
+    assert loaded.values["ServerName"] == "INI settings"
+
+
+def test_migrate_world_option_sav_to_ini_removes_sav_and_uses_profile_ports(tmp_path):
+    profile = _make_profile(tmp_path)
+    profile.game_port = 9123
+    profile.rest_port = 9124
+    profile.rest_password = "profile-secret"
+    save_dir = Path(profile.backup_source) / profile.dedicated_server_name
+    save_dir.mkdir()
+    codec = WorldOptionSavCodec()
+    codec.write(
+        save_dir / "WorldOption.sav",
+        merge_option_values(
+            codec.load_template(),
+            {"ServerName": "Imported world", "PublicPort": 7000, "RESTAPIPort": 7001},
+        ),
+    )
+
+    migrated = migrate_world_option_sav_to_ini(profile)
+
+    assert migrated == save_dir / "WorldOption.sav"
+    assert not migrated.exists()
+    values = read_ini_option_settings(resolve_ini_path(profile))
+    assert values["ServerName"] == "Imported world"
+    assert values["PublicPort"] == 9123
+    assert values["RESTAPIPort"] == 9124
+    assert values["AdminPassword"] == "profile-secret"
 
 
 def test_save_world_settings_ini_never_backs_up(tmp_path):
@@ -249,7 +282,7 @@ def test_save_world_settings_unknown_format_raises():
         save_world_settings(profile, {}, "yaml")
 
 
-def test_saving_ini_does_not_clear_autodetected_sav_preference(tmp_path):
+def test_saving_ini_does_not_reenable_legacy_sav_preference(tmp_path):
     profile = _make_profile(tmp_path)
     save_dir = Path(profile.backup_source) / profile.dedicated_server_name
     save_dir.mkdir()
@@ -258,6 +291,7 @@ def test_saving_ini_does_not_clear_autodetected_sav_preference(tmp_path):
 
     save_world_settings(profile, {"ServerName": "Switched to ini"}, "ini")
 
-    # a stale WorldOption.sav still wins on the next load - Palsitter warns, never deletes it.
+    # Legacy SAV files no longer override the INI workflow.
     loaded = load_world_settings(profile)
-    assert loaded.source_format == "sav"
+    assert loaded.source_format == "ini"
+    assert loaded.values["ServerName"] == "Switched to ini"

@@ -12,14 +12,13 @@ from pywebio.session import local, register_thread
 from module.games.palworld.backup import BackupService
 from module.instances import load_instance, load_runtime
 from module.games.palworld.config import (
-    PalworldProfile,
     fixed_executable_path,
     fixed_palserver_dir,
     load_profile,
 )
 from module.games.palworld.server import PalRestClient, get_pal_rest_cache
 from module.games.palworld.audit import AuditEvent, AuditStore, utc_now
-from module.games.palworld.server.status import endpoint_status, instance_is_running
+from module.games.palworld.server.status import endpoint_ports, endpoint_status, instance_is_running
 from module.webui.i18n import t
 from module.webui.session import page_context, register_page_cleanup, register_page_stop_event, run_if_current
 from module.webui.assets import client_call, client_query, put_asset_widget
@@ -99,8 +98,6 @@ def _set_status(*args, **kwargs):
 def _status_code(*args, **kwargs):
     from module.webui.instance import _status_code as implementation
     return implementation(*args, **kwargs)
-
-Profile = PalworldProfile
 
 CONSOLE_COMMANDS = (
     ("announce <message>", "console.hint.announce"),
@@ -203,14 +200,12 @@ def _render_scheduler(name: str) -> None:
                 ),
                 put_scope("scheduler_maintenance"),
                 put_scope("scheduler_endpoints"),
-                put_scope("scheduler_backup_info"),
             ],
         )
         client_call("dom.addClasses", scope="scheduler_panel", classes=["panel", "scheduler-actions"])
     _update_scheduler_controls(name)
     _update_scheduler_backup(name)
-    _update_scheduler_endpoints()
-    _update_scheduler_backup_info(profile)
+    _update_scheduler_endpoints(name)
 
 
 def _open_scheduler_folder(name: str) -> None:
@@ -223,32 +218,6 @@ def _open_scheduler_folder(name: str) -> None:
     except Exception as exc:
         toast(t("scheduler.open_failed", error=exc), color="error")
 
-def _next_backup_time(
-    profile: Profile,
-    latest: Path | None,
-    now: dt.datetime | None = None,
-    scheduler_running: bool | None = None,
-) -> str:
-    interval = int(float(profile.backup_interval_minutes) * 60)
-    if scheduler_running is None:
-        scheduler_running = _manager(profile.name).active
-    if interval <= 0 or not scheduler_running:
-        return "-"
-    now = now or dt.datetime.now()
-    started_at = _manager(profile.name).backup_schedule_started_at
-    latest_at = latest.stat().st_mtime if latest is not None else None
-    next_at = (
-        dt.datetime.fromtimestamp(latest_at) + dt.timedelta(seconds=interval)
-        if latest_at is not None and (started_at is None or latest_at >= started_at)
-        else dt.datetime.fromtimestamp(started_at) + dt.timedelta(seconds=interval)
-        if started_at is not None
-        else now + dt.timedelta(seconds=interval)
-    )
-    if next_at <= now:
-        elapsed = (now - next_at).total_seconds()
-        next_at += dt.timedelta(seconds=(int(elapsed // interval) + 1) * interval)
-    return next_at.strftime("%Y-%m-%d %H:%M:%S")
-
 @use_scope("scheduler_backup", clear=True)
 def _update_scheduler_backup(name: str, disabled: bool = False) -> None:
     put_button(t("scheduler.backup"), onclick=lambda: _backup_now(name), disabled=disabled)
@@ -260,19 +229,6 @@ def _update_scheduler_save(name: str) -> None:
         t("scheduler.save"),
         onclick=lambda: _save_world_now(name),
         disabled=busy or _manager(name).state != "running",
-    )
-
-@use_scope("scheduler_backup_info", clear=True)
-def _update_scheduler_backup_info(profile: Profile) -> None:
-    latest = BackupService(profile).latest_backup()
-    put_asset_widget(
-        "palworld.scheduler_backup_info",
-        {
-            "latest_label": t("scheduler.latest_backup"),
-            "latest": latest.name if latest else "-",
-            "next_label": t("scheduler.next_backup"),
-            "next": _next_backup_time(profile, latest),
-        },
     )
 
 @use_scope("scheduler_toggle", clear=True)
@@ -319,8 +275,9 @@ def _update_scheduler_maintenance(name: str) -> None:
         put_row(buttons, size=" ".join("auto" for _ in buttons))
 
 @use_scope("scheduler_endpoints", clear=True)
-def _update_scheduler_endpoints(statuses: dict[str, str] | None = None) -> None:
+def _update_scheduler_endpoints(name: str, statuses: dict[str, str] | None = None) -> None:
     values = statuses or {"udp": "unknown", "rest": "unknown", "rcon": "unknown"}
+    ports = endpoint_ports(load_profile(name))
     put_asset_widget(
         "palworld.scheduler_endpoints",
         {
@@ -329,6 +286,7 @@ def _update_scheduler_endpoints(statuses: dict[str, str] | None = None) -> None:
                     "key": key,
                     "label": t(f"scheduler.{key}_status"),
                     "status": t(f"endpoint.{values[key]}"),
+                    "port": ports[key],
                 }
                 for key in ("udp", "rest", "rcon")
             ]
@@ -373,6 +331,7 @@ def _render_metrics(name: str, row: list[str] | None = None):
         "days": row[8] if row else "-",
         "cpu": row[9] if row else "-",
         "game-version": row[10] if row else "-",
+        "palbox": row[11] if row else "-",
     }
     items = [
         ("fps", t("metrics.fps")),
@@ -381,6 +340,7 @@ def _render_metrics(name: str, row: list[str] | None = None):
         ("cpu", t("metrics.cpu")),
         ("memory", t("metrics.memory")),
         ("game-version", t("metrics.game_version")),
+        ("palbox", t("metrics.palbox")),
     ]
     return put_asset_widget(
         "palworld.metrics",
@@ -573,6 +533,7 @@ def _update_metrics_output(name: str, row: list[str]) -> None:
         "days": row[8],
         "cpu": row[9],
         "game-version": row[10],
+        "palbox": row[11],
     }
     client_call(
         "palworld.overview.updateMetrics",
@@ -617,7 +578,7 @@ def _start_overview_updates(name: str) -> None:
                         context,
                         lambda: (
                             _set_status(_status_code(name)),
-                            _update_scheduler_backup_info(load_profile(name)),
+                            _update_scheduler_controls(name),
                         ),
                     )
                     last_state = current_state
@@ -669,7 +630,7 @@ def _start_overview_updates(name: str) -> None:
                 )
                 if stop_event.is_set():
                     return
-                run_if_current(context, lambda: _update_scheduler_endpoints(statuses))
+                run_if_current(context, lambda: _update_scheduler_endpoints(name, statuses))
                 ready = statuses.get("udp") == "open" and statuses.get("rest") == "open"
                 if not running:
                     startup_probes_remaining = 10
@@ -835,7 +796,6 @@ def _run_backup_now(name: str) -> None:
     except Exception as exc:
         toast(t("action.backup_failed", error=exc), color="error")
     if client_query("dom.scopeExists", scope="scheduler_panel"):
-        _update_scheduler_backup_info(profile)
         _update_scheduler_backup(name)
     if client_query("dom.scopeExists", scope="backup_settings_panel"):
         _render_backup_now_button(name)

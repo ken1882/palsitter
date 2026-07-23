@@ -91,18 +91,29 @@ def ensure_world_settings(profile: PalworldProfile) -> Path:
     return path
 
 
+def migrate_world_option_sav_to_ini(profile: PalworldProfile) -> Optional[Path]:
+    """Convert the active world's WorldOption.sav into the server INI."""
+    sav_path = find_world_sav_path(profile)
+    if sav_path is None:
+        return None
+
+    codec = WorldOptionSavCodec()
+    values = _fill_defaults(extract_option_values(codec.read(sav_path)))
+    values["PublicPort"] = profile.game_port
+    values["RESTAPIPort"] = profile.rest_port
+    if profile.rest_password:
+        values["AdminPassword"] = profile.rest_password
+    write_ini_option_settings(resolve_ini_path(profile), values)
+    sav_path.unlink()
+    profile.world_settings = values
+    profile._sync_world_network_settings()
+    return sav_path
+
+
 def load_world_settings(
     profile: PalworldProfile,
     sav_codec: Optional[WorldOptionSavCodec] = None,
 ) -> LoadedWorldSettings:
-    sav_path = find_world_sav_path(profile)
-    if sav_path is not None:
-        codec = sav_codec or WorldOptionSavCodec()
-        values = extract_option_values(codec.read(sav_path))
-        filled = _fill_defaults(values)
-        profile.world_settings = filled
-        profile._sync_world_network_settings()
-        return LoadedWorldSettings(filled, "sav", sav_path)
     values = read_ini_option_settings(resolve_ini_path(profile))
     if not values and profile.world_settings:
         values = dict(profile.world_settings)

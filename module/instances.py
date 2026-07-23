@@ -352,12 +352,15 @@ def create_instance(
     return record
 
 
-def delete_instance(name: str) -> None:
+def delete_instance(name: str, *, wipe_data: bool = False) -> None:
     safe = safe_profile_name(name)
     found = _instance_index().get(safe.casefold())
     if found is None:
         raise FileNotFoundError(f"Profile not found: {name}")
-    found[1].unlink()
+    if wipe_data:
+        shutil.rmtree(found[1].parent)
+    else:
+        found[1].unlink()
 
 
 def next_instance_name(game: str) -> str:

@@ -52,7 +52,6 @@
     "palworld.server_settings_toolbar": "gui/html/games/palworld/server_settings_toolbar.html",
     "palworld.world_settings_toolbar": "gui/html/games/palworld/world_settings_toolbar.html",
     "palworld.world_field_label": "gui/html/games/palworld/world_field_label.html",
-    "palworld.scheduler_backup_info": "gui/html/games/palworld/scheduler_backup_info.html",
     "palworld.scheduler_endpoints": "gui/html/games/palworld/scheduler_endpoints.html",
     "palworld.metrics": "gui/html/games/palworld/metrics.html",
     "palworld.log_box": "gui/html/games/palworld/log_box.html",

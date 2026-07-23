@@ -7,14 +7,7 @@ and saved is described in [World Settings](../features/world-settings.md); this 
 about layout only.
 
 - The panel title is `World Settings`; it does not repeat the selected instance name.
-- A `Save format` selector at the top of the panel offers `PalWorldSettings.ini` and
-  `WorldOption.sav`; it defaults to whichever format the page auto-detected on load (see
-  [World Settings](../features/world-settings.md)), and can be changed freely before
-  saving.
-- When a `WorldOption.sav` was loaded, a warning banner appears above the format
-  selector explaining that it overrides `PalWorldSettings.ini`. There is no button to
-  delete a valid save override.
-- A sticky filter row below the format selector contains `All`, one option per schema
+- A sticky filter row below the title contains `All`, one option per schema
   category, a search input, and `Changed only`. Search matches localized labels and raw
   setting keys case-insensitively; search and Changed only apply within the selected
   category.
@@ -54,13 +47,10 @@ about layout only.
 - A malformed `PalWorldSettings.ini` shows its parse error and a recovery action. Recovery
   is disabled while the server is active; after confirmation it makes a timestamped copy
   and regenerates only Palsitter-managed defaults.
-- An undecodable `WorldOption.sav` is never synthesized or overwritten. Its recovery
-  action requires an inactive server and confirmation, renames the file to a timestamped
-  sibling, and reloads the page in INI mode.
 
 The instance navigation places [`Saves & Backups`](./instance-saves-backups.md) directly
 beneath World Settings.
 
 **Tests:** `tests/test_gui_playwright.py` clicks category, search, Changed only, password,
-Reset/Save, navigation guards, and both recovery confirmations through the real page.
-Tests verify filtering never loses edits and recovery is unavailable while active.
+Reset/Save, navigation guards, and INI recovery through the real page. Tests verify
+filtering never loses edits and recovery is unavailable while active.

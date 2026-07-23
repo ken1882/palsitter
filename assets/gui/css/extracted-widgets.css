@@ -12,6 +12,7 @@
 .metric-dot-cpu { background: #fb7185; }
 .metric-dot-memory { background: #f3c178; }
 .metric-dot-game-version { background: #c084fc; }
+.metric-dot-palbox { background: #00ffff; }
 .settings-view > div { grid-column: 1 / -1; width: 100%; }
 .settings-view > div[style*="grid-auto-flow"] { align-items: start; }
 .loading-indicator .spinner-border,

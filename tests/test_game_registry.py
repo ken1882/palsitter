@@ -47,6 +47,7 @@ def test_unsupported_status_summary_is_typed_without_dispatching_palworld(tmp_pa
 def test_palworld_status_summary_populates_typed_operator_fields(tmp_path, monkeypatch):
     monkeypatch.setenv("PALSITTER_CONFIG_DIR", str(tmp_path / "config"))
     record = create_instance("default", "palworld")
+    record.game_config["world_settings"]["BaseCampMaxNum"] = 77
     adapter = get_game("palworld")
     profile = adapter.load_typed_profile(record.name, record.game_config)
     backup_dir = Path(profile.backup_dir)
@@ -61,6 +62,7 @@ def test_palworld_status_summary_populates_typed_operator_fields(tmp_path, monke
                 "serverfpsaverage": "59.5",
                 "uptime": "120",
                 "days": "4",
+                "basecampnum": "3",
             },
         info={"version": "v1.2.3"},
     )
@@ -93,6 +95,8 @@ def test_palworld_status_summary_populates_typed_operator_fields(tmp_path, monke
     assert (summary.current_players, summary.max_players) == (3, 32)
     assert (summary.current_fps, summary.average_fps) == (60.0, 59.5)
     assert (summary.uptime_seconds, summary.days) == (120, 4)
+    assert (summary.basecamp_num, summary.basecamp_max_num) == (3, 77)
+    assert summary["palbox"] == "3 / 77"
     assert summary.cpu_percent == 12.5
     assert summary.memory_bytes == 256 * 1024 * 1024
     assert summary.game_version == "v1.2.3"

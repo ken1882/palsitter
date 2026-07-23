@@ -7,7 +7,8 @@ from module.games.palworld.config import load_profile, save_profile
 from module.webui.i18n import t
 from module.webui.session import page_context, register_page_cleanup
 from module.webui.assets import client_call, put_asset_icon, put_asset_widget
-from module.games.palworld.worldsettings import WORLD_OPTION_CATEGORIES, WORLD_OPTION_FIELDS, diagnose_ini, diagnose_world_option_sav, disable_undecodable_world_option_sav, find_world_sav_path, load_world_settings, recover_malformed_ini, resolve_ini_path, save_world_settings
+from module.games.palworld.worldsettings import WORLD_OPTION_CATEGORIES, WORLD_OPTION_FIELDS, diagnose_ini, load_world_settings, recover_malformed_ini, resolve_ini_path, save_world_settings
+from module.games.palworld.worldsettings.ini_codec import coerce_integer
 
 def _clear_dirty_form(*args, **kwargs):
     from module.webui.forms import _clear_dirty_form as implementation
@@ -60,19 +61,14 @@ _WORLD_INPUT_TYPE_BY_FTYPE = {"int": "number", "float": "float", "string": "text
 def render(name: str) -> None:
     profile = load_profile(name)
     previous_world_settings = dict(profile.world_settings)
-    sav_path = find_world_sav_path(profile)
-    sav_error = diagnose_world_option_sav(profile) if sav_path is not None else None
-    if sav_error is not None:
-        _render_world_recovery(name, "sav", sav_error)
-        return
-    ini_error = diagnose_ini(resolve_ini_path(profile)) if sav_path is None else None
+    ini_error = diagnose_ini(resolve_ini_path(profile))
     if ini_error is not None:
-        _render_world_recovery(name, "ini", ini_error)
+        _render_world_recovery(name, ini_error)
         return
     try:
         loaded = load_world_settings(profile)
     except Exception as exc:
-        _render_world_recovery(name, "sav" if sav_path is not None else "ini", str(exc))
+        _render_world_recovery(name, str(exc))
         return
     if profile.world_settings != previous_world_settings:
         save_profile(profile)
@@ -88,8 +84,6 @@ def render(name: str) -> None:
             "world_settings_panel",
             [
                 put_asset_widget("shared.panel_title", {"title": t("world.title")}),
-                put_scope("world_settings_warning"),
-                put_scope("world_settings_format_row"),
                 put_scope("world_settings_toolbar"),
                 put_scope("world_settings_form"),
                 put_scope("world_settings_actions"),
@@ -98,19 +92,6 @@ def render(name: str) -> None:
         client_call("dom.addClasses", scope="world_settings_panel", classes=["panel"])
         client_call("dom.addClasses", scope="world_settings_form", classes=["settings-view"])
         client_call("dom.addClasses", scope="world_settings_actions", classes=["settings-actions"])
-        if loaded.source_format == "sav":
-            with use_scope("world_settings_warning"):
-                put_warning(t("world.sav_override_warning"))
-        with use_scope("world_settings_format_row"):
-            put_asset_widget("shared.field_label", {"label": t("world.format_label")})
-            put_select(
-                "world_settings_format",
-                value=loaded.source_format,
-                options=[
-                    {"label": t("world.format_ini"), "value": "ini"},
-                    {"label": t("world.format_sav"), "value": "sav"},
-                ],
-            )
         with use_scope("world_settings_toolbar"):
             _render_world_settings_toolbar()
         with use_scope("world_settings_form"):
@@ -147,23 +128,21 @@ def _world_settings(name: str) -> None:
     from module.webui.instance import open_instance
     open_instance(name, "world_settings")
 
-def _render_world_recovery(name: str, kind: str, error: str) -> None:
+def _render_world_recovery(name: str, error: str) -> None:
     clear("content")
     active = _manager(name).active
-    title_key = "world.recovery_sav_title" if kind == "sav" else "world.recovery_ini_title"
-    detail_key = "world.recovery_sav_detail" if kind == "sav" else "world.recovery_ini_detail"
-    action_key = "world.disable_sav" if kind == "sav" else "world.regenerate_ini"
+    action_key = "world.regenerate_ini"
     recovery_children = [
-        put_asset_widget("shared.panel_title", {"title": t(title_key)}),
+        put_asset_widget("shared.panel_title", {"title": t("world.recovery_ini_title")}),
         put_warning(t("world.parse_error", error=error)),
-        put_text(t(detail_key)),
+        put_text(t("world.recovery_ini_detail")),
     ]
     if active:
         recovery_children.append(put_warning(t("world.recovery_stop_required")))
     recovery_children.append(
         put_button(
             t(action_key),
-            onclick=lambda: _confirm_world_recovery(name, kind, error),
+            onclick=lambda: _confirm_world_recovery(name),
             color="warning",
             disabled=active,
         )
@@ -172,8 +151,8 @@ def _render_world_recovery(name: str, kind: str, error: str) -> None:
         put_scope("world_recovery_panel", recovery_children)
         client_call("dom.addClasses", scope="world_recovery_panel", classes=["panel"])
 
-def _confirm_world_recovery(name: str, kind: str, error: str) -> None:
-    action_key = "world.disable_sav" if kind == "sav" else "world.regenerate_ini"
+def _confirm_world_recovery(name: str) -> None:
+    action_key = "world.regenerate_ini"
     with popup(t("world.recovery_confirm_title"), closable=True):
         put_text(t("world.recovery_confirm", action=t(action_key)))
         put_row(
@@ -181,30 +160,23 @@ def _confirm_world_recovery(name: str, kind: str, error: str) -> None:
                 put_button(t("common.cancel"), onclick=close_popup, color="secondary"),
                 put_button(
                     t(action_key),
-                    onclick=lambda: _run_world_recovery(name, kind),
+                    onclick=lambda: _run_world_recovery(name),
                     color="warning",
                 ),
             ],
             size="1fr auto",
         )
 
-def _run_world_recovery(name: str, kind: str) -> None:
+def _run_world_recovery(name: str) -> None:
     close_popup()
     profile = load_profile(name)
     try:
-        if kind == "sav":
-            result = disable_undecodable_world_option_sav(
-                profile,
-                is_server_active=lambda: _manager(name).active,
-            )
-            toast(t("world.sav_disabled", file=result.disabled_path.name))
-        else:
-            result = recover_malformed_ini(
-                profile,
-                is_server_active=lambda: _manager(name).active,
-            )
-            save_profile(profile)
-            toast(t("world.ini_regenerated", file=result.malformed_copy.name))
+        result = recover_malformed_ini(
+            profile,
+            is_server_active=lambda: _manager(name).active,
+        )
+        save_profile(profile)
+        toast(t("world.ini_regenerated", file=result.malformed_copy.name))
         _world_settings(name)
     except Exception as exc:
         toast(t("world.recovery_failed", error=exc), color="error")
@@ -359,7 +331,7 @@ def _validate_world_settings_form(values: dict) -> bool:
     for field_ in WORLD_OPTION_FIELDS:
         if field_.ftype == "int":
             try:
-                int(values.get(field_.key))
+                values[field_.key] = coerce_integer(values.get(field_.key))
             except (TypeError, ValueError):
                 _show_field_error(_world_pin(field_.key), t("validation.integer_required"))
                 valid = False
@@ -373,7 +345,6 @@ def _validate_world_settings_form(values: dict) -> bool:
 
 def _save_world_settings(name: str, *, rerender: bool = True) -> bool:
     profile = load_profile(name)
-    fmt = str(pin.world_settings_format or "ini")
     values = _collect_world_values()
     if not _validate_world_settings_form(values):
         toast(t("validation.fix_errors"), color="error")
@@ -382,7 +353,7 @@ def _save_world_settings(name: str, *, rerender: bool = True) -> bool:
         save_world_settings(
             profile,
             values,
-            fmt,
+            "ini",
             backup_service=BackupService(profile, logger=_manager(name).append_log),
         )
         save_profile(profile)

@@ -1,4 +1,7 @@
 palworld-save-tools==0.24.0
+# Current Palworld 1.0 saves use PlM/Oodle; the PyPI codec only handles PlZ.
+palooz @ git+https://github.com/deafdudecomputers/PalworldSaveTools.git@v2.1.9#subdirectory=src/palsav/palooz
+palsav-flex @ git+https://github.com/deafdudecomputers/PalworldSaveTools.git@v2.1.9#subdirectory=src/palsav
 psutil==7.2.2
 pywebio==1.8.4
 pywinpty>=2.0; sys_platform == "win32"

@@ -27,10 +27,12 @@ from module.config import (
 from module.instances import (
     InstanceRecord,
     create_instance,
+    delete_instance,
     initialize_instances,
     list_instances,
     load_instance,
     next_instance_name,
+    profile_dir,
     save_instance,
 )
 from module.games.palworld.config import PALWORLD_CONFIG_VERSION, new_profile
@@ -313,6 +315,21 @@ def test_delete_profile_removes_reference_only(tmp_path, monkeypatch):
 
     with pytest.raises(FileNotFoundError):
         delete_profile("server2")
+
+
+def test_delete_instance_can_wipe_profile_directory(tmp_path, monkeypatch):
+    monkeypatch.setenv("PALSITTER_CONFIG_DIR", str(tmp_path))
+
+    create_instance("server2", "palworld")
+    data_file = profile_dir("server2") / "server-data" / "save.sav"
+    data_file.parent.mkdir()
+    data_file.write_text("save-data", encoding="utf-8")
+
+    delete_instance("server2", wipe_data=True)
+
+    assert not profile_dir("server2").exists()
+    with pytest.raises(FileNotFoundError):
+        delete_instance("server2", wipe_data=True)
 
 
 def test_satisfactory_uses_empty_template_and_names_are_global(tmp_path, monkeypatch):

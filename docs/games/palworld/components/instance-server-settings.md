@@ -71,8 +71,12 @@ embeds the profile form directly in the content area (no modal).
   Delete remains in the document and is not part of the floating action bar.
 - `Delete instance` opens a confirmation modal; it does not delete immediately.
 - The confirmation modal shows a warning that only the profile reference is removed, an
-  input box, and a red `Yes, delete` button that stays disabled until the input exactly
-  matches the instance's displayed name (e.g. `default` for the default instance).
+  input box, a `Wipe data` checkbox, and a red `Yes, delete` button that stays disabled
+  until the input exactly matches the instance's displayed name (e.g. `default` for the
+  default instance).
+- When `Wipe data` is checked, clicking `Yes, delete` opens a second confirmation modal;
+  confirming it permanently removes the instance directory, including server files,
+  save games, backups, and profile data. Canceling leaves the instance unchanged.
 - Confirming deletes only the profile reference (its `<name>.json`); the server working
   directory, save games, and backups on disk are left intact.
 - After a successful delete the modal closes, the instance is removed from the sidebar,

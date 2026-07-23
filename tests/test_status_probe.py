@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import psutil
 
 from module.config import Profile
-from module.server.status import endpoint_status, instance_is_running, rest_is_available
+from module.server.status import endpoint_ports, endpoint_status, instance_is_running, rest_is_available
 
 
 class FakeConnection:
@@ -14,6 +14,17 @@ class FakeConnection:
 
     def close(self):
         self.closed = True
+
+
+def test_endpoint_ports_match_profile_and_world_settings():
+    profile = Profile(name="test", game_port=8211, rest_port=8212)
+
+    assert endpoint_ports(
+        profile,
+        settings_loader=lambda profile: SimpleNamespace(
+            values={"RCONEnabled": True, "RCONPort": 25576}
+        ),
+    ) == {"udp": 8211, "rest": 8212, "rcon": 25576}
 
 
 def test_endpoint_status_reports_open_udp_rest_and_rcon():

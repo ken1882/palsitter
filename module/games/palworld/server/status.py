@@ -29,6 +29,23 @@ def _tcp_status(
     return "open"
 
 
+def endpoint_ports(
+    profile: PalworldProfile,
+    *,
+    settings_loader: Callable[..., object] = load_world_settings,
+) -> dict[str, int]:
+    try:
+        settings = settings_loader(profile).values
+        rcon_port = int(settings.get("RCONPort", settings.get("rcon_port", 25575)))
+    except (OSError, ValueError, TypeError):
+        rcon_port = 25575
+    return {
+        "udp": int(profile.game_port),
+        "rest": int(profile.rest_port),
+        "rcon": rcon_port,
+    }
+
+
 def endpoint_status(
     profile: PalworldProfile,
     *,
@@ -59,10 +76,9 @@ def endpoint_status(
     try:
         settings = settings_loader(profile).values
         rcon_enabled = bool(settings.get("RCONEnabled", settings.get("rcon_enabled", False)))
-        rcon_port = int(settings.get("RCONPort", settings.get("rcon_port", 25575)))
     except (OSError, ValueError, TypeError):
         rcon_enabled = False
-        rcon_port = 25575
+    rcon_port = endpoint_ports(profile, settings_loader=settings_loader)["rcon"]
     rcon = (
         _tcp_status("127.0.0.1", rcon_port, create_connection)
         if rcon_enabled and process_running is not False
