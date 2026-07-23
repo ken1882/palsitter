@@ -3,11 +3,12 @@
 const root = window.Palsitter = window.Palsitter || {};
 root.palworld = root.palworld || {};
 const api = root.palworld.map = root.palworld.map || {};
+const GUILD_COLORS = ['red', 'blue', 'green', 'yellow', 'purple', 'teal', 'gray', 'orange'];
 let refreshTimer = null;
 let refreshStartTimer = null;
 let controller = null;
 
-api.mount = ({mapSize, initialScale, labels, generation}) => {
+api.mount = ({mapSize, initialScale, palboxIcon, labels, generation}) => {
     api.generation = generation;
     const oldDestroy = api.destroy;
     const previousDropdownOpen = api.playerDropdownOpen === true;
@@ -17,6 +18,7 @@ api.mount = ({mapSize, initialScale, labels, generation}) => {
     const viewport = document.getElementById('palworld-map-viewport');
     const world = document.getElementById('palworld-map-world');
     const playerLayer = document.getElementById('palworld-map-players');
+    const palboxLayers = [...document.querySelectorAll('.palworld-map-palboxes')];
     const playerButton = document.getElementById('palworld-map-player-button');
     const playerDropdown = document.getElementById('palworld-map-player-dropdown');
     const playerList = document.getElementById('palworld-map-player-list');
@@ -31,6 +33,8 @@ api.mount = ({mapSize, initialScale, labels, generation}) => {
         activeMap: 'palpagos',
         allPlayers: [],
         players: [],
+        palboxes: [],
+        guildColors: new Map(),
         selected: null,
         playerDropdownOpen: previousDropdownOpen,
         dragging: false,
@@ -45,6 +49,14 @@ api.mount = ({mapSize, initialScale, labels, generation}) => {
     const playersForActiveMap = () => mapState.allPlayers.filter(
         player => player.map === mapState.activeMap
     );
+    const colorForGuild = guildId => {
+        const value = String(guildId || '').trim();
+        if (!value) return null;
+        if (!mapState.guildColors.has(value)) {
+            mapState.guildColors.set(value, GUILD_COLORS[mapState.guildColors.size % GUILD_COLORS.length]);
+        }
+        return mapState.guildColors.get(value);
+    };
     const renderActiveMap = () => {
         for (const layer of mapLayers) layer.hidden = layer.dataset.mapName !== mapState.activeMap;
         viewport.dataset.mapName = mapState.activeMap;
@@ -59,6 +71,7 @@ api.mount = ({mapSize, initialScale, labels, generation}) => {
         mapSelect.value = mapName;
         renderActiveMap();
         updatePlayers(mapState.allPlayers, mapState.playerState);
+        updatePalboxes(mapState.palboxes);
     };
     const viewportCenter = () => ({
         x: viewport.clientWidth / 2,
@@ -79,7 +92,7 @@ api.mount = ({mapSize, initialScale, labels, generation}) => {
         const center = viewportCenter();
         world.style.transform = `translate(${center.x - mapState.centerX * mapState.scale}px, ${center.y - mapState.centerY * mapState.scale}px) scale(${mapState.scale})`;
         const inverseScale = 1 / mapState.scale;
-        for (const marker of document.querySelectorAll('.palworld-map-poi-wrap, .palworld-map-player-dot')) {
+        for (const marker of document.querySelectorAll('.palworld-map-poi-wrap, .palworld-map-palbox-wrap, .palworld-map-player-dot')) {
             marker.style.transform = `translate(-50%, -50%) scale(${inverseScale})`;
         }
         viewport.dataset.zoom = String(mapState.scale);
@@ -180,6 +193,8 @@ api.mount = ({mapSize, initialScale, labels, generation}) => {
             dot.setAttribute('role', 'img');
             dot.setAttribute('aria-label', labels.player_aria.replace('{name}', player.name));
             dot.dataset.playerName = player.name;
+            const guildColor = colorForGuild(player.guildId);
+            if (guildColor) dot.dataset.guildColor = guildColor;
             dot.title = player.name;
             dot.style.left = `${player.x}px`;
             dot.style.top = `${player.y}px`;
@@ -188,6 +203,35 @@ api.mount = ({mapSize, initialScale, labels, generation}) => {
         updatePlayerList();
         if (dropdownWasOpen) openPlayerDropdown();
         else closePlayerDropdown();
+        applyCamera();
+    };
+    const updatePalboxes = palboxes => {
+        mapState.palboxes = Array.isArray(palboxes) ? palboxes : [];
+        for (const layer of palboxLayers) layer.replaceChildren();
+        for (const palbox of mapState.palboxes) {
+            if (!palbox || !palbox.map || !Number.isFinite(Number(palbox.x)) || !Number.isFinite(Number(palbox.y))) continue;
+            const layer = palboxLayers.find(candidate => candidate.parentElement?.dataset.mapName === palbox.map);
+            if (!layer) continue;
+            const label = String(palbox.label || '');
+            const wrap = document.createElement('span');
+            wrap.className = 'palworld-map-poi-wrap palworld-map-palbox-wrap';
+            wrap.dataset.poiType = 'Palbox';
+            wrap.dataset.locationName = label;
+            wrap.title = label;
+            wrap.style.left = `${palbox.x}px`;
+            wrap.style.top = `${palbox.y}px`;
+            const icon = document.createElement('img');
+            icon.className = 'palworld-map-poi palworld-map-palbox';
+            icon.src = palboxIcon;
+            icon.alt = label;
+            icon.draggable = false;
+            const tooltip = document.createElement('span');
+            tooltip.className = 'palworld-map-tooltip';
+            tooltip.setAttribute('role', 'tooltip');
+            tooltip.textContent = label;
+            wrap.append(icon, tooltip);
+            layer.appendChild(wrap);
+        }
         applyCamera();
     };
     const onPointerDown = event => {
@@ -240,12 +284,14 @@ api.mount = ({mapSize, initialScale, labels, generation}) => {
     document.getElementById('palworld-map-zoom-out').addEventListener('click', () => setScale(mapState.scale * 0.8), {signal});
     for (const control of controls) control.addEventListener('pointerdown', event => event.stopPropagation(), {signal});
     api.updatePlayers = updatePlayers;
+    api.updatePalboxes = updatePalboxes;
     api.destroy = () => {
         controller?.abort();
         controller = null;
         if (refreshStartTimer) clearTimeout(refreshStartTimer);
         refreshStartTimer = null;
         delete api.updatePlayers;
+        delete api.updatePalboxes;
         delete api.destroy;
     };
     renderActiveMap();
@@ -279,8 +325,9 @@ api.destroyPage = () => {
     document.getElementById("pywebio-scope-content")?.classList.remove("map-content");
 };
 
-api.pushPlayers = ({players, state, generation}) => {
+api.pushPlayers = ({players, palboxes, state, generation}) => {
     if (generation != null && generation !== api.generation) return;
     api.updatePlayers?.(players, state);
+    api.updatePalboxes?.(palboxes);
 };
 })();

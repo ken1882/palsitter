@@ -8,8 +8,11 @@
         <button type="button" class="btn btn-secondary pagination-table-tags-button pagination-table-chip" aria-expanded="false" aria-controls="{{tag_popup_id}}">
           <span>{{tags_label}}</span>
         </button>
-        <div id="{{tag_popup_id}}" class="pagination-table-popover pagination-table-tags-popup" hidden>
-          <div class="pagination-table-tags-title">{{tags_title}}</div>
+        <div id="{{tag_popup_id}}" class="pagination-table-popover pagination-table-tags-popup" data-checkbox-group="{{tag_popup_id}}" hidden>
+          <div class="pagination-table-tags-title checkbox-select-all-group">
+            <span>{{tags_title}}</span>
+            <button type="button" class="btn btn-secondary checkbox-select-all-button" data-select-all-label="{{select_all}}" data-select-none-label="{{select_none}}">{{select_none}}</button>
+          </div>
           {{#tags}}
           <label class="pagination-table-tag-option">
             <input type="checkbox" data-tag-value="{{value}}" checked><span>{{label}}</span>

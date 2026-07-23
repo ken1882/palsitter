@@ -14,6 +14,7 @@ from module.games.palworld.config import PalworldProfile, load_profile
 from module.games.palworld.players_cache import PlayerCache
 from module.games.palworld.server.rest import PalRestClient
 from module.games.palworld.server.status import matching_instance_processes
+from module.games.palworld.version_cache import read_version_cache, update_version_cache
 from module.instances import profile_path
 
 
@@ -27,9 +28,11 @@ class PalRestSnapshot:
     info: dict | None = None
     players: dict | None = None
     metrics: dict | None = None
+    game_data: dict | None = None
     info_error: str | None = None
     players_error: str | None = None
     metrics_error: str | None = None
+    game_data_error: str | None = None
 
 
 def _session_identity(profile: PalworldProfile) -> Hashable | None:
@@ -89,12 +92,19 @@ class PalRestCache:
         self._poll_lock = threading.Lock()
         self._session_identity: Hashable | None = None
         self._rest_open = False
-        self._info: dict | None = None
+        cached_version = read_version_cache(name).get("game_version")
+        self._info: dict | None = (
+            {"version": str(cached_version)}
+            if cached_version not in (None, "")
+            else None
+        )
         self._players: dict | None = None
         self._metrics: dict | None = None
+        self._game_data: dict | None = None
         self._info_error: str | None = None
         self._players_error: str | None = None
         self._metrics_error: str | None = None
+        self._game_data_error: str | None = None
         self._info_attempted = False
         self._next_poll_at = 0.0
         self._thread: threading.Thread | None = None
@@ -128,9 +138,11 @@ class PalRestCache:
                 info=deepcopy(self._info),
                 players=deepcopy(self._players),
                 metrics=deepcopy(self._metrics),
+                game_data=deepcopy(self._game_data),
                 info_error=self._info_error,
                 players_error=self._players_error,
                 metrics_error=self._metrics_error,
+                game_data_error=self._game_data_error,
             )
 
     def poll_once(self, now: float | None = None) -> None:
@@ -154,6 +166,9 @@ class PalRestCache:
             rest_open = False
         with self._lock:
             self._rest_open = rest_open
+            if not profile.launch_enable_gamedata_api:
+                self._game_data = None
+                self._game_data_error = None
             if not rest_open:
                 return
             fetch_info = not self._info_attempted
@@ -169,6 +184,9 @@ class PalRestCache:
                 with self._lock:
                     self._info = result if isinstance(result, dict) else {}
                     self._info_error = None
+                version = result.get("version") if isinstance(result, dict) else None
+                if version not in (None, ""):
+                    update_version_cache(self.name, game_version=str(version))
             except Exception as exc:
                 with self._lock:
                     self._info_error = str(exc)
@@ -202,11 +220,23 @@ class PalRestCache:
                 with self._lock:
                     self._metrics_error = str(exc)
 
+        def fetch_game_data_result() -> None:
+            try:
+                result = self.client_factory(profile).game_data()
+                with self._lock:
+                    self._game_data = result if isinstance(result, dict) else {}
+                    self._game_data_error = None
+            except Exception as exc:
+                with self._lock:
+                    self._game_data_error = str(exc)
+
         targets = []
         if fetch_info:
             targets.append(fetch_info_result)
         if fetch_polling_data:
             targets.extend((fetch_players_result, fetch_metrics_result))
+            if profile.launch_enable_gamedata_api:
+                targets.append(fetch_game_data_result)
         threads = [threading.Thread(target=target) for target in targets]
         for thread in threads:
             thread.start()
@@ -222,9 +252,11 @@ class PalRestCache:
         self._rest_open = False
         self._players = None
         self._metrics = None
+        self._game_data = None
         self._info_error = None
         self._players_error = None
         self._metrics_error = None
+        self._game_data_error = None
         self._info_attempted = False
         self._next_poll_at = 0.0
 

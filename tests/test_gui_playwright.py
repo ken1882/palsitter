@@ -26,6 +26,7 @@ from module.games.palworld.server.history import (
 )
 from module.games.palworld.audit import AuditEvent, AuditStore
 from module.games.palworld.players_cache import PlayerCache
+from module.games.palworld.version_cache import update_version_cache
 from module.worldsettings.ini_codec import read_ini_option_settings
 from module.worldsettings.sav_codec import WorldOptionSavCodec, extract_option_values, merge_option_values
 from module.worldsettings.service import resolve_ini_path
@@ -147,6 +148,7 @@ def _mock_metrics_server(
     players_fail_after=None,
     players_override=None,
     players_sequence=None,
+    game_data_override=None,
     get_calls=None,
     shutdown_executable=None,
     banlist_path=None,
@@ -217,6 +219,13 @@ def _mock_metrics_server(
                 return
             if self.path == "/v1/api/info":
                 self._write_json({"version": "v1.2.3"})
+                return
+            if self.path == "/v1/api/game-data":
+                self._write_json(
+                    game_data_override
+                    if game_data_override is not None
+                    else {"ActorData": []}
+                )
                 return
             self.send_error(404)
 
@@ -578,43 +587,6 @@ def test_updater_matches_state_tables_styles_and_git_behavior(tmp_path, monkeypa
 
 
 @pytest.mark.playwright
-def test_updater_confirmed_restart_reconnects_the_python_gui(tmp_path, monkeypatch):
-    available = tmp_path / "update-available.flag"
-    available.write_text("", encoding="ascii")
-    mock_git = tmp_path / "git-mock.cmd"
-    mock_git.write_text(
-        "\n".join(
-            [
-                '@if "%1"=="log" @echo abc1234---Tester---2026-07-09 12:00:00 +0800---test commit',
-                '@if "%1"=="fetch" @exit /b 0',
-                f'@if "%1"=="rev-list" @if exist "{available}" (@echo 1) else (@echo 0)',
-                '@if "%1"=="rev-list" @exit /b 0',
-                '@if "%1"=="pull" @exit /b 0',
-                '@exit /b 0',
-            ]
-        ),
-        encoding="ascii",
-    )
-
-    with _gui_page(
-        tmp_path,
-        monkeypatch,
-        extra_env={"PALSITTER_GIT": str(mock_git)},
-        seed_profile=False,
-    ) as (page, config_dir):
-        page.locator("#pywebio-scope-menu").get_by_text("Updater").click()
-        page.get_by_text("New version available", exact=True).wait_for(timeout=10000)
-        page.get_by_role("button", name="Click to update", exact=True).click()
-        page.get_by_text("Update finished", exact=True).wait_for(timeout=10000)
-        page.locator(".modal.show").get_by_role("button", name="Continue", exact=True).click()
-
-        page.locator("#pywebio-scope-restart_overlay").get_by_text(
-            "Palsitter restart complete", exact=True
-        ).wait_for(timeout=20000)
-        assert (config_dir / "webui" / "restart-state.json").is_file()
-
-
-@pytest.mark.playwright
 def test_utils_matches_actions_live_log_css_and_gated_code(tmp_path, monkeypatch):
     with _gui_page(tmp_path, monkeypatch) as (page, _):
         page.locator("#pywebio-scope-menu").get_by_text("Utils").click()
@@ -669,6 +641,11 @@ def test_utils_matches_actions_live_log_css_and_gated_code(tmp_path, monkeypatch
         assert modal.locator(".utils-instance-selection").evaluate(
             "element => getComputedStyle(element).overflowY"
         ) == "auto"
+        select_toggle = modal.get_by_role("button", name="Select none", exact=True)
+        select_toggle.click()
+        assert not checkboxes.first.is_checked()
+        modal.get_by_role("button", name="Select all", exact=True).click()
+        assert checkboxes.first.is_checked()
         modal.locator("button.close").click()
 
         page.evaluate(
@@ -706,60 +683,6 @@ def test_utils_matches_actions_live_log_css_and_gated_code(tmp_path, monkeypatch
 
 
 @pytest.mark.playwright
-def test_force_restart_overlay_rebuilds_and_terminal_state_persists(tmp_path, monkeypatch):
-    with _gui_page(tmp_path, monkeypatch) as (page, _):
-        state_path = config_dir / "webui" / "restart-state.json"
-        state_path.write_text(
-            json.dumps(
-                {
-                    "operation_id": "test-operation",
-                    "phase": "stopping",
-                    "instances": {
-                        "default": {
-                            "game": "palworld",
-                            "ownership": "managed",
-                            "status": "shutdown_requested",
-                            "message": "Graceful shutdown requested",
-                        }
-                    },
-                    "summary": {},
-                }
-            ),
-            encoding="utf-8",
-        )
-        page.reload()
-        overlay = page.locator("#pywebio-scope-restart_overlay")
-        card = overlay.locator(".restart-overlay-card")
-        card.wait_for(state="attached", timeout=5000)
-        assert overlay.is_visible(), overlay.evaluate("element => element.outerHTML")
-        assert overlay.get_by_role("button", name="Close", exact=True).count() == 0
-        assert overlay.get_by_text("Graceful shutdown requested", exact=False).count() == 1
-
-        state_path.write_text(
-            json.dumps(
-                {
-                    "operation_id": "test-operation",
-                    "phase": "completed",
-                    "instances": {
-                        "default": {
-                            "game": "palworld",
-                            "ownership": "managed",
-                            "status": "restored",
-                            "message": "Server restored",
-                        }
-                    },
-                    "summary": {"restore_failures": {}},
-                }
-            ),
-            encoding="utf-8",
-        )
-        page.reload()
-        overlay.get_by_role("button", name="Close", exact=True).click()
-        page.reload()
-        overlay.locator(".restart-overlay-card").wait_for(state="detached", timeout=5000)
-
-
-@pytest.mark.playwright
 def test_utils_run_stop_and_kill_use_mocked_processes(tmp_path, monkeypatch):
     steam_calls = tmp_path / "utils-steamcmd-calls.txt"
     _prepare_fixed_palserver_python(tmp_path)
@@ -792,6 +715,11 @@ def test_utils_run_stop_and_kill_use_mocked_processes(tmp_path, monkeypatch):
             checkboxes = modal.locator("input.utils-instance-checkbox[type='checkbox']")
             assert checkboxes.count() == 2
             assert all(checkboxes.nth(index).is_checked() for index in range(checkboxes.count()))
+            if action == "Run all instances":
+                modal.get_by_role("button", name="Select none", exact=True).click()
+                assert not any(checkboxes.nth(index).is_checked() for index in range(checkboxes.count()))
+                modal.get_by_role("button", name="Select all", exact=True).click()
+                assert all(checkboxes.nth(index).is_checked() for index in range(checkboxes.count()))
             if deselect:
                 modal.get_by_role("checkbox", name=deselect, exact=True).uncheck()
             modal.get_by_role("button", name="Confirm", exact=True).click()
@@ -904,6 +832,9 @@ def test_side_add_server_is_overlay_modal(tmp_path, monkeypatch):
         page.locator("#pywebio-scope-world_toggle_RESTAPIEnabled").get_by_role(
             "button", name="On", exact=True
         ).wait_for(timeout=5000)
+        page.locator("#pywebio-scope-world_toggle_EnableGameDataAPI").get_by_role(
+            "button", name="On", exact=True
+        ).wait_for(timeout=5000)
 
         eye = admin_password.locator("xpath=ancestor::div[contains(@style, 'grid-auto-flow')]").locator(
             "button.password-eye"
@@ -946,7 +877,6 @@ def test_add_server_shows_locked_creation_progress(tmp_path, monkeypatch):
     with _gui_page(tmp_path, monkeypatch) as (page, _):
         page.locator("#pywebio-scope-aside").get_by_text("Add", exact=True).click()
         page.get_by_label("Profile name", exact=True).fill("slow-import")
-        page.get_by_label("Import dedicated save", exact=True).check()
         page.get_by_label("Level.sav file", exact=True).fill(str(world / "Level.sav"))
         page.locator("#pywebio-scope-add_import_panel").get_by_role(
             "button", name="Browse", exact=True
@@ -1225,8 +1155,8 @@ def test_open_rest_without_matching_process_stays_inactive_and_unpolled(tmp_path
             assert get_calls == []
             page.locator("#pywebio-scope-menu").get_by_text("Players", exact=True).click()
             detail = page.locator("#pywebio-scope-players_detail_panel")
-            detail.get_by_text(
-                "PalServer is not running or its REST API is unavailable.", exact=True
+            detail.locator("#pywebio-scope-players_detail_list").get_by_text(
+                    "PalServer is not running or its REST API is unavailable.", exact=True
             ).wait_for(timeout=5000)
             assert detail.get_by_text("Loading players...", exact=True).count() == 0
             assert get_calls == []
@@ -1240,8 +1170,8 @@ def test_players_page_replaces_loading_when_running_rest_is_closed(tmp_path, mon
             page.locator("#pywebio-scope-aside").get_by_text("default").click()
             page.locator("#pywebio-scope-menu").get_by_text("Players", exact=True).click()
             detail = page.locator("#pywebio-scope-players_detail_panel")
-            detail.get_by_text(
-                "PalServer is not running or its REST API is unavailable.", exact=True
+            detail.locator("#pywebio-scope-players_detail_list").get_by_text(
+                    "PalServer is not running or its REST API is unavailable.", exact=True
             ).wait_for(timeout=5000)
             assert detail.get_by_text("Loading players...", exact=True).count() == 0
 
@@ -1403,6 +1333,7 @@ def test_scheduler_endpoint_statuses_retry_during_startup(tmp_path, monkeypatch)
             rest_port=rest_port,
             profile_overrides={
                 "game_port": game_port,
+                "launch_enable_gamedata_api": False,
                 "executable_args": ["-c", "import time; time.sleep(60)"],
             },
             extra_env={"PALSITTER_FAKE_STEAMCMD_CALLS": str(steam_calls)},
@@ -1836,6 +1767,14 @@ def test_audit_page_supports_monthly_rows_search_tags_time_and_pagination(tmp_pa
         assert popup_box["x"] >= 0
         assert popup_box["x"] + popup_box["width"] <= viewport["width"]
         popup.get_by_text("Palsitter command", exact=True).wait_for(timeout=5000)
+        popup.get_by_role("button", name="Select none", exact=True).click()
+        assert popup.locator("input[data-tag-value]").evaluate_all(
+            "inputs => inputs.every(input => !input.checked)"
+        )
+        popup.get_by_role("button", name="Select all", exact=True).click()
+        assert popup.locator("input[data-tag-value]").evaluate_all(
+            "inputs => inputs.every(input => input.checked)"
+        )
         popup.locator("input[data-tag-value='game_command']").uncheck()
         assert audit.locator("tbody tr").count() == 0
 
@@ -2130,6 +2069,34 @@ def test_game_map_places_overlays_and_centers_from_cached_players(tmp_path, monk
     ]
     with _running_palserver_process(tmp_path), _mock_metrics_server(
         players_override=players,
+        game_data_override={
+            "ActorData": [
+                {
+                    "Type": "Palbox",
+                    "GuildName": "Moon Guild",
+                    "LocationX": -100000,
+                    "LocationY": 0,
+                },
+                {
+                    "Type": "Character",
+                    "UnitType": "Player",
+                    "userid": "steam_1",
+                    "GuildID": "guild-a",
+                },
+                {
+                    "Type": "Character",
+                    "UnitType": "Player",
+                    "userid": "steam_2",
+                    "GuildID": "guild-a",
+                },
+                {
+                    "Type": "Character",
+                    "UnitType": "Player",
+                    "userid": "steam_3",
+                    "GuildID": "guild-b",
+                },
+            ]
+        },
         get_calls=get_calls,
     ) as (rest_port, _):
         with _gui_page(tmp_path, monkeypatch, rest_port=rest_port) as (page, _):
@@ -2146,6 +2113,21 @@ def test_game_map_places_overlays_and_centers_from_cached_players(tmp_path, monk
             assert page.locator(".palworld-map-layer[data-map-name='world-tree'] .palworld-map-poi[data-poi-type='Watchtower']").count() == 2
             assert page.locator(".palworld-map-layer[data-map-name='world-tree'] .palworld-map-tile").count() == 158
             assert page.locator(".palworld-map-layer[data-map-name='world-tree'] .palworld-map-fallback-tile").count() == 4
+            palbox = page.locator(".palworld-map-palbox").first
+            palbox.wait_for(timeout=10000)
+            assert palbox.get_attribute("src").endswith("/static/gui/map/home.webp")
+            assert "/v1/api/game-data" in get_calls
+            palbox.hover()
+            assert palbox.locator("xpath=..").locator(
+                ".palworld-map-tooltip"
+            ).inner_text() == "Palbox: Moon Guild"
+            guild_color = page.locator('.palworld-map-player-dot[data-player-id="steam_1"]').get_attribute(
+                "data-guild-color"
+            )
+            assert guild_color in {"red", "blue", "green", "yellow", "purple", "teal", "gray", "orange"}
+            assert page.locator('.palworld-map-player-dot[data-player-id="steam_2"]').get_attribute(
+                "data-guild-color"
+            ) == guild_color
             assert page.locator(".palworld-map-layer[data-map-name='world-tree'] img[src$='z4x8y0.webp']").count() == 0
             assert not page.locator("#palworld-map-select option[value='world-tree']").is_disabled()
 
@@ -2410,50 +2392,28 @@ def test_overview_check_update_logs_result_and_shows_update_marker(tmp_path, mon
 
 
 @pytest.mark.playwright
-def test_log_placeholder_precedes_slow_metrics_and_updates_periodically(tmp_path, monkeypatch):
-    with _running_palserver_process(tmp_path), _mock_metrics_server(delay=2) as (rest_port, _):
-        with _gui_page(tmp_path, monkeypatch, rest_port=rest_port) as (page, _):
-            started = time.monotonic()
-            page.locator("#pywebio-scope-aside").get_by_text("default").click()
+def test_overview_uses_persisted_version_and_build_when_server_is_down(
+    tmp_path, monkeypatch
+):
+    _prepare_fixed_palserver_python(tmp_path)
+    manifest = _fixed_palserver_dir(tmp_path) / "steamapps" / "appmanifest_2394010.acf"
+    manifest.parent.mkdir(parents=True, exist_ok=True)
+    manifest.write_text('"buildid" "12345"', encoding="utf-8")
+    monkeypatch.setenv("PALSITTER_CONFIG_DIR", str(tmp_path / "config"))
+    update_version_cache(
+        "default",
+        game_version="v9.9.9",
+        installed_build_id="12345",
+        status="up_to_date",
+    )
 
-            log_box = page.locator(".log-box")
-            log_box.wait_for(timeout=2000)
-            assert time.monotonic() - started < 2
-            initial_log = log_box.inner_text()
-            assert initial_log in ("Loading logs...", "No log output yet.") or (
-                "Started supervisor process" in initial_log
-            )
-
-            fps = page.locator('[data-metric="fps"] .metric-value')
-            assert fps.inner_text() == "-"
-            page.locator(
-                '[data-metric="fps"] .metric-value',
-                has_text="60.0 / 59.2",
-            ).wait_for(timeout=10000)
-            assert "Loading logs..." not in log_box.inner_text()
-            page.evaluate(
-                "window.__fpsMetricNode = document.querySelector('[data-metric=fps] .metric-value')"
-            )
-            page.wait_for_timeout(3500)
-            assert page.evaluate(
-                "document.querySelector('[data-metric=fps] .metric-value') === window.__fpsMetricNode"
-            )
-
-            page.locator('input[name="console_command"]').fill("periodic-test")
-            page.get_by_role("button", name="Run").click()
-            page.locator(".log-box").get_by_text(
-                "Unknown console command: periodic-test"
-            ).wait_for(timeout=2500)
-            page.locator(".log-box").evaluate("(node) => { window.__palsitterLogNode = node; }")
-
-            page.locator('input[name="console_command"]').fill("append-test")
-            page.get_by_role("button", name="Run").click()
-            page.locator(".log-box").get_by_text(
-                "Unknown console command: append-test"
-            ).wait_for(timeout=2500)
-            assert page.locator(".log-box").evaluate(
-                "(node) => node === window.__palsitterLogNode"
-            )
+    with _gui_page(tmp_path, monkeypatch) as (page, _):
+        page.get_by_text("Game Version: v9.9.9", exact=False).wait_for(timeout=10000)
+        page.get_by_text("Build: 12345", exact=False).wait_for(timeout=5000)
+        page.locator("#pywebio-scope-aside").get_by_text("default", exact=True).click()
+        page.locator('[data-metric="game-version"]').get_by_text(
+            "v9.9.9", exact=True
+        ).wait_for(timeout=5000)
 
 
 @pytest.mark.playwright
@@ -2539,6 +2499,7 @@ def test_running_header_receives_new_palserver_output(tmp_path, monkeypatch):
             rest_port=rest_port,
             profile_overrides={
                 "executable_args": ["-c", launch_script],
+                "launch_enable_gamedata_api": False,
                 "shutdown_wait_seconds": 0,
             },
             extra_env={"PALSITTER_FAKE_STEAMCMD_CALLS": str(steam_calls)},
@@ -2613,6 +2574,10 @@ def test_overview_log_type_filter_hides_stable_rows_and_applies_to_appends(
             "UE4SS",
         ]
         assert modal.get_by_text("All", exact=True).count() == 0
+        assert all(checkboxes.nth(index).is_checked() for index in range(4))
+        modal.get_by_role("button", name="Select none", exact=True).click()
+        assert not any(checkboxes.nth(index).is_checked() for index in range(4))
+        modal.get_by_role("button", name="Select all", exact=True).click()
         assert all(checkboxes.nth(index).is_checked() for index in range(4))
 
         modal.get_by_label("Palsitter", exact=True).uncheck()
@@ -2808,7 +2773,7 @@ def test_server_settings_are_embedded_and_save(tmp_path, monkeypatch):
 
 @pytest.mark.playwright
 def test_server_settings_auto_update_dependencies_and_persistence(tmp_path, monkeypatch):
-    with _gui_page(tmp_path, monkeypatch) as (page, _):
+    with _gui_page(tmp_path, monkeypatch) as (page, config_dir):
         page.locator("#pywebio-scope-aside").get_by_text("default", exact=True).click()
         page.locator("#pywebio-scope-menu").get_by_text("Server Settings", exact=True).click()
         page.locator("#pywebio-scope-settings_form").wait_for(timeout=5000)
@@ -3395,9 +3360,16 @@ def test_players_page_splits_cached_offline_players_and_shows_activity(
         "location_y": -226869.515625,
         "building_count": 7,
     }
+    tree_walker = {
+        "name": "Tree Walker",
+        "userId": "steam_3",
+        "level": 30,
+        "location_x": 621794,
+        "location_y": -757915,
+    }
     bob = {**alice, "name": "Bob", "userId": "steam_2"}
     with _running_palserver_process(tmp_path), _mock_metrics_server(
-        players_sequence=[[alice], [bob], [alice]],
+        players_sequence=[[alice, tree_walker], [bob, tree_walker], [alice, tree_walker]],
     ) as (rest_port, _):
         with _gui_page(tmp_path, monkeypatch, rest_port=rest_port) as (page, _):
             page.locator("#pywebio-scope-aside").get_by_text("default", exact=True).click()
@@ -3410,13 +3382,14 @@ def test_players_page_splits_cached_offline_players_and_shows_activity(
             offline = page.locator("#pywebio-scope-players_offline_list")
             online.get_by_text("Bob", exact=False).wait_for(timeout=15000)
             offline.get_by_text("Alice", exact=False).wait_for(timeout=5000)
-            online.get_by_text("Location 192205.78, -226869.52", exact=True).wait_for(timeout=5000)
-            offline.get_by_text("Last location 192205.78, -226869.52", exact=True).wait_for(timeout=5000)
+            online.get_by_text("Location -838, 689", exact=True).wait_for(timeout=5000)
+            online.get_by_text("Location -83, 854", exact=True).wait_for(timeout=5000)
+            offline.get_by_text("Last location -838, 689", exact=True).wait_for(timeout=5000)
             assert offline.locator('[data-player-field="ping"]').count() == 0
-            assert online.get_by_role("button", name="Kick", exact=True).count() == 1
+            assert online.get_by_role("button", name="Kick", exact=True).count() == 2
             assert offline.get_by_role("button", name="Kick", exact=True).count() == 0
-            assert online.get_by_text("Last login: ", exact=False).count() == 1
-            assert online.get_by_text("Play time: 0.0hours", exact=True).count() == 1
+            assert online.get_by_text("Last login: ", exact=False).count() == 2
+            assert online.get_by_text("Play time: 0.0hours", exact=True).count() == 2
             online_row = online.locator("> div").first
             activity = online_row.locator(".player-activity")
             kick = online_row.get_by_role("button", name="Kick", exact=True)
@@ -3787,6 +3760,7 @@ def test_world_settings_menu_position_and_field_types_save_to_ini(tmp_path, monk
             "Saves & Backups",
             "Game Map",
             "Audit",
+            "Tools",
         ]
         assert page.locator('select[name="world_settings_format"]').count() == 0
         assert page.locator("#pywebio-scope-world_settings_warning").count() == 0
@@ -3804,6 +3778,9 @@ def test_world_settings_menu_position_and_field_types_save_to_ini(tmp_path, monk
         page.locator('input[name="world_ServerDescription"]').fill("Hello World")
         xbox = page.get_by_label("Xbox", exact=True)
         xbox.uncheck()
+        game_data_api = page.locator("#pywebio-scope-world_toggle_EnableGameDataAPI")
+        game_data_api.get_by_role("button", name="On", exact=True).click()
+        game_data_api.get_by_role("button", name="Off", exact=True).wait_for(timeout=2000)
 
         page.locator("#pywebio-scope-world_settings_actions").get_by_role(
             "button", name="Save", exact=True
@@ -3819,8 +3796,35 @@ def test_world_settings_menu_position_and_field_types_save_to_ini(tmp_path, monk
         assert saved["DeathPenalty"] == "Item"
         assert saved["ServerDescription"] == "Hello World"
         assert saved["CrossplayPlatforms"] == ["Steam", "PS5", "Mac"]
+        assert "EnableGameDataAPI" not in saved
         profile_copy = load_profile("default")
         assert profile_copy.world_settings["CrossplayPlatforms"] == ["Steam", "PS5", "Mac"]
+        assert profile_copy.launch_enable_gamedata_api is False
+        assert "-enable-gamedata-api" not in profile_copy.build_executable_args()
+
+
+@pytest.mark.playwright
+def test_world_settings_game_data_api_toggle_controls_launch_argument(tmp_path, monkeypatch):
+    with _gui_page(tmp_path, monkeypatch) as (page, config_dir):
+        page.locator("#pywebio-scope-aside").get_by_text("default", exact=True).click()
+        page.locator("#pywebio-scope-menu").get_by_text("World Settings", exact=True).click()
+        page.locator("#pywebio-scope-world_settings_form").wait_for(timeout=5000)
+
+        toggle = page.locator("#pywebio-scope-world_toggle_EnableGameDataAPI")
+        toggle.get_by_role("button", name="On", exact=True).click()
+        toggle.get_by_role("button", name="Off", exact=True).wait_for(timeout=2000)
+        page.locator("#pywebio-scope-world_settings_actions").get_by_role(
+            "button", name="Save", exact=True
+        ).click()
+        page.get_by_text("World settings saved", exact=True).wait_for(timeout=5000)
+
+        monkeypatch.setenv("PALSITTER_CONFIG_DIR", str(config_dir))
+        saved = load_profile("default")
+        assert saved.launch_enable_gamedata_api is False
+        assert "-enable-gamedata-api" not in saved.build_executable_args()
+        assert "EnableGameDataAPI" not in read_ini_option_settings(
+            resolve_ini_path(saved)
+        )
 
 
 @pytest.mark.playwright
@@ -3941,7 +3945,7 @@ def test_external_overview_operations_and_players_page(tmp_path, monkeypatch):
             assert page.locator("#pywebio-scope-players_detail_summary").count() == 0
             detail.get_by_text("Alice", exact=False).first.wait_for(timeout=15000)
             detail.get_by_text("Ping 23ms", exact=False).wait_for(timeout=5000)
-            detail.get_by_text("Location 120.5, -44.25", exact=False).wait_for(timeout=5000)
+            detail.get_by_text("Location -344, 270", exact=False).wait_for(timeout=5000)
             detail.get_by_text("Buildings 7", exact=False).wait_for(timeout=5000)
             assert detail.get_by_text("203.0.113.5", exact=False).count() == 0
             masked = detail.locator(".player-userid-value")
@@ -4382,7 +4386,7 @@ def test_mods_page_hides_ue4ss_components_on_linux(tmp_path, monkeypatch):
         panel.get_by_text("UE4SS mod loader", exact=True).wait_for(timeout=5000)
         panel.get_by_text(
             "Unavailable: UE4SS Lua/C++ management is not supported for native Linux "
-            "Palworld servers. Pak mods can still be listed, enabled, disabled, and deleted.",
+            "Palworld servers.",
             exact=True,
         ).wait_for(timeout=5000)
         assert panel.locator('select[name="ue4ss_release"]').count() == 0

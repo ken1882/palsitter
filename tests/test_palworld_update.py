@@ -2,15 +2,23 @@ from pathlib import Path
 import threading
 import time
 
+import pytest
+
 from module.config import Profile
 from module.games.palworld.config import fixed_executable_path, fixed_palserver_dir
 from module.games.palworld.update import (
     PalworldUpdateService,
     appmanifest_path,
+    load_cached_update_info,
     parse_installed_build_id,
     parse_public_build_id,
     parse_steamcmd_progress,
 )
+
+
+@pytest.fixture(autouse=True)
+def _isolated_config_dir(tmp_path, monkeypatch):
+    monkeypatch.setenv("PALSITTER_CONFIG_DIR", str(tmp_path / "config"))
 
 
 class FakeProcess:
@@ -111,6 +119,22 @@ def test_check_update_compares_manifest_with_public_build_and_emits_progress(tmp
     assert captured["cwd"] == str(Path(profile.steamcmd).resolve().parent)
     assert events[-1].phase == "complete"
     assert any("SteamCMD:" in message for message in logs)
+
+
+def test_update_build_is_persisted_and_loaded_after_restart(tmp_path, monkeypatch):
+    monkeypatch.setenv("PALSITTER_CONFIG_DIR", str(tmp_path / "config"))
+    profile = _profile(tmp_path)
+    _prepare_install(profile, "100")
+
+    info = PalworldUpdateService(
+        profile,
+        pty_process_factory=lambda *args, **kwargs: FakeProcess(
+            ['"public" { "buildid" "200" }']
+        ),
+    ).check_update(force=True)
+
+    assert info.installed_build_id == "100"
+    assert load_cached_update_info(profile) == info
 
 
 def test_appmanifest_path_uses_the_forced_server_install_directory(tmp_path):

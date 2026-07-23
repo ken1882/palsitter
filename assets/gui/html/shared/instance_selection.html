@@ -1,4 +1,7 @@
-<div class="utils-instance-selection">
-  {{#instances}}<label class="utils-instance-option"><input type="checkbox" class="utils-instance-checkbox" aria-label="{{label}}" data-instance-name="{{name}}" checked><span>{{label}}</span></label>{{/instances}}
-  {{^instances}}{{empty}}{{/instances}}
+<div class="checkbox-select-all-group utils-instance-selection-group" data-checkbox-group="utils-instance-selection">
+  <button type="button" class="btn btn-secondary checkbox-select-all-button" data-select-all-label="{{select_all}}" data-select-none-label="{{select_none}}">{{select_none}}</button>
+  <div class="utils-instance-selection">
+    {{#instances}}<label class="utils-instance-option"><input type="checkbox" class="utils-instance-checkbox" aria-label="{{label}}" data-instance-name="{{name}}" checked><span>{{label}}</span></label>{{/instances}}
+    {{^instances}}{{empty}}{{/instances}}
+  </div>
 </div>

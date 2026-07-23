@@ -21,7 +21,7 @@ from module.instances import (
 
 
 PALWORLD_SERVER_APP_ID = "2394010"
-PALWORLD_CONFIG_VERSION = 4
+PALWORLD_CONFIG_VERSION = 5
 DEDICATED_SERVER_NAME_RE = re.compile(r"^[0-9A-Z]{32}$")
 ADMIN_PASSWORD_RE = re.compile(r"^[a-z0-9]{8}$")
 WINDOWS = os.name == "nt"
@@ -32,6 +32,7 @@ _LAUNCH_SWITCHES = {
     "-usemultithreadfords": "launch_use_multithread_for_ds",
     "-publiclobby": "launch_public_lobby",
     "-logformat": "launch_log_format",
+    "-enable-gamedata-api": "launch_enable_gamedata_api",
 }
 _WORKER_THREADS_PREFIX = "-numberofworkerthreadsserver="
 
@@ -199,6 +200,7 @@ class PalworldProfile:
     launch_worker_threads_server: int | None = None
     launch_public_lobby: bool = False
     launch_log_format: bool = False
+    launch_enable_gamedata_api: bool = True
     extra_args: list[str] = field(default_factory=list)
     game_port: int = 8211
     query_port: int = 27015
@@ -257,6 +259,11 @@ class PalworldProfile:
 
     def _apply_legacy_launch_args(self, args: list[str]) -> None:
         parsed, extra = _split_launch_args(list(args or []))
+        if not any(
+            str(argument).strip().casefold() == "-enable-gamedata-api"
+            for argument in args
+        ):
+            parsed["launch_enable_gamedata_api"] = self.launch_enable_gamedata_api
         for field_name, value in parsed.items():
             setattr(self, field_name, value)
         self.extra_args = extra
@@ -296,6 +303,8 @@ class PalworldProfile:
             args.append("-publiclobby")
         if self.launch_log_format:
             args.append("-logformat")
+        if self.launch_enable_gamedata_api:
+            args.append("-enable-gamedata-api")
         args.extend(str(argument).strip() for argument in self.extra_args if str(argument).strip())
         return args
 
@@ -343,10 +352,16 @@ class PalworldProfile:
             "launch_worker_threads_server",
             "launch_public_lobby",
             "launch_log_format",
+            "launch_enable_gamedata_api",
             "extra_args",
         }
         if not structured_launch_keys.intersection(values) and "executable_args" in values:
             parsed, extra = _split_launch_args(list(values.get("executable_args") or []))
+            if not any(
+                str(argument).strip().casefold() == "-enable-gamedata-api"
+                for argument in values.get("executable_args") or []
+            ):
+                parsed["launch_enable_gamedata_api"] = True
             values.update(parsed)
             values["extra_args"] = extra
         values["config_version"] = PALWORLD_CONFIG_VERSION
@@ -355,6 +370,13 @@ class PalworldProfile:
         allowed = {item.name for item in dataclass_fields(cls) if item.init} - {"name"}
         profile = cls(name=name, **{key: value for key, value in defaults.items() if key in allowed})
         profile.world_settings = dict(profile.world_settings or {})
+        if (
+            "launch_enable_gamedata_api" not in values
+            and "EnableGameDataAPI" in profile.world_settings
+        ):
+            profile.launch_enable_gamedata_api = bool(
+                profile.world_settings["EnableGameDataAPI"]
+            )
         profile._sync_world_network_settings()
         profile.extra_args = list(profile.extra_args or [])
         if profile.launch_worker_threads_server is not None:
@@ -409,6 +431,7 @@ class PalworldProfile:
             "launch_worker_threads_server": self.launch_worker_threads_server,
             "launch_public_lobby": self.launch_public_lobby,
             "launch_log_format": self.launch_log_format,
+            "launch_enable_gamedata_api": self.launch_enable_gamedata_api,
             "extra_args": list(self.extra_args),
             "game_port": self.game_port,
             "query_port": self.query_port,

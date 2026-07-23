@@ -200,6 +200,14 @@ class GameAdapter:
         profile = self.load_typed_profile(record.name, record.game_config)
         return PalworldUpdateService(profile, logger=log, progress=progress).check_update(force=force)
 
+    def cached_update_info(self, record: InstanceRecord) -> UpdateInfo:
+        if not self.capabilities.updates or self.id != "palworld":
+            return UpdateInfo()
+        from module.games.palworld.update import load_cached_update_info
+
+        profile = self.load_typed_profile(record.name, record.game_config)
+        return load_cached_update_info(profile)
+
     def install_or_update(
         self,
         record: InstanceRecord,

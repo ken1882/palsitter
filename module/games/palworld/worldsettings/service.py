@@ -9,7 +9,7 @@ from module.games.palworld.config import PalworldProfile, server_config_dir_name
 
 from .ini_codec import read_ini_option_settings, write_ini_option_settings
 from .sav_codec import WorldOptionSavCodec, extract_option_values, merge_option_values
-from .schema import WORLD_OPTION_FIELDS
+from .schema import WORLD_OPTION_FIELDS, WORLD_OPTION_FIELDS_BY_KEY
 
 SAV_FILENAME = "WorldOption.sav"
 
@@ -61,7 +61,14 @@ def _fill_defaults(values: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _sav_values(values: Dict[str, Any]) -> Dict[str, Any]:
-    serialized = dict(values)
+    serialized = {
+        key: value
+        for key, value in values.items()
+        if (
+            WORLD_OPTION_FIELDS_BY_KEY.get(key) is None
+            or WORLD_OPTION_FIELDS_BY_KEY[key].persisted
+        )
+    }
     crossplay = serialized.get("CrossplayPlatforms", [])
     serialized["CrossplayPlatforms"] = f"({','.join(crossplay)})"
     return serialized
@@ -99,6 +106,7 @@ def migrate_world_option_sav_to_ini(profile: PalworldProfile) -> Optional[Path]:
 
     codec = WorldOptionSavCodec()
     values = _fill_defaults(extract_option_values(codec.read(sav_path)))
+    values["EnableGameDataAPI"] = profile.launch_enable_gamedata_api
     values["PublicPort"] = profile.game_port
     values["RESTAPIPort"] = profile.rest_port
     if profile.rest_password:
@@ -118,6 +126,7 @@ def load_world_settings(
     if not values and profile.world_settings:
         values = dict(profile.world_settings)
     filled = _fill_defaults(values)
+    filled["EnableGameDataAPI"] = profile.launch_enable_gamedata_api
     if not values:
         filled["PublicPort"] = profile.game_port
         filled["RESTAPIPort"] = profile.rest_port
@@ -135,6 +144,7 @@ def save_world_settings(
     sav_codec: Optional[WorldOptionSavCodec] = None,
 ) -> None:
     normalized = _fill_defaults(values)
+    profile.launch_enable_gamedata_api = bool(normalized["EnableGameDataAPI"])
     if fmt == "sav":
         (backup_service or BackupService(profile)).create_backup()
         codec = sav_codec or WorldOptionSavCodec()

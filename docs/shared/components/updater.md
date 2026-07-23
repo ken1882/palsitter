@@ -20,8 +20,11 @@
   the fresh GUI child imports updated Python modules and reads updated HTML, cache-busted
   CSS, JavaScript, and templates before reconnecting with `ping`/`status`.
 - The normal `gui.py` wrapper used by direct Python, the Linux shell runner, systemd, and
-  Docker keeps its parent process alive, replaces the child on the shared restart exit
-  code, and lets the browser reconnect to the same web port.
+  Docker keeps its parent process alive and replaces the child on the shared restart exit
+  code; the same web port is available for a later browser reconnect. The old PyWebIO
+  browser session is not a stable Playwright assertion target during replacement, so
+  restart tests must use a fresh/reconnect-aware connection and persisted state rather
+  than waiting on stale-page locators.
 - Before replacement, every managed agent and PalServer identity is verified. A failed
   verification aborts replacement in the current GUI, leaves external watchers attached,
   and attempts rollback reconnection; it never exits or launches a duplicate.
@@ -32,3 +35,5 @@
   table.
 - Updater tables use dark headers, dark rows, square borders, and light text.
 - The page does not display a separate warning panel or repository URL line.
+- A websocket/Tornado traceback during reload or replacement is a real test failure. Do
+  not hide it as expected restart noise or weaken the GUI harness's traceback assertion.

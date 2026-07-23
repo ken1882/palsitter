@@ -74,6 +74,10 @@ adding lifecycle controls to those pages.
 
 - Opening Overview displays the Log panel and a localized loading placeholder immediately;
   logs never wait for REST, metrics, status, or update checks.
+- The log widget is client-mounted after the initial render. Its loading placeholder may
+  be cleared before the first asynchronous update, so tests must wait for a settled log
+  output/empty state or a deterministic log action rather than require the placeholder to
+  remain in the DOM immediately after navigation.
 - The placeholder is replaced by current output or a localized empty state. Output
   refreshes at least once per second, retains only the latest 300 lines, appends without
   rebuilding retained text, and preserves an active text selection.
@@ -106,7 +110,8 @@ adding lifecycle controls to those pages.
   and is unavailable for external or uninstalled servers. A Filter button immediately
   left of Auto Scroll opens a popup with checked native HTML
   checkboxes for `Palsitter`, `PalServer`, `SteamCMD`, and `UE4SS`; there is no aggregate
-  `All` option. `PalServer:`, `SteamCMD:`, and `UE4SS:` lines, including supervisor lines
+  `All` option, but the popup provides a localized Select all/Select none toggle for those
+  four checkboxes. `PalServer:`, `SteamCMD:`, and `UE4SS:` lines, including supervisor lines
   carrying an instance-name prefix, use their matching type and every other line uses
   `Palsitter`. Checkbox changes apply immediately for the current
   Overview visit. The browser retains the full latest-300-line model, but the log view
@@ -143,7 +148,10 @@ adding lifecycle controls to those pages.
   metric cards.
 - For each detected PalServer process session, the shared REST cache requests `/info`
   once after REST opens and retains the last successful response after the server stops,
-  so the cached Game Version remains visible while inactive. It requests `/players` and
+  persisting the successful game version per instance so it remains available after a GUI
+  restart. The successful SteamCMD installed/available build information is persisted per
+  instance as well, so the cached Build remains available when the server is inactive.
+  It requests `/players` and
   `/metrics` together every three seconds while that process is running and REST remains
   open. Overview, Home, Players, and the read-only console commands render those cached
   results and never issue their own requests to these endpoints.
@@ -158,3 +166,5 @@ Save state, Start update/validation, Stopping status, shutdown payload, status r
 readiness gating, KILL only after owned graceful Stop, external attach/Detach, the live
 PalServer and UE4SS Overview logs, and responsive layout. Lifecycle tests fake SteamCMD,
 PalServer, process state, REST, and network probes.
+Menu assertions follow the current ordered menu, including `Tools`, and asynchronous log
+assertions use a settled state rather than the transient initial placeholder.

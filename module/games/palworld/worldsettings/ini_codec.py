@@ -159,6 +159,12 @@ def read_ini_option_settings(path: Path) -> Dict[str, Any]:
 
 
 def write_ini_option_settings(path: Path, values: Dict[str, Any]) -> None:
+    values = {
+        key: value
+        for key, value in values.items()
+        if (WORLD_OPTION_FIELDS_BY_KEY.get(key) is None
+            or WORLD_OPTION_FIELDS_BY_KEY[key].persisted)
+    }
     existing_raw: Dict[str, str] = {}
     lines: Optional[list[str]] = None
     newline = "\r\n"
@@ -175,7 +181,12 @@ def write_ini_option_settings(path: Path, values: Dict[str, Any]) -> None:
                 option_line_index = index
                 break
 
-    merged_keys = list(existing_raw.keys())
+    merged_keys = [
+        key
+        for key in existing_raw
+        if (WORLD_OPTION_FIELDS_BY_KEY.get(key) is None
+            or WORLD_OPTION_FIELDS_BY_KEY[key].persisted)
+    ]
     for key in values:
         if key not in existing_raw:
             merged_keys.append(key)

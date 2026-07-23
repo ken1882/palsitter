@@ -58,3 +58,14 @@ according to Server Settings.
 serialization, progress, archive validation, cleanup, and failures. Lifecycle and
 Playwright tests prove installed and missing-instance Start update before launch, the
 validation setting is honored, and Restart never invokes SteamCMD.
+
+### Test launch stubs
+
+- Lifecycle tests may use a copied Python process as the `PalServer.exe` stand-in, but
+  that process still receives the configured launch arguments. Set
+  `launch_enable_gamedata_api` to `False` for this stub (and disable any other game-only
+  switches it cannot parse), or make the stub argument-tolerant. Otherwise Python
+  interprets `-enable-gamedata-api` as its own `-e` option and exits before the test can
+  observe a running server.
+- Keep process-state assertions independent from the mocked REST endpoint: the
+  application only uses REST after it finds the configured server executable process.

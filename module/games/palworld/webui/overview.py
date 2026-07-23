@@ -22,6 +22,7 @@ from module.games.palworld.server.status import endpoint_ports, endpoint_status,
 from module.webui.i18n import t
 from module.webui.session import page_context, register_page_cleanup, register_page_stop_event, run_if_current
 from module.webui.assets import client_call, client_query, put_asset_widget
+from module.webui.checkbox_groups import mount_checkbox_group
 
 
 def _open_folder(*args, **kwargs):
@@ -460,6 +461,8 @@ def _open_overview_log_filter() -> None:
         put_asset_widget(
             "palworld.log_filter",
             {
+                "select_all": t("common.select_all"),
+                "select_none": t("common.select_none"),
                 "types": [
                     {"key": log_type, "label": label}
                     for log_type, label in (
@@ -474,6 +477,7 @@ def _open_overview_log_filter() -> None:
         put_button(t("common.close"), onclick=close_popup, color="secondary")
     context = page_context()
     client_call("palworld.overview.mountFilter", generation=context.generation if context else None)
+    mount_checkbox_group("overview-log-filter")
 
 
 def _enable_console_input() -> None:

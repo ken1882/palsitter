@@ -127,10 +127,12 @@ def test_new_profile_launch_defaults_use_cpu_count_minus_one(tmp_path, monkeypat
     assert profile.launch_no_async_loading_thread is False
     assert profile.launch_use_multithread_for_ds is True
     assert profile.launch_worker_threads_server == 7
+    assert profile.launch_enable_gamedata_api is True
     assert profile.build_executable_args() == [
         "-useperfthreads",
         "-UseMultithreadForDS",
         "-NumberOfWorkerThreadsServer=7",
+        "-enable-gamedata-api",
     ]
 
 
@@ -432,7 +434,7 @@ def test_current_profile_defaults_disable_optional_launch_and_memory_policies():
     assert profile.update_on_start is True
     assert profile.auto_update is True
     assert profile.auto_update_idle_minutes == 30
-    assert profile.build_executable_args() == []
+    assert profile.build_executable_args() == ["-enable-gamedata-api"]
     assert profile.memory_restart_mb == 0
     assert profile.crash_restart_limit_per_hour == 5
     assert profile.self_heal_trigger_frame_minutes == 30
@@ -472,12 +474,14 @@ def test_legacy_launch_and_memory_config_migrates_atomically(tmp_path, monkeypat
     assert profile.build_executable_args() == [
         "-useperfthreads",
         "-NumberOfWorkerThreadsServer=4",
+        "-enable-gamedata-api",
         "-custom=value",
     ]
     assert profile.memory_restart_mb == 3
     assert raw["config_version"] == PALWORLD_CONFIG_VERSION
     assert raw["launch_useperfthreads"] is True
     assert raw["launch_worker_threads_server"] == 4
+    assert raw["launch_enable_gamedata_api"] is True
     assert raw["extra_args"] == ["-custom=value"]
     assert raw["memory_restart_mb"] == 3
     assert raw["self_heal_trigger_frame_minutes"] == 30
@@ -505,6 +509,7 @@ def test_structured_launch_arguments_have_stable_order_and_reject_duplicates():
         "-NumberOfWorkerThreadsServer=6",
         "-publiclobby",
         "-logformat",
+        "-enable-gamedata-api",
         "-custom=value",
     ]
 

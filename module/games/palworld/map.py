@@ -12,6 +12,14 @@ WORLD_X_MAX = 349_400.0
 WORLD_Y_MIN = -724_400.0
 WORLD_Y_MAX = 724_400.0
 
+# PalDB's Palpagos map uses 459 world units per in-game coordinate unit.
+PALPAGOS_GAME_COORD_SCALE = 459.0
+PALPAGOS_GAME_X_WORLD_Y_OFFSET = 158_000.0
+PALPAGOS_GAME_Y_WORLD_X_OFFSET = -123_888.0
+WORLD_TREE_GAME_COORD_SCALE = 1335.144531
+WORLD_TREE_GAME_X_START = 127.7
+WORLD_TREE_GAME_Y_START = -648.7
+
 WORLD_TREE_X_MIN = 347_351.5
 WORLD_TREE_X_MAX = 689_148.5
 WORLD_TREE_Y_MIN = -818_197.0
@@ -72,6 +80,56 @@ def world_to_map_pixel(
     return horizontal * MAP_SIZE, vertical * MAP_SIZE
 
 
+def world_to_game_coord(
+    world_x: Any, world_y: Any, map_name: str = "palpagos"
+) -> tuple[int, int] | None:
+    """Convert Palworld REST coordinates to PalDB's in-game coordinates.
+
+    PalDB's coordinate display swaps the world axes and rounds using the
+    JavaScript ``Math.round`` behavior. The transform constants are specific
+    to each map:
+
+    * Palpagos: ``game_x = round((world_y - 158000) / 459)`` and
+      ``game_y = round((world_x + 123888) / 459)``
+    * World Tree: ``game_x = round((world_y + 818197) / 1335.144531 - 127.7)``
+      and ``game_y = round((world_x - 347351.5) / 1335.144531 + 648.7)``
+
+    These are the transforms used by PalDB's Palpagos and World Tree map
+    renderers.
+    """
+    if isinstance(world_x, bool) or isinstance(world_y, bool):
+        return None
+    try:
+        x = float(world_x)
+        y = float(world_y)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(x) or not math.isfinite(y):
+        return None
+
+    if map_name == "palpagos":
+        game_x = math.floor(
+            (y - PALPAGOS_GAME_X_WORLD_Y_OFFSET) / PALPAGOS_GAME_COORD_SCALE + 0.5
+        )
+        game_y = math.floor(
+            (x - PALPAGOS_GAME_Y_WORLD_X_OFFSET) / PALPAGOS_GAME_COORD_SCALE + 0.5
+        )
+    elif map_name == "world-tree":
+        game_x = math.floor(
+            (y - WORLD_TREE_Y_MIN) / WORLD_TREE_GAME_COORD_SCALE
+            - WORLD_TREE_GAME_X_START
+            + 0.5
+        )
+        game_y = math.floor(
+            (x - WORLD_TREE_X_MIN) / WORLD_TREE_GAME_COORD_SCALE
+            - WORLD_TREE_GAME_Y_START
+            + 0.5
+        )
+    else:
+        return None
+    return game_x, game_y
+
+
 def load_manifest(map_name: str = "palpagos") -> dict[str, Any]:
     return json.loads(
         (_MAP_ASSETS_PATH / map_name / "manifest.json").read_text(encoding="utf-8")
@@ -102,11 +160,35 @@ def player_map_row(player: Mapping[str, Any], map_name: str = "palpagos") -> dic
     }
 
 
+def game_data_player_guilds(game_data: Mapping[str, Any] | None) -> dict[str, str]:
+    """Return the Game Data API's player-user ID to GuildID mapping."""
+    actors = game_data.get("ActorData", []) if isinstance(game_data, Mapping) else []
+    guilds: dict[str, str] = {}
+    for actor in actors if isinstance(actors, list) else []:
+        if not isinstance(actor, Mapping):
+            continue
+        if str(actor.get("Type", "")).casefold() != "character":
+            continue
+        if str(actor.get("UnitType", "")).casefold() != "player":
+            continue
+        userid = str(actor.get("userid") or actor.get("userId") or "").strip()
+        guild_id = str(actor.get("GuildID") or actor.get("guildId") or "").strip()
+        if userid and guild_id:
+            guilds[userid] = guild_id
+    return guilds
+
+
 __all__ = [
     "MAP_SIZE",
     "MAP_NAMES",
+    "PALPAGOS_GAME_COORD_SCALE",
+    "PALPAGOS_GAME_X_WORLD_Y_OFFSET",
+    "PALPAGOS_GAME_Y_WORLD_X_OFFSET",
     "WORLD_TREE_X_MAX",
     "WORLD_TREE_X_MIN",
+    "WORLD_TREE_GAME_COORD_SCALE",
+    "WORLD_TREE_GAME_X_START",
+    "WORLD_TREE_GAME_Y_START",
     "WORLD_TREE_Y_MAX",
     "WORLD_TREE_Y_MIN",
     "WORLD_X_MAX",
@@ -117,5 +199,7 @@ __all__ = [
     "load_marker_labels",
     "map_name_for_coordinates",
     "player_map_row",
+    "game_data_player_guilds",
+    "world_to_game_coord",
     "world_to_map_pixel",
 ]

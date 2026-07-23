@@ -1,9 +1,11 @@
 import pytest
 
 from module.games.palworld.map import (
+    game_data_player_guilds,
     load_marker_labels,
     map_name_for_coordinates,
     player_map_row,
+    world_to_game_coord,
     world_to_map_pixel,
 )
 
@@ -24,10 +26,30 @@ def test_world_coordinates_map_to_paldb_pixels(name, world_x, world_y, expected)
     assert point == pytest.approx(expected, abs=1)
 
 
+@pytest.mark.parametrize(
+    ("name", "world_x", "world_y", "expected"),
+    [
+        ("Deserted Islet", -108667, 79120, (-172, 33)),
+        ("Foot of the World Tree", 192506, -227006, (-839, 689)),
+        ("Crescent Moon Shore Watchtower", -197247, 140510, (-38, -160)),
+    ],
+)
+def test_world_coordinates_map_to_paldb_game_coordinates(
+    name, world_x, world_y, expected
+):
+    assert world_to_game_coord(world_x, world_y) == expected, name
+
+
+def test_world_tree_coordinates_map_to_paldb_game_coordinates():
+    assert world_to_game_coord(621794, -757915, "world-tree") == (-83, 854)
+
+
 @pytest.mark.parametrize("value", [None, "not-a-number", float("nan"), float("inf")])
 def test_world_coordinate_mapping_rejects_invalid_values(value):
     assert world_to_map_pixel(value, 0) is None
     assert world_to_map_pixel(0, value) is None
+    assert world_to_game_coord(value, 0) is None
+    assert world_to_game_coord(0, value) is None
 
 
 @pytest.mark.parametrize(
@@ -67,6 +89,28 @@ def test_player_map_row_accepts_rest_coordinate_spellings_and_keeps_invalid_rows
         "y": None,
         "valid": False,
     }
+
+
+def test_game_data_player_guilds_reads_only_player_character_actors():
+    assert game_data_player_guilds(
+        {
+            "ActorData": [
+                {
+                    "Type": "Character",
+                    "UnitType": "Player",
+                    "userid": "steam_1",
+                    "GuildID": "guild-a",
+                },
+                {
+                    "Type": "Character",
+                    "UnitType": "WildPal",
+                    "userid": "steam_2",
+                    "GuildID": "guild-b",
+                },
+                {"Type": "PalBox", "GuildID": "guild-c"},
+            ]
+        }
+    ) == {"steam_1": "guild-a"}
 
 
 def test_paldb_marker_labels_include_supported_ui_languages():

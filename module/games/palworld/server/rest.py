@@ -76,6 +76,9 @@ class PalRestClient:
     def metrics(self) -> Dict[str, Any]:
         return self.request("GET", "metrics") or {}
 
+    def game_data(self) -> Dict[str, Any]:
+        return self.request("GET", "game-data") or {}
+
     def announce(self, message: str) -> Any:
         return self.request("POST", "announce", json={"message": message})
 

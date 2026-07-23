@@ -31,6 +31,9 @@ Opened from the `Add` item in the [Left Sidebar](./left-sidebar.md).
   unavailable.
   Satisfactory exposes no import fields.
 - The Palworld file browser shows folders and only the exact `Level.sav` file.
+- The current import interaction is the direct `Level.sav file` field and its `Browse`
+  action; there is no separate `Import dedicated save` checkbox. Tests must follow this
+  current modal path and label.
 - Local single-player and co-op worlds are imported, but the resulting warning explains
   that player identity migration may still be required before the original characters
   can be used on the dedicated server.

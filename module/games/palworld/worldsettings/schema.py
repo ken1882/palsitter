@@ -15,6 +15,7 @@ class WorldOptionField:
     i18n_key: str
     help_i18n_key: str
     choices: Tuple[str, ...] = field(default_factory=tuple)
+    persisted: bool = True
 
 
 WORLD_OPTION_CATEGORIES: list[tuple[str, str]] = [
@@ -34,7 +35,7 @@ WORLD_OPTION_CATEGORIES: list[tuple[str, str]] = [
 ]
 
 
-def _f(key, category, ftype, default, i18n_suffix, choices=()):
+def _f(key, category, ftype, default, i18n_suffix, choices=(), *, persisted=True):
     return WorldOptionField(
         key,
         category,
@@ -43,6 +44,7 @@ def _f(key, category, ftype, default, i18n_suffix, choices=()):
         f"world.field.{i18n_suffix}",
         f"world.field_help.{i18n_suffix}",
         tuple(choices),
+        persisted,
     )
 
 
@@ -188,6 +190,14 @@ WORLD_OPTION_FIELDS: list[WorldOptionField] = [
     _f("ChatPostLimitPerMinute", "server_admin_network", "int", 30, "chat_post_limit_per_minute"),
     _f("AutoSaveSpan", "server_admin_network", "int", 30, "auto_save_span"),
     _f("bIsUseBackupSaveData", "server_admin_network", "bool", True, "is_use_backup_save_data"),
+    _f(
+        "EnableGameDataAPI",
+        "server_admin_network",
+        "bool",
+        True,
+        "enable_gamedata_api",
+        persisted=False,
+    ),
 
     # -- logging --
     _f("LogFormatType", "logging", "enum", "Text", "log_format_type", ("Text", "Json")),

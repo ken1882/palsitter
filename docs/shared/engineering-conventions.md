@@ -66,3 +66,22 @@
   requests as test failures. Repeated navigation tests cover identity, focus, selection,
   scroll position, timers, observers, event-listener cleanup, and delayed-operation stale
   result suppression where relevant.
+
+## GUI test stability contract
+
+- Select controls from the labels and scopes rendered by the current page. Repeated
+  empty-state text is valid when it belongs to separate lists; scope the assertion to
+  the owning list instead of using a panel-wide exact-text locator.
+- Treat client-mounted loading indicators as transient. After navigation, wait for the
+  widget's settled output, settled empty state, or a deterministic action result before
+  asserting text or geometry.
+- Test doubles must accept the interface they replace. A copied Python process used as a
+  Palworld executable must not receive Palworld-only interpreter switches; disable those
+  settings or use an argument-tolerant stub.
+- Preserve fixture values that the test needs, especially temporary config directories. A
+  helper result assigned to `_` is unavailable to later assertions.
+- GUI restart coverage must establish a fresh or reconnect-aware browser connection after
+  a child replacement. The old PyWebIO page session is not a stable assertion target, and
+  any server traceback is a genuine failure.
+- After changing Playwright tests, run the full two-worker command from `AGENTS.md`; use
+  serial execution to diagnose ordering or timing issues, not as the only validation.

@@ -553,6 +553,26 @@
     padding: .25rem .1rem;
 }
 
+.checkbox-select-all-group {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+}
+
+.checkbox-select-all-button {
+    flex: 0 0 auto;
+}
+
+.utils-instance-selection-group {
+    align-items: stretch;
+    flex-direction: column;
+}
+
+.overview-log-filter-options.checkbox-select-all-group {
+    align-items: stretch;
+    flex-direction: column;
+}
+
 .utils-instance-option {
     display: flex;
     align-items: center;

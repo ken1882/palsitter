@@ -135,6 +135,7 @@ def test_rest_client_kick_raises_visible_error_on_http_failure():
         ("players", "players", {"players": [{"name": "Alice", "ping": 20}]}),
         ("settings", "settings", {"Difficulty": "Normal"}),
         ("metrics", "metrics", {"currentplayernum": 1, "serverfps": 60}),
+        ("game_data", "game-data", {"ActorData": [{"Type": "Palbox"}]}),
     ],
 )
 def test_rest_get_methods_parse_success_and_use_basic_auth(method_name, path, body):

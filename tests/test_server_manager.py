@@ -152,7 +152,12 @@ def test_start_passes_port_flags(monkeypatch):
     )
 
     manager = PalServerManager(
-        Profile(name="test", game_port=8222, query_port=27099),
+        Profile(
+            name="test",
+            game_port=8222,
+            query_port=27099,
+            launch_enable_gamedata_api=False,
+        ),
         popen_factory=popen,
         pty_process_factory=lambda *a, **k: FakeProc(stdout=iter([]), returncode=0),
     )
@@ -180,7 +185,12 @@ def test_windows_start_uses_console_binary_for_detached_file_output(tmp_path, mo
         "module.server.manager.psutil.Process", lambda pid: SimpleNamespace(status=lambda: "running")
     )
     manager = PalServerManager(
-        Profile(name="test", executable=str(wrapper), workdir=str(install_dir)),
+        Profile(
+            name="test",
+            executable=str(wrapper),
+            workdir=str(install_dir),
+            launch_enable_gamedata_api=False,
+        ),
         popen_factory=popen,
     )
 
@@ -412,6 +422,7 @@ def test_start_resolves_relative_canonical_paths(tmp_path, monkeypatch):
             name="default",
             workdir=str(install_dir),
             executable=str(install_dir / "PalServer.exe"),
+            launch_enable_gamedata_api=False,
         ),
         popen_factory=popen,
     )
@@ -434,7 +445,7 @@ def test_linux_fixed_server_launches_from_server_root(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr("module.games.palworld.config.WINDOWS", False)
     monkeypatch.setattr("module.games.palworld.server.manager.WINDOWS", False)
-    profile = Profile(name="linux")
+    profile = Profile(name="linux", launch_enable_gamedata_api=False)
     profile.apply_fixed_paths()
     executable = Path(profile.executable)
     executable.parent.mkdir(parents=True)
@@ -465,7 +476,7 @@ def test_linux_fixed_server_uses_palserver_launcher_script(tmp_path, monkeypatch
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr("module.games.palworld.config.WINDOWS", False)
     monkeypatch.setattr("module.games.palworld.server.manager.WINDOWS", False)
-    profile = Profile(name="linux")
+    profile = Profile(name="linux", launch_enable_gamedata_api=False)
     profile.apply_fixed_paths()
     executable = Path(profile.executable)
     executable.parent.mkdir(parents=True)
@@ -1562,6 +1573,7 @@ def test_structured_launch_options_are_used_for_server_command(monkeypatch):
         launch_useperfthreads=True,
         launch_worker_threads_server=4,
         launch_public_lobby=True,
+        launch_enable_gamedata_api=False,
         extra_args=["-custom=value"],
     )
     manager = PalServerManager(

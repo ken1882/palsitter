@@ -14,6 +14,7 @@ from module.webui.shutdown_workflow import render_overlay as render_shutdown_ove
 from module.webui.shutdown_workflow import start_workflow as start_shutdown_workflow
 from module.webui.session import page_context, register_page_stop_event, run_if_current
 from module.webui.assets import client_call, client_query, put_asset_widget
+from module.webui.checkbox_groups import mount_checkbox_group
 
 def _home(*args, **kwargs):
     from module.webui.pages.home import _home as implementation
@@ -62,9 +63,15 @@ def _select_instances(action: str) -> None:
     with popup(t(f"utils.select_{action}"), closable=True) as scope:
         put_asset_widget(
             "shared.instance_selection",
-            {"instances": instances, "empty": t("utils.no_instances")},
+            {
+                "instances": instances,
+                "empty": t("utils.no_instances"),
+                "select_all": t("common.select_all"),
+                "select_none": t("common.select_none"),
+            },
             scope=scope,
         )
+        mount_checkbox_group("utils-instance-selection")
         put_button(t("common.confirm"), onclick=lambda: _execute_bulk_action(action), color="primary")
 
 

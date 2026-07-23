@@ -85,17 +85,20 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 ### Shared / Multi-game
 - Every GUI feature must have a corresponding Playwright test in `tests/test_gui_playwright.py`.
 - Playwright tests must click the real UI path for the feature, not only assert that text exists after page load.
+- Treat the current rendered controls and labels as the test contract: inspect the page before writing selectors, scope repeated messages to their owning list, and do not assert obsolete controls or menu entries.
+- Wait for a stable post-mount state before checking asynchronous widgets. Do not assert transient loading or empty DOM in the same turn as navigation; use a settled state or a deterministic user action.
 - For layout changes, test geometry and user state: no page-level horizontal overflow, popovers stay
   in the viewport, table content scrolls inside its shell, and navigation does not move the outer page.
 - PyWebIO server errors must fail Playwright tests. The GUI test harness must capture stdout/stderr and assert there is no `Unhandled error in pywebio app` and no `Traceback`.
 - External dependencies must be mocked or faked.
-- Config tests must use `PALSITTER_CONFIG_DIR` with a temporary directory and must not read or mutate the real local profiles.
+- Config tests must use `PALSITTER_CONFIG_DIR` with a temporary directory and must not read or mutate the real local profiles. Capture any fixture/helper return value that the test needs; do not discard it with `_` and reference it later.
 - Multi-game tests must cover empty startup, case-insensitive global names, same-game cloning,
   adapter dispatch after multiprocessing spawn, and unsupported-game bulk-action skipping.
 
 ### Palworld
 - Tests must never require real SteamCMD, a real Palworld server, or a live Palworld REST API.
 - Server lifecycle tests must mock SteamCMD, `PalServer.exe`, process state, virtual memory, and REST calls.
+- Lifecycle tests that replace `PalServer.exe` with a copied Python stub must either disable game-only launch switches, including `launch_enable_gamedata_api`, or make the stub accept the complete production argument list. A Python stub must not receive `-enable-gamedata-api` as its interpreter's `-e` option.
 - REST tests must assert method, URL, Basic Auth, request bodies, successful parsing, and HTTP failure handling.
 - Backup tests must use temporary directories and assert included files, excluded nested `backup` folders, retention deletion, and failure/retry behavior when relevant.
 
@@ -191,4 +194,5 @@ Frontend maintainability rules:
 - GUI tests for delayed operations must click the real action, navigate away before the
   result returns, and assert that no result, error, popup, toast, or status rows appear
   on the replacement page.
+- GUI replacement/restart tests must not assume that the original PyWebIO browser session automatically reconnects after the GUI child is replaced. Verify persisted state through a reconnect-aware harness or an explicit fresh connection; never wait indefinitely on stale-page locators. Any PyWebIO/Tornado traceback during this workflow remains a test failure, not an acceptable teardown artifact.
 

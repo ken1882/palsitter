@@ -4,8 +4,10 @@ Reached from the Palworld instance menu directly after [Overview](./instance-ove
 It is a dedicated REST-backed administration page; the Overview keeps a compact roster.
 
 - Each online-player row shows name, level, whole-millisecond ping (rendered with
-  `int(ping)`), coordinates, and building count when the REST response supplies them. IP
-  addresses are never displayed.
+  `int(ping)`), PalDB in-game coordinates, and building count when the REST response
+  supplies them. Palpagos and The World Tree use their map-specific coordinate transforms;
+  unrecognized numeric positions retain their formatted REST values. IP addresses are never
+  displayed.
 - The page separates current REST players from offline players retained in the per-instance
   cache. Offline rows keep their last known player details and have no live kick/ban actions.
   They omit ping and label cached coordinates as `Last location`.
@@ -34,6 +36,9 @@ It is a dedicated REST-backed administration page; the Overview keeps a compact 
   only while the exact instance process is running and its configured REST TCP endpoint
   is open. An unavailable instance replaces every loading placeholder with an explicit
   unavailable state without attempting HTTP requests.
+- The unavailable state is rendered independently in the online and offline list scopes,
+  so the same localized message can appear more than once. Tests must scope the locator
+  to the list or section being verified.
 - Existing keyed player rows are patched in place when cached fields change. Only joined
   or departed players add or remove row nodes, so a revealed user id stays revealed while
   that player remains online.

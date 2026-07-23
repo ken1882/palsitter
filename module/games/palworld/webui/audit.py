@@ -32,6 +32,8 @@ def render(name: str) -> None:
         page_number=t("audit.page_number"),
         tags=t("audit.filter"),
         tags_title=t("audit.filter_title"),
+        select_all=t("common.select_all"),
+        select_none=t("common.select_none"),
         time_window=t("audit.time_window"),
         from_label=t("audit.from"),
         to_label=t("audit.to"),

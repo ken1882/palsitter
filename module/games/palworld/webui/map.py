@@ -12,8 +12,10 @@ from module.games.palworld.map import (
     MAP_SIZE,
     load_manifest,
     load_marker_labels,
+    game_data_player_guilds,
     map_name_for_coordinates,
     player_map_row,
+    world_to_map_pixel,
 )
 from module.games.palworld.server import get_pal_rest_cache
 from module.webui.assets import client_call, put_asset_widget
@@ -30,6 +32,10 @@ def _asset_url(map_name: str, path: str) -> str:
     return f"/static/gui/map/{quote(map_name)}/" + "/".join(
         quote(part) for part in path.split("/")
     )
+
+
+def _shared_asset_url(path: str) -> str:
+    return "/static/gui/map/" + "/".join(quote(part) for part in path.split("/"))
 
 
 def _tile_data(map_name: str, filename: str) -> dict | None:
@@ -82,7 +88,7 @@ def _marker_data(
         "label": label,
         "left": f"{x:g}",
         "top": f"{y:g}",
-        "src": _asset_url(map_name, icon),
+        "src": _shared_asset_url(icon),
     }
 
 
@@ -145,8 +151,9 @@ def _map_data() -> dict:
         "legend": t("map.legend"),
         "fast_travel": t("map.fast_travel"),
         "watchtower": t("map.watchtower"),
-        "fast_travel_icon": _asset_url("palpagos", "fast-travel.webp"),
-        "watchtower_icon": _asset_url("palpagos", "watchtower.webp"),
+        "fast_travel_icon": _shared_asset_url("fast-travel.webp"),
+        "watchtower_icon": _shared_asset_url("watchtower.webp"),
+        "palbox_icon": _shared_asset_url("home.webp"),
         "players": t("map.players", count=0),
         "player_list": t("map.player_list"),
         "zoom_controls": t("map.zoom_controls"),
@@ -172,6 +179,7 @@ def render(name: str) -> None:
         "palworld.map.mount",
         mapSize=MAP_SIZE,
         initialScale=_INITIAL_SCALE,
+        palboxIcon=_shared_asset_url("home.webp"),
         generation=context.generation,
         labels={
             "player_count": t("map.players", count="{count}"),
@@ -181,6 +189,7 @@ def render(name: str) -> None:
             "live": t("map.live"),
             "stale": t("map.stale"),
             "unavailable": t("map.unavailable"),
+            "palbox": t("map.palbox"),
         },
     )
     client_call("palworld.map.startRefresh")
@@ -190,6 +199,8 @@ def render(name: str) -> None:
 def _refresh(name: str, context=None) -> None:
     context = context or page_context()
     snapshot = get_pal_rest_cache(name).snapshot()
+    game_data = snapshot.game_data
+    guilds = game_data_player_guilds(game_data)
     result = snapshot.players if isinstance(snapshot.players, dict) else {}
     rows = result.get("players", []) if isinstance(result, dict) else []
     players = []
@@ -205,29 +216,64 @@ def _refresh(name: str, context=None) -> None:
         mapped = player_map_row(player, map_name)
         if mapped is not None:
             mapped["map"] = map_name
+            if game_data is not None:
+                guild_id = str(
+                    player.get("GuildID")
+                    or player.get("guildId")
+                    or guilds.get(mapped["userId"], "")
+                ).strip()
+                if guild_id:
+                    mapped["guildId"] = guild_id
             players.append(mapped)
+    actors = game_data.get("ActorData", []) if isinstance(game_data, dict) else []
+    palboxes = []
+    for actor in actors if isinstance(actors, list) else []:
+        if not isinstance(actor, dict) or str(actor.get("Type", "")).casefold() != "palbox":
+            continue
+        world_x = actor.get("LocationX", actor.get("location_x"))
+        world_y = actor.get("LocationY", actor.get("location_y"))
+        map_name = map_name_for_coordinates(world_x, world_y)
+        point = world_to_map_pixel(world_x, world_y, map_name) if map_name else None
+        if point is None:
+            continue
+        palboxes.append(
+            {
+                "map": map_name,
+                "x": point[0],
+                "y": point[1],
+                "label": f"{t('map.palbox')}: {actor.get('GuildName', '')}",
+            }
+        )
     state = "live" if snapshot.players is not None and snapshot.players_error is None else "stale"
     if snapshot.players is None and not snapshot.session_active:
         state = "unavailable"
-    signature = (json.dumps(players, sort_keys=True), state)
+    signature = (
+        json.dumps(players, sort_keys=True),
+        json.dumps(palboxes, sort_keys=True),
+        state,
+    )
     run_if_current(
         context,
         lambda: _apply_map_players(
             signature,
             players,
+            palboxes,
             state,
             context.generation if context else None,
         ),
     )
 
 
-def _apply_map_players(signature, players: list, state: str, generation=None) -> None:
+def _apply_map_players(
+    signature, players: list, palboxes: list, state: str, generation=None
+) -> None:
     if signature == getattr(local, "map_snapshot_signature", None):
         return
     local.map_snapshot_signature = signature
     client_call(
         "palworld.map.pushPlayers",
         players=players,
+        palboxes=palboxes,
         state=state,
         generation=generation,
     )

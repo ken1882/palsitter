@@ -10,6 +10,8 @@ It displays new audit events recorded by Palsitter in monthly files under the in
   update, crash, stop, server exit, and agent exit.
 - The page supports search, type checkboxes, custom calendar/time bounds, quick ranges for
   24 hours, 3 days, 7 days, and 30 days, configurable page size, and newest-first paging.
+- The type filter has a localized Select all/Select none button. It selects or clears only
+  the audit type checkboxes in that filter popup.
 - It uses the shared pagination-table layout: standard shared controls without decorative
   chevrons, content-based initial column sizing, a viewport-safe table shell, and a footer
   that stays anchored while pages change.

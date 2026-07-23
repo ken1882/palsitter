@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Callable
 
 from module.games.palworld.config import PALWORLD_SERVER_APP_ID, PalworldProfile
+from module.games.palworld.version_cache import read_version_cache, update_version_cache
 from module.games.registry import OperationProgress, UpdateInfo
 from module.pty_process import PtyProcessLike, spawn_pty_process
 from module.steamcmd import ensure_steamcmd_at, steamcmd_platform_args
@@ -45,6 +46,25 @@ def read_installed_build_id(path: Path) -> str | None:
         return parse_installed_build_id(path.read_text(encoding="utf-8", errors="replace"))
     except OSError:
         return None
+
+
+def load_cached_update_info(profile: PalworldProfile) -> UpdateInfo:
+    cached = read_version_cache(profile.name)
+    installed_build = read_installed_build_id(appmanifest_path(profile))
+    if installed_build is None:
+        value = cached.get("installed_build_id")
+        installed_build = str(value) if value not in (None, "") else None
+    available = cached.get("available_build_id")
+    available_build = str(available) if available not in (None, "") else None
+    status = str(cached.get("status") or "unknown")
+    if installed_build is not None and available_build is not None:
+        status = "up_to_date" if installed_build == available_build else "update_available"
+    checked_at = cached.get("checked_at")
+    try:
+        checked = dt.datetime.fromisoformat(str(checked_at)) if checked_at else None
+    except ValueError:
+        checked = None
+    return UpdateInfo(installed_build, available_build, checked, status)
 
 
 def parse_public_build_id(output: str) -> str | None:
@@ -137,11 +157,21 @@ class PalworldUpdateService:
             ),
         )
 
+    def _persist_update_info(self, info: UpdateInfo) -> None:
+        update_version_cache(
+            self.profile.name,
+            installed_build_id=info.installed_build_id,
+            available_build_id=info.available_build_id,
+            checked_at=info.checked_at.isoformat() if info.checked_at else None,
+            status=info.status,
+        )
+
     def check_update(self, *, force: bool = False) -> UpdateInfo:
         installed_build = read_installed_build_id(appmanifest_path(self.profile))
         checked_at = self.now()
         if not self.installed:
             info = UpdateInfo(installed_build, None, checked_at, "not_installed")
+            self._persist_update_info(info)
             self._emit("check_update", "complete", 100.0, "Server is not installed")
             return info
 
@@ -186,12 +216,14 @@ class PalworldUpdateService:
                     status = "update_available"
                 info = UpdateInfo(installed_build, available_build, checked_at, status)
                 _CHECK_CACHE[self._cache_key] = info
+                self._persist_update_info(info)
                 self._emit("check_update", "complete", 100.0, "Update check completed")
                 return info
             except Exception as exc:
                 self.log(f"Update check failed: {exc}")
                 info = UpdateInfo(installed_build, None, checked_at, "unknown")
                 _CHECK_CACHE[self._cache_key] = info
+                self._persist_update_info(info)
                 self._emit("check_update", "failed", None, "Update check failed", str(exc))
                 return info
 
@@ -242,6 +274,7 @@ class PalworldUpdateService:
                 self.now(),
                 "up_to_date" if installed_build is not None else "unknown",
             )
+            self._persist_update_info(info)
             with _CHECK_LOCK:
                 _CHECK_CACHE.pop(self._cache_key, None)
             self.log("Validation completed" if validate else "Update completed")

@@ -109,7 +109,11 @@ class ProcessManager:
         self._bootstrap_thread: Optional[threading.Thread] = None
         self._restart_thread: Optional[threading.Thread] = None
         self._operation_progress: OperationProgress | None = None
-        self._update_info = UpdateInfo()
+        try:
+            record = load_instance(config_name)
+            self._update_info = get_game(record.game).cached_update_info(record)
+        except (FileNotFoundError, OSError, TypeError, ValueError):
+            self._update_info = UpdateInfo()
         self._ownership = "none"
         self._check_display_running = False
         self._display_probe_at = 0.0

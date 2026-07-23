@@ -1,3 +1,4 @@
-<div class="overview-log-filter-options">
+<div class="overview-log-filter-options checkbox-select-all-group" data-checkbox-group="overview-log-filter">
+  <button type="button" class="btn btn-secondary checkbox-select-all-button" data-select-all-label="{{select_all}}" data-select-none-label="{{select_none}}">{{select_none}}</button>
   {{#types}}<label class="overview-log-filter-option" for="overview-log-filter-{{key}}"><input id="overview-log-filter-{{key}}" type="checkbox" class="overview-log-filter-checkbox" data-log-type="{{key}}"><span>{{label}}</span></label>{{/types}}
 </div>

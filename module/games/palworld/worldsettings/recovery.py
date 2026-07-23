@@ -115,6 +115,7 @@ def _managed_defaults(profile: PalworldProfile) -> dict[str, Any]:
             "RESTAPIEnabled": True,
             "RESTAPIPort": profile.rest_port,
             "AdminPassword": profile.rest_password,
+            "EnableGameDataAPI": profile.launch_enable_gamedata_api,
         }
     )
     return values

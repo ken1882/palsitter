@@ -7,6 +7,7 @@ from pywebio.pin import pin, put_input
 from pywebio.session import local
 from module.games.palworld.audit import AuditEvent, AuditStore, utc_now
 from module.games.palworld.config import load_profile
+from module.games.palworld.map import map_name_for_coordinates, world_to_game_coord
 from module.games.palworld.players_cache import PalworldBanList, PlayerCache
 from module.games.palworld.server import PalRestClient, get_pal_rest_cache
 from module.webui.i18n import t
@@ -378,10 +379,15 @@ def _player_row_values(player: dict) -> dict[str, str]:
     online = bool(player.get("online", True))
     ping = player.get("ping", None)
     ping = f"{int(ping)}ms" if online and isinstance(ping, (int, float)) else ""
-    x = player.get("location_x", player.get("locationX", "-"))
-    y = player.get("location_y", player.get("locationY", "-"))
-    x = str(round(x, 2)) if isinstance(x, (int, float)) else "-"
-    y = str(round(y, 2)) if isinstance(y, (int, float)) else "-"
+    world_x = player.get("location_x", player.get("locationX"))
+    world_y = player.get("location_y", player.get("locationY"))
+    map_name = map_name_for_coordinates(world_x, world_y)
+    game_coord = world_to_game_coord(world_x, world_y, map_name) if map_name else None
+    if game_coord is not None:
+        x, y = (str(value) for value in game_coord)
+    else:
+        x = str(round(world_x, 2)) if isinstance(world_x, (int, float)) else "-"
+        y = str(round(world_y, 2)) if isinstance(world_y, (int, float)) else "-"
     buildings = player.get("building_count", player.get("buildingCount"))
     return {
         "name": f"{player_name} (Lv: {level})",

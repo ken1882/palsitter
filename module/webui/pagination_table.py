@@ -6,6 +6,7 @@ from dataclasses import asdict, dataclass
 from typing import Any, Literal, Mapping, Sequence
 
 from module.webui.assets import client_call, put_asset_widget
+from module.webui.checkbox_groups import mount_checkbox_group
 from module.webui.session import register_page_cleanup
 
 
@@ -52,6 +53,8 @@ class PaginationTableLabels:
     first: str = "First page"
     last: str = "Last page"
     page_number: str = "Page number"
+    select_all: str = "Select all"
+    select_none: str = "Select none"
 
 
 def _validate_columns(columns: Sequence[TableColumn]) -> tuple[TableColumn, ...]:
@@ -162,6 +165,7 @@ def put_pagination_table(
         labels=asdict(labels),
     )
     register_page_cleanup(lambda: client_call("paginationTable.destroy", tableId=table_id))
+    mount_checkbox_group(f"{table_id}-tags")
 
 
 __all__ = [

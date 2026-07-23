@@ -43,7 +43,8 @@
   reconnect.
 - Run, Stop, and Kill open a modal listing every configured instance. Each instance has
   an HTML checkbox, all checkboxes are selected by default, the list scrolls when it is
-  too tall, and only selected instances are acted on after confirmation.
+  too tall, and only selected instances are acted on after confirmation. A localized
+  Select all/Select none toggle selects or clears only the instances in that modal.
 - Run starts inactive supported instances, Stop terminates running supported instances
   normally, and Kill immediately terminates running supported instances. Unsupported
   placeholders are skipped and named in the result.

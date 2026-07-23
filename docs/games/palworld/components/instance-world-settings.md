@@ -27,7 +27,9 @@ about layout only.
   `ServerName`) have no spinner since they aren't numeric.
 - `Server password` and `Admin password` are masked inputs with eye buttons that toggle
   visibility. New instances receive a random eight-character lowercase alphanumeric
-  admin password, and their REST API toggle defaults to On.
+  admin password, their REST API toggle defaults to On, and the `Enable Game Data API`
+  toggle defaults to On. The latter is a launch-only setting: it adds
+  `-enable-gamedata-api` to PalServer and is not written to the world INI.
 - Every field label has a small circular `(?)` help icon immediately after it
   (`.field-help`). Hovering (or focusing via keyboard) shows a tooltip explaining what
   the setting does and, for enum fields, what each choice means — sourced from official

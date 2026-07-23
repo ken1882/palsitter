@@ -12,6 +12,7 @@
         <div class="palworld-map-pois">
           {{#markers}}<span class="palworld-map-poi-wrap" data-poi-type="{{type}}" data-location-name="{{label}}" title="{{label}}" data-map-left="{{left}}" data-map-top="{{top}}"><img class="palworld-map-poi" data-poi-type="{{type}}" src="{{src}}" alt="{{label}}" draggable="false"><span class="palworld-map-tooltip" role="tooltip">{{label}}</span></span>{{/markers}}
         </div>
+        <div class="palworld-map-palboxes"></div>
       </div>
       {{/layers}}
       <div id="palworld-map-players" class="palworld-map-players"></div>
@@ -21,10 +22,6 @@
       <select id="palworld-map-select" class="palworld-map-select">
         <option selected value="palpagos">{{palpagos}}</option><option value="world-tree">{{world_tree}}</option>
       </select>
-      <div class="palworld-map-legend" aria-label="{{legend}}">
-        <span><img src="{{fast_travel_icon}}" alt="">{{fast_travel}}</span>
-        <span><img src="{{watchtower_icon}}" alt="">{{watchtower}}</span>
-      </div>
     </div>
     <div id="palworld-map-top-right" class="palworld-map-overlay palworld-map-top-right">
       <button id="palworld-map-player-button" class="palworld-map-player-button" type="button" aria-expanded="false" aria-controls="palworld-map-player-dropdown">{{players}}</button>

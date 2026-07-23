@@ -1,6 +1,14 @@
+import pytest
+
 from module.config import Profile
 from module.games.palworld.players_cache import PlayerCache
 from module.games.palworld.server.api_cache import PalRestCache
+from module.games.palworld.version_cache import version_cache_path
+
+
+@pytest.fixture(autouse=True)
+def _isolated_config_dir(tmp_path, monkeypatch):
+    monkeypatch.setenv("PALSITTER_CONFIG_DIR", str(tmp_path / "config"))
 
 
 class FakeRestClient:
@@ -8,6 +16,7 @@ class FakeRestClient:
         self.info_calls = 0
         self.players_calls = 0
         self.metrics_calls = 0
+        self.game_data_calls = 0
         self.fail_players = False
 
     def info(self):
@@ -23,6 +32,10 @@ class FakeRestClient:
     def metrics(self):
         self.metrics_calls += 1
         return {"currentplayernum": self.metrics_calls}
+
+    def game_data(self):
+        self.game_data_calls += 1
+        return {"ActorData": [{"Type": "Palbox", "GuildName": "Guild"}]}
 
 
 def _cache(client, identity, rest_open, updated):
@@ -51,6 +64,7 @@ def test_cache_fetches_info_once_per_session_and_polls_dynamic_data_every_three_
     assert client.info_calls == 1
     assert client.players_calls == 2
     assert client.metrics_calls == 2
+    assert client.game_data_calls == 2
     assert updated[-1] == [{"userId": "steam_1", "level": 2}]
     assert cache.snapshot().info == {"version": "v1"}
 
@@ -72,6 +86,7 @@ def test_cache_waits_for_rest_and_retains_successful_dynamic_data_after_failure(
 
     cache.poll_once(now=0)
     assert (client.info_calls, client.players_calls, client.metrics_calls) == (0, 0, 0)
+    assert client.game_data_calls == 0
 
     rest_open[0] = True
     cache.poll_once(now=1)
@@ -84,6 +99,7 @@ def test_cache_waits_for_rest_and_retains_successful_dynamic_data_after_failure(
     assert snapshot.players == first_players
     assert snapshot.players_error == "players unavailable"
     assert snapshot.metrics == {"currentplayernum": 2}
+    assert snapshot.game_data == {"ActorData": [{"Type": "Palbox", "GuildName": "Guild"}]}
 
 
 def test_cache_clears_session_data_when_server_stops():
@@ -99,6 +115,24 @@ def test_cache_clears_session_data_when_server_stops():
     assert cache.snapshot().info == {"version": "v1"}
     assert cache.snapshot().players is None
     assert cache.snapshot().metrics is None
+    assert cache.snapshot().game_data is None
+
+
+def test_cache_skips_game_data_when_launch_option_is_disabled():
+    client = FakeRestClient()
+    profile = Profile(name="test", launch_enable_gamedata_api=False)
+    cache = PalRestCache(
+        "test",
+        profile_loader=lambda _: profile,
+        session_probe=lambda _: (42, 100.0),
+        rest_probe=lambda _: True,
+        client_factory=lambda _: client,
+    )
+
+    cache.poll_once(now=0)
+
+    assert client.game_data_calls == 0
+    assert cache.snapshot().game_data is None
 
 
 def test_cache_default_player_persistence_tracks_poll_interval(tmp_path, monkeypatch):
@@ -121,3 +155,30 @@ def test_cache_default_player_persistence_tracks_poll_interval(tmp_path, monkeyp
     assert row["online"] is True
     assert row["last_login"]
     assert row["total_play_time_seconds"] == 6.0
+
+
+def test_cache_persists_game_version_for_a_new_cache_after_server_stops(tmp_path, monkeypatch):
+    monkeypatch.setenv("PALSITTER_CONFIG_DIR", str(tmp_path / "config"))
+    client = FakeRestClient()
+    profile = Profile(name="test")
+    cache = PalRestCache(
+        "test",
+        profile_loader=lambda _: profile,
+        session_probe=lambda _: (42, 100.0),
+        rest_probe=lambda _: True,
+        client_factory=lambda _: client,
+    )
+
+    cache.poll_once(now=0)
+    assert version_cache_path("test").is_file()
+
+    stopped = PalRestCache(
+        "test",
+        profile_loader=lambda _: profile,
+        session_probe=lambda _: None,
+        rest_probe=lambda _: False,
+        client_factory=lambda _: client,
+    )
+    stopped.poll_once(now=1)
+
+    assert stopped.snapshot().info == {"version": "v1"}

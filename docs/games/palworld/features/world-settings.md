@@ -9,9 +9,16 @@ Palsitter itself. `PublicPort` is synchronized to the internal launch/status gam
 `RESTAPIPort` and `AdminPassword` are synchronized to Palsitter's REST client, which
 always connects to `localhost` using the fixed account `admin`.
 
+The `Server Admin & Network` category also contains the launch-only `Enable Game Data
+API` switch. When enabled (the default), Palsitter appends `-enable-gamedata-api` to
+PalServer's launch command, enabling the REST `/game-data` world actor snapshot API.
+This switch is stored in the Palsitter profile and is not written into
+`PalWorldSettings.ini` or `WorldOption.sav`.
+
 The full field list, grouped by category, lives in `module/worldsettings/schema.py` as a
 single data-driven table (key, category, type, default, i18n key) - that table is the
-only place field metadata is defined; the INI codec and the [World Settings
+only place field metadata is defined; launch-only fields are marked non-persisted, and
+the INI codec and the [World Settings
 page](../components/instance-world-settings.md) both iterate it rather than hand-coding
 each field.
 

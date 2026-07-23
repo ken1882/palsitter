@@ -48,6 +48,10 @@
     transform-origin: center;
     pointer-events: auto;
 }
+.palworld-map-poi-wrap:hover,
+.palworld-map-poi-wrap:focus-within {
+    z-index: 50;
+}
 .palworld-map-poi {
     display: block;
     width: 100%;
@@ -110,6 +114,13 @@
     pointer-events: none;
 }
 .palworld-map-player-dot:hover::after { visibility: visible; }
+.palworld-map-player-dot[data-guild-color="blue"] { background: #3b82f6; }
+.palworld-map-player-dot[data-guild-color="green"] { background: #22c55e; }
+.palworld-map-player-dot[data-guild-color="yellow"] { background: #facc15; }
+.palworld-map-player-dot[data-guild-color="purple"] { background: #a855f7; }
+.palworld-map-player-dot[data-guild-color="teal"] { background: #14b8a6; }
+.palworld-map-player-dot[data-guild-color="gray"] { background: #9ca3af; }
+.palworld-map-player-dot[data-guild-color="orange"] { background: #f97316; }
 body.light-palsitter .palworld-map-tooltip,
 body.light-palsitter .palworld-map-player-dot::after {
     color: #2c2c2c;
