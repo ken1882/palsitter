@@ -89,6 +89,7 @@ def test_low_disk_warning_waits_for_confirmation(monkeypatch):
     )
     monkeypatch.setattr(overview, "popup", lambda *args, **kwargs: FakePopup())
     monkeypatch.setattr(overview, "close_popup", lambda: None)
+    monkeypatch.setattr(overview, "toast", lambda *args, **kwargs: None)
     monkeypatch.setattr(overview, "put_warning", lambda *args, **kwargs: None)
     monkeypatch.setattr(overview, "put_row", lambda *args, **kwargs: None)
     monkeypatch.setattr(overview, "_update_scheduler_controls", lambda name: None)

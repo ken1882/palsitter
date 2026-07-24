@@ -5,6 +5,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+from pywebio import session as pywebio_session
 from pywebio.session import local
 
 from module.config import config_dir
@@ -68,6 +69,11 @@ def set_language(language: str) -> str:
 
 
 def get_language() -> str:
+    # PyWebIO starts its blocking script-mode server when no session
+    # implementation has been registered yet. Worker threads must fall back
+    # before touching `local` in that state.
+    if not pywebio_session._active_session_cls:
+        return DEFAULT_LANGUAGE
     try:
         language = getattr(local, "language", DEFAULT_LANGUAGE)
     except Exception:
