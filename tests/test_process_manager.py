@@ -958,3 +958,34 @@ def test_process_manager_drains_bounded_structured_lifecycle_events():
     assert events[0].reason == "reason-2"
     assert events[-1].outcome == "outcome-21"
     assert manager.next_scheduled_restart == next_restart
+
+
+def test_process_manager_does_not_audit_update_checks(tmp_path, monkeypatch):
+    manager = _manager_with_profile(tmp_path, monkeypatch)
+    manager._event_queue = queue.Queue()
+    calls = []
+    monkeypatch.setattr(
+        manager,
+        "_record_adapter_event",
+        lambda *args: calls.append(args),
+    )
+    checked_at = dt.datetime(2026, 7, 24, 10, 0, tzinfo=dt.timezone.utc)
+    manager._event_queue.put(
+        SimpleNamespace(
+            type="update_check",
+            timestamp=checked_at,
+            message="Palworld update check: up_to_date",
+            details={
+                "installed_build_id": "100",
+                "available_build_id": "100",
+                "status": "up_to_date",
+            },
+        )
+    )
+
+    manager._drain_events()
+
+    assert manager.update_info == UpdateInfo(
+        "100", "100", checked_at, "up_to_date"
+    )
+    assert calls == []

@@ -44,6 +44,7 @@ from module.games.palworld.audit import (
 )
 from module.games.palworld.update import PalworldUpdateService
 from module.steamcmd import steamcmd_platform_args
+from module.thread_watchdog import ThreadWatchdog
 from module.games.registry import AdapterEvent, UpdateInfo
 from module.instances import (
     DailyLogWriter,
@@ -70,6 +71,7 @@ WINDOWS = os.name == "nt"
 WINDOWS_STDOUT_ARGS = ("-stdout", "-FullStdOutLogOutput", "-FORCELOGFLUSH")
 SERVER_OUTPUT_POLL_SECONDS = 0.5
 SERVER_OUTPUT_REPLAY_LINES = 300
+SERVER_OUTPUT_RESTART_DELAY_SECONDS = 1.0
 
 
 class AttachedServerProcess:
@@ -246,11 +248,14 @@ class PalServerManager:
         self._server_output_tail: deque[str] = deque(maxlen=5)
         self._output_thread: threading.Thread | None = None
         self._capture_output_thread: threading.Thread | None = None
+        self._capture_output_watchdog: ThreadWatchdog | None = None
         self._server_output_writer: DailyLogWriter | None = None
         self._server_output_stop_event: threading.Event | None = None
+        self._server_output_watchdog: ThreadWatchdog | None = None
         self._server_output_path: Path | None = None
         self._ue4ss_output_thread: threading.Thread | None = None
         self._ue4ss_stop_event: threading.Event | None = None
+        self._ue4ss_output_watchdog: ThreadWatchdog | None = None
 
     def _record_event(
         self,
@@ -485,6 +490,16 @@ class PalServerManager:
             if self._server_output_writer is writer:
                 self._server_output_writer = None
 
+    def _stop_capture_output(self) -> None:
+        watchdog = self._capture_output_watchdog
+        thread = self._capture_output_thread
+        if watchdog is not None:
+            watchdog.stop(timeout=1)
+        elif thread is not None and thread.is_alive() and thread is not threading.current_thread():
+            thread.join(timeout=1)
+        self._capture_output_watchdog = None
+        self._capture_output_thread = None
+
     @staticmethod
     def _file_cursor(path: Path) -> tuple[int, tuple[int, int] | None, bytes]:
         try:
@@ -534,6 +549,16 @@ class PalServerManager:
         pending = b""
         error_reported = False
 
+        def report_stream_error(exc: Exception) -> None:
+            nonlocal error_reported
+            if error_reported:
+                return
+            try:
+                self.log(f"PalServer: log streaming unavailable: {exc}")
+            except Exception:
+                pass
+            error_reported = True
+
         def emit_complete_lines(*, flush: bool = False) -> None:
             nonlocal pending
             parts = pending.split(b"\n")
@@ -541,12 +566,18 @@ class PalServerManager:
             for raw_line in parts:
                 line = raw_line.rstrip(b"\r").decode("utf-8", errors="replace")
                 if line:
-                    emit(line)
+                    try:
+                        emit(line)
+                    except Exception as exc:
+                        report_stream_error(exc)
             if flush and pending:
                 line = pending.rstrip(b"\r").decode("utf-8", errors="replace")
                 pending = b""
                 if line:
-                    emit(line)
+                    try:
+                        emit(line)
+                    except Exception as exc:
+                        report_stream_error(exc)
 
         while not stop_event.is_set():
             try:
@@ -596,11 +627,16 @@ class PalServerManager:
                 pending = b""
                 prefix = b""
             except OSError as exc:
-                if not error_reported:
-                    self.log(f"PalServer: log streaming unavailable: {exc}")
-                    error_reported = True
+                report_stream_error(exc)
+            except Exception as exc:
+                report_stream_error(exc)
 
-            if not active():
+            try:
+                is_active = active()
+            except Exception as exc:
+                report_stream_error(exc)
+                is_active = True
+            if not is_active:
                 break
             stop_event.wait(SERVER_OUTPUT_POLL_SECONDS)
 
@@ -641,12 +677,23 @@ class PalServerManager:
 
         stop_event = threading.Event()
 
+        cursor_state = {
+            "offset": offset,
+            "file_id": file_id,
+            "prefix": prefix,
+        }
+
         def persist_cursor(
             current_path: Path,
             new_offset: int,
             new_file_id: tuple[int, int] | None,
             new_prefix: bytes,
         ) -> None:
+            cursor_state.update(
+                offset=new_offset,
+                file_id=new_file_id,
+                prefix=new_prefix,
+            )
             try:
                 update_runtime(
                     self.profile.name,
@@ -658,33 +705,45 @@ class PalServerManager:
             except OSError:
                 pass
 
-        thread = threading.Thread(
-            target=self._stream_file_output,
-            args=(path, stop_event),
-            kwargs={
-                "initial_offset": offset,
-                "initial_file_id": file_id,
-                "initial_prefix": prefix,
-                "active": lambda: self.alive,
-                "emit": self._server_output_line,
-                "replay_limit": SERVER_OUTPUT_REPLAY_LINES if replay_existing else 0,
-                "cursor_callback": persist_cursor,
-                "path_provider": path_provider,
-            },
-            daemon=True,
+        def stream_output() -> None:
+            self._stream_file_output(
+                path,
+                stop_event,
+                initial_offset=cursor_state["offset"],
+                initial_file_id=cursor_state["file_id"],
+                initial_prefix=cursor_state["prefix"],
+                active=lambda: self.alive,
+                emit=self._server_output_line,
+                replay_limit=SERVER_OUTPUT_REPLAY_LINES if replay_existing else 0,
+                cursor_callback=persist_cursor,
+                path_provider=path_provider,
+            )
+
+        watchdog = ThreadWatchdog(
+            stream_output,
+            name=f"{self.profile.name} PalServer log tailer",
+            should_run=lambda: self.alive,
+            stop_event=stop_event,
+            restart_delay=SERVER_OUTPUT_RESTART_DELAY_SECONDS,
+            logger=lambda message: self.log(f"PalServer: {message}"),
         )
         self._server_output_stop_event = stop_event
-        self._output_thread = thread
-        thread.start()
+        self._server_output_watchdog = watchdog
+        watchdog.start()
+        self._output_thread = watchdog.thread
 
     def _stop_server_output(self) -> None:
         stop_event = self._server_output_stop_event
+        watchdog = self._server_output_watchdog
         thread = self._output_thread
         if stop_event is not None:
             stop_event.set()
-        if thread is not None and thread.is_alive() and thread is not threading.current_thread():
+        if watchdog is not None:
+            watchdog.stop(timeout=1)
+        elif thread is not None and thread.is_alive() and thread is not threading.current_thread():
             thread.join(timeout=1)
         self._server_output_stop_event = None
+        self._server_output_watchdog = None
         self._output_thread = None
 
     def _ue4ss_log_path(self) -> Path | None:
@@ -716,6 +775,7 @@ class PalServerManager:
         initial_file_id: tuple[int, int] | None,
         initial_prefix: bytes = b"",
         active: Callable[[], bool],
+        cursor_callback: Callable[[int, tuple[int, int] | None, bytes], None] | None = None,
     ) -> None:
         offset = initial_offset
         file_id = initial_file_id
@@ -769,6 +829,8 @@ class PalServerManager:
                     if not prefix:
                         with path.open("rb") as handle:
                             prefix = handle.read(min(offset, 4096))
+                    if cursor_callback is not None:
+                        cursor_callback(offset, file_id, prefix)
                 error_reported = False
             except FileNotFoundError:
                 file_id = None
@@ -776,6 +838,10 @@ class PalServerManager:
                 pending = b""
                 prefix = b""
             except OSError as exc:
+                if not error_reported:
+                    self.log(f"UE4SS: log streaming unavailable: {exc}")
+                    error_reported = True
+            except Exception as exc:
                 if not error_reported:
                     self.log(f"UE4SS: log streaming unavailable: {exc}")
                     error_reported = True
@@ -788,12 +854,16 @@ class PalServerManager:
 
     def _stop_ue4ss_output(self) -> None:
         stop_event = self._ue4ss_stop_event
+        watchdog = self._ue4ss_output_watchdog
         thread = self._ue4ss_output_thread
         if stop_event is not None:
             stop_event.set()
-        if thread is not None and thread.is_alive() and thread is not threading.current_thread():
+        if watchdog is not None:
+            watchdog.stop(timeout=1)
+        elif thread is not None and thread.is_alive() and thread is not threading.current_thread():
             thread.join(timeout=1)
         self._ue4ss_stop_event = None
+        self._ue4ss_output_watchdog = None
         self._ue4ss_output_thread = None
 
     def _start_ue4ss_output(
@@ -811,20 +881,46 @@ class PalServerManager:
         if replay_existing:
             offset = 0
         stop_event = threading.Event()
-        thread = threading.Thread(
-            target=self._stream_ue4ss_output,
-            args=(path, stop_event),
-            kwargs={
-                "initial_offset": offset,
-                "initial_file_id": file_id,
-                "initial_prefix": prefix,
-                "active": active,
-            },
-            daemon=True,
+        cursor_state = {
+            "offset": offset,
+            "file_id": file_id,
+            "prefix": prefix,
+        }
+
+        def persist_cursor(
+            new_offset: int,
+            new_file_id: tuple[int, int] | None,
+            new_prefix: bytes,
+        ) -> None:
+            cursor_state.update(
+                offset=new_offset,
+                file_id=new_file_id,
+                prefix=new_prefix,
+            )
+
+        def stream_output() -> None:
+            self._stream_ue4ss_output(
+                path,
+                stop_event,
+                initial_offset=cursor_state["offset"],
+                initial_file_id=cursor_state["file_id"],
+                initial_prefix=cursor_state["prefix"],
+                active=active,
+                cursor_callback=persist_cursor,
+            )
+
+        watchdog = ThreadWatchdog(
+            stream_output,
+            name=f"{self.profile.name} UE4SS log tailer",
+            should_run=active,
+            stop_event=stop_event,
+            restart_delay=SERVER_OUTPUT_RESTART_DELAY_SECONDS,
+            logger=lambda message: self.log(f"UE4SS: {message}"),
         )
         self._ue4ss_stop_event = stop_event
-        self._ue4ss_output_thread = thread
-        thread.start()
+        self._ue4ss_output_watchdog = watchdog
+        watchdog.start()
+        self._ue4ss_output_thread = watchdog.thread
 
     @staticmethod
     def _server_output_lines(raw_line: str) -> list[str]:
@@ -1088,6 +1184,7 @@ class PalServerManager:
             )
             self.state_callback("running")
             return
+        self._stop_capture_output()
         self._prepare_server_settings()
         if update:
             self.run_update()
@@ -1167,12 +1264,18 @@ class PalServerManager:
         )
         self._start_server_output(replay_existing=False)
         if getattr(self.process, "stdout", None) is not None:
-            self._capture_output_thread = threading.Thread(
-                target=self._capture_server_output,
-                args=(self.process,),
-                daemon=True,
+            process = self.process
+            watchdog = ThreadWatchdog(
+                lambda: self._capture_server_output(process),
+                name=f"{self.profile.name} PalServer stdout capture",
+                should_run=lambda: process.poll() is None,
+                restart_delay=SERVER_OUTPUT_RESTART_DELAY_SECONDS,
+                restart_on_return=False,
+                logger=lambda message: self.log(f"PalServer: {message}"),
             )
-            self._capture_output_thread.start()
+            self._capture_output_watchdog = watchdog
+            watchdog.start()
+            self._capture_output_thread = watchdog.thread
         self.warning = False
         self.countdown = -1
         self.countdown_reason = None
@@ -1273,6 +1376,7 @@ class PalServerManager:
         self.external_attached = False
         self._stop_server_output()
         self._stop_ue4ss_output()
+        self._stop_capture_output()
         if self.process is not None:
             clear_runtime(self.profile.name, pid=self.process.pid)
         self.agent_client = None

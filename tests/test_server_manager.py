@@ -928,6 +928,48 @@ def test_ue4ss_stream_retries_transient_read_errors_once(tmp_path, monkeypatch):
     assert sum("log streaming unavailable" in line for line in logs) == 1
 
 
+def test_server_stream_continues_after_callback_error(tmp_path):
+    path = tmp_path / "palserver.log"
+    path.write_text("first line\n", encoding="utf-8")
+    logs = []
+    emitted = []
+    active = threading.Event()
+    active.set()
+    stop_event = threading.Event()
+    manager = PalServerManager(Profile(name="test"), logger=logs.append)
+
+    def emit(line):
+        if line == "first line":
+            raise RuntimeError("transient callback failure")
+        emitted.append(line)
+
+    stat = path.stat()
+    thread = threading.Thread(
+        target=manager._stream_file_output,
+        args=(path, stop_event),
+        kwargs={
+            "initial_offset": 0,
+            "initial_file_id": (stat.st_dev, stat.st_ino),
+            "active": active.is_set,
+            "emit": emit,
+        },
+        daemon=True,
+    )
+    thread.start()
+    _wait_for_log(logs, "PalServer: log streaming unavailable: transient callback failure")
+
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write("second line\n")
+    deadline = time.monotonic() + 2
+    while time.monotonic() < deadline and "second line" not in emitted:
+        time.sleep(0.01)
+
+    active.clear()
+    stop_event.set()
+    thread.join(timeout=1)
+    assert "second line" in emitted
+
+
 def test_external_attach_starts_ue4ss_stream_when_installed(tmp_path, monkeypatch):
     path = tmp_path / "UE4SS.log"
     path.write_text("attached line\n", encoding="utf-8")

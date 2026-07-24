@@ -47,6 +47,7 @@ from module.instances import (
     update_agent_state,
 )
 from module.pty_process import PtyProcessLike, spawn_pty_process
+from module.thread_watchdog import ThreadWatchdog
 
 
 PROTOCOL_MAJOR = 1
@@ -54,6 +55,7 @@ PROTOCOL_MINOR = 0
 AGENT_IMPLEMENTATION = 2
 AGENT_CONNECT_TIMEOUT = 10.0
 AGENT_MODULE = "module.games.palworld.server.agent"
+AGENT_OUTPUT_RESTART_DELAY_SECONDS = 1.0
 _PIPE_PREFIX = r"\\.\pipe\palsitter-agent-v1-"
 
 if os.name != "nt":  # pragma: no cover - the agent is Windows-first.
@@ -695,6 +697,7 @@ class ServerAgent:
         self.process: PtyProcessLike | None = None
         self.job: JobObject | None = None
         self.output_thread: threading.Thread | None = None
+        self._output_watchdog: ThreadWatchdog | None = None
         self.output_handle = None
         self.stop_reader = threading.Event()
         self.lock = threading.RLock()
@@ -767,6 +770,9 @@ class ServerAgent:
         with self.lock:
             if self._alive():
                 return self.status()
+            if self._output_watchdog is not None:
+                self._output_watchdog.stop(timeout=2)
+                self._output_watchdog = None
             self.stop_reader.clear()
             self.exit_code = None
             self.exit_reason = None
@@ -806,9 +812,38 @@ class ServerAgent:
             self.server_executable = str(Path(self._command()[0]).resolve())
             self.server_state = "running"
             self._write_state()
-            self.output_thread = threading.Thread(target=self._read_output, daemon=True)
-            self.output_thread.start()
+            watchdog = ThreadWatchdog(
+                self._read_output_watchdog_target,
+                name=f"{self.name} PalServer agent output",
+                should_run=self._alive,
+                stop_event=self.stop_reader,
+                restart_delay=AGENT_OUTPUT_RESTART_DELAY_SECONDS,
+                restart_on_return=False,
+                logger=self._report_output_watchdog,
+            )
+            self._output_watchdog = watchdog
+            watchdog.start()
+            self.output_thread = watchdog.thread
             return self.status()
+
+    def _read_output_watchdog_target(self) -> None:
+        with self.lock:
+            if self.process is None or self.stop_reader.is_set():
+                return
+            if self.output_handle is None:
+                self.output_handle = DailyLogWriter(
+                    lambda: profile_server_output_path(self.name)
+                )
+        self._read_output()
+        if not self._alive():
+            self.stop_reader.set()
+
+    def _report_output_watchdog(self, message: str) -> None:
+        with self.lock:
+            self.exit_reason = message
+            self.server_state = "running"
+            self.state = "running"
+            self._write_state()
 
     def _read_output(self) -> None:
         process = self.process
@@ -817,6 +852,7 @@ class ServerAgent:
             return
         last_flush = time.monotonic()
         bytes_since_flush = 0
+        capture_error: Exception | None = None
         try:
             while not self.stop_reader.is_set():
                 # pywinpty's Windows console stream can hold a long-lived
@@ -840,18 +876,29 @@ class ServerAgent:
                     bytes_since_flush = 0
                     last_flush = now
         except Exception as exc:
+            capture_error = exc
             self.exit_reason = f"output capture failed: {exc}"
         finally:
             try:
                 handle.flush()
                 _flush_file_buffers(handle)
             except Exception as exc:
+                capture_error = capture_error or exc
                 self.exit_reason = self.exit_reason or f"output flush failed: {exc}"
             with self.lock:
                 process = self.process
                 code = process.poll() if process is not None else None
                 self.exit_code = code
-                if self.stop_reader.is_set():
+                retry_capture = (
+                    capture_error is not None
+                    and not self.stop_reader.is_set()
+                    and code is None
+                )
+                if retry_capture:
+                    self.server_state = "running"
+                    self.state = "running"
+                    self.exit_reason = self.exit_reason or "output capture failed; retrying"
+                elif self.stop_reader.is_set():
                     self.server_state = "stopped"
                     self.exit_reason = self.exit_reason or "stopped"
                 elif code is None:
@@ -867,11 +914,14 @@ class ServerAgent:
             except Exception:
                 pass
             self.output_handle = None
-            if self.job is not None:
+            if not retry_capture and self.job is not None:
                 self.job.close()
                 self.job = None
-            self.process = None
+            if not retry_capture:
+                self.process = None
             self._write_state()
+            if retry_capture and capture_error is not None:
+                raise capture_error
 
     def _stop_server(self, *, force: bool) -> dict[str, Any]:
         process = self.process
@@ -885,7 +935,11 @@ class ServerAgent:
                 process.wait(timeout=10)
             except Exception:
                 process.kill()
-        if self.output_thread is not None and self.output_thread.is_alive():
+        watchdog = self._output_watchdog
+        if watchdog is not None:
+            watchdog.stop(timeout=2)
+            self._output_watchdog = None
+        elif self.output_thread is not None and self.output_thread.is_alive():
             self.output_thread.join(timeout=2)
         self.server_state = "stopped"
         self.state = "idle"

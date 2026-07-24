@@ -16,6 +16,7 @@ import psutil
 from module.games import AdapterEvent, InstanceStatusSummary, OperationProgress, UpdateInfo, get_game
 from module.instances import load_instance, profile_log_path, prune_dated_log_files
 from module.process import kill_process_tree as _kill_process_tree
+from module.thread_watchdog import ThreadWatchdog
 
 
 _PROCESS_CONTEXT = mp.get_context("spawn")
@@ -102,6 +103,7 @@ class ProcessManager:
         self.logs = self._load_persisted_logs()
         self._reader: Optional[threading.Thread] = None
         self._reader_process: Optional[mp.Process] = None
+        self._reader_watchdog: ThreadWatchdog | None = None
         self.warning = False
         self._stop_reason: Optional[str] = None
         self._state = "inactive"
@@ -293,6 +295,7 @@ class ProcessManager:
                                     event_timestamp,
                                     str(details.get("status", "unknown")),
                                 )
+                    continue
                 self._record_adapter_event(
                     str(event_type),
                     str(getattr(event, "message", "")),
@@ -956,12 +959,34 @@ class ProcessManager:
                 and self._reader_process is process
             ):
                 return
+            previous_watchdog = self._reader_watchdog
+            if previous_watchdog is not None:
+                previous_watchdog.stop(timeout=1)
             self._reader_process = process
-            self._reader = threading.Thread(
-                target=self._read_logs, args=(process,), daemon=True
+            stop_event = threading.Event()
+
+            def read_logs() -> None:
+                try:
+                    self._read_logs(process)
+                finally:
+                    try:
+                        if not process.is_alive():
+                            stop_event.set()
+                    except Exception:
+                        stop_event.set()
+
+            watchdog = ThreadWatchdog(
+                read_logs,
+                name=f"{self.config_name} supervisor log reader",
+                should_run=process.is_alive,
+                stop_event=stop_event,
+                restart_delay=1.0,
+                logger=self.append_log,
             )
-            reader = self._reader
-        reader.start()
+            self._reader_watchdog = watchdog
+        watchdog.start()
+        with self._lock:
+            self._reader = watchdog.thread
 
     def _read_logs(self, watched_process: mp.Process | None = None) -> None:
         if watched_process is None:

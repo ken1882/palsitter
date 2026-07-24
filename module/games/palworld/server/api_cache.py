@@ -16,6 +16,7 @@ from module.games.palworld.server.rest import PalRestClient
 from module.games.palworld.server.status import matching_instance_processes
 from module.games.palworld.version_cache import read_version_cache, update_version_cache
 from module.instances import profile_path
+from module.thread_watchdog import ThreadWatchdog
 
 
 POLL_INTERVAL_SECONDS = 3.0
@@ -108,26 +109,33 @@ class PalRestCache:
         self._info_attempted = False
         self._next_poll_at = 0.0
         self._thread: threading.Thread | None = None
+        self._watchdog: ThreadWatchdog | None = None
         self._stop_event = threading.Event()
 
     def ensure_started(self) -> None:
         with self._lock:
-            if self._thread is not None and self._thread.is_alive():
+            if self._watchdog is not None and self._watchdog.alive:
                 return
             self._stop_event.clear()
-            self._thread = threading.Thread(
-                target=self._poll_loop,
+            watchdog = ThreadWatchdog(
+                self._poll_loop,
                 name=f"pal-rest-cache-{self.name}",
-                daemon=True,
+                stop_event=self._stop_event,
+                restart_delay=1.0,
             )
-            thread = self._thread
-        thread.start()
+            self._watchdog = watchdog
+        watchdog.start()
+        with self._lock:
+            self._thread = watchdog.thread
 
     def stop(self) -> None:
         self._stop_event.set()
         with self._lock:
+            watchdog = self._watchdog
             thread = self._thread
-        if thread is not None and thread is not threading.current_thread():
+        if watchdog is not None:
+            watchdog.stop(timeout=2)
+        elif thread is not None and thread is not threading.current_thread():
             thread.join(timeout=2)
 
     def snapshot(self) -> PalRestSnapshot:
@@ -268,8 +276,8 @@ class PalRestCache:
                 pass
             snapshot = self.snapshot()
             if not snapshot.session_active:
-                return
-            if not snapshot.rest_open:
+                delay = 1.0
+            elif not snapshot.rest_open:
                 delay = 1.0
             else:
                 with self._lock:
