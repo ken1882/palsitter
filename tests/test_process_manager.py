@@ -1,6 +1,7 @@
 import datetime as dt
 import queue
 import threading
+from pathlib import Path
 from types import SimpleNamespace
 
 import psutil
@@ -120,7 +121,7 @@ def test_resource_usage_finds_exact_external_instance_and_reuses_cpu_sample(
 def test_resource_usage_picks_matching_child_by_executable_name(tmp_path, monkeypatch):
     manager = _manager_with_profile(tmp_path, monkeypatch, executable="PalServer.exe")
     other = FakePsProcess("steamcmd.exe", memory_percent=1.0)
-    target = FakePsProcess("PalServer.exe", memory_percent=42.5)
+    target = FakePsProcess(Path(fixed_executable_path("test")).name, memory_percent=42.5)
     monkeypatch.setattr(
         "module.webui.process_manager.psutil.Process",
         lambda pid: SimpleNamespace(children=lambda recursive=True: [other, target]),
@@ -157,7 +158,7 @@ def test_resource_usage_sums_palserver_process_tree_rss(tmp_path, monkeypatch):
             return SimpleNamespace(rss=self._rss)
 
     worker = TreeProcess("PalServer-Win64-Shipping.exe", 3, 30)
-    target = TreeProcess("PalServer.exe", 2, 20, [worker])
+    target = TreeProcess(Path(fixed_executable_path("test")).name, 2, 20, [worker])
     other = TreeProcess("steamcmd.exe", 4, 99)
     monkeypatch.setattr(
         "module.webui.process_manager.psutil.Process",

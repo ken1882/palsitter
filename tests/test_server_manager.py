@@ -1,5 +1,6 @@
 import datetime as dt
 import io
+import os
 import subprocess
 import threading
 import time
@@ -12,6 +13,7 @@ from module.config import Profile, game_user_settings_path
 from module.worldsettings.service import resolve_ini_path
 from module.games.registry import UpdateInfo
 from module.server.manager import PalServerManager
+from module.steamcmd import steamcmd_platform_args
 
 
 @pytest.fixture(autouse=True)
@@ -166,6 +168,7 @@ def test_start_passes_port_flags(monkeypatch):
     assert captured_cmd["cmd"] == ["PalServer.exe", "-port=8222", "-queryport=27099"]
 
 
+@pytest.mark.skipif(os.name != "nt", reason="Windows detached-process behavior is Windows-only")
 def test_windows_start_uses_console_binary_for_detached_file_output(tmp_path, monkeypatch):
     captured = {}
     install_dir = tmp_path / "PalServer"
@@ -350,6 +353,7 @@ def test_steam_update_uses_fixed_palworld_server_app_id():
 
     assert manager.steam_update_args() == [
         "steamcmd",
+        *steamcmd_platform_args(),
         "+force_install_dir",
         str(Path.cwd()),
         "+login",
@@ -1028,6 +1032,7 @@ def test_run_update_uses_absolute_paths_for_fresh_relative_profile(tmp_path, mon
     assert captured == {
         "cmd": [
             str(expected_steamcmd),
+            *steamcmd_platform_args(),
             "+force_install_dir",
             str(expected_install),
             "+login",

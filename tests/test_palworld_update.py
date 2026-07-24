@@ -14,6 +14,7 @@ from module.games.palworld.update import (
     parse_public_build_id,
     parse_steamcmd_progress,
 )
+from module.steamcmd import steamcmd_platform_args
 
 
 @pytest.fixture(autouse=True)
@@ -108,6 +109,7 @@ def test_check_update_compares_manifest_with_public_build_and_emits_progress(tmp
     assert info.available_build_id == "200"
     assert info.status == "update_available"
     assert captured["cmd"][1:] == [
+        *steamcmd_platform_args(),
         "+login",
         "anonymous",
         "+app_info_update",
@@ -277,6 +279,7 @@ def test_install_or_update_builds_validate_command_and_reports_structured_progre
     ).install_or_update(validate=True)
 
     assert captured["cmd"][1:] == [
+        *steamcmd_platform_args(),
         "+force_install_dir",
         str(Path(profile.workdir).resolve()),
         "+login",

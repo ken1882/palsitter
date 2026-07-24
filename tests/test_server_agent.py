@@ -42,6 +42,7 @@ def test_agent_client_sends_versioned_json_request(monkeypatch):
     assert writes[0]["command"] == "status"
 
 
+@pytest.mark.skipif(os.name != "nt", reason="PalServer agent is Windows-only")
 def test_agent_captures_pty_chunks_and_flushes_raw_output(tmp_path, monkeypatch):
     monkeypatch.setenv("PALSITTER_CONFIG_DIR", str(tmp_path / "config"))
     monkeypatch.setenv("PALSITTER_PROFILE_DIR", str(tmp_path / "profile"))
@@ -103,6 +104,7 @@ def test_agent_captures_pty_chunks_and_flushes_raw_output(tmp_path, monkeypatch)
     assert output and all(size == 1 for size in process.stdout.sizes)
 
 
+@pytest.mark.skipif(os.name != "nt", reason="PalServer agent paths are Windows-only")
 def test_agent_resolves_profile_relative_executable_from_repository_root():
     profile = PalworldProfile(
         name="test",
