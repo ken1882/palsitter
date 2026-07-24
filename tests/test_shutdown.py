@@ -213,3 +213,35 @@ def test_desktop_control_can_start_shared_shutdown_without_stopping_immediately(
         assert not completed.is_set()
     finally:
         control.close()
+
+
+def test_desktop_control_can_close_gui_without_stopping_instances():
+    gui_only_called = threading.Event()
+    completed = threading.Event()
+
+    def gui_only_shutdown():
+        gui_only_called.set()
+        return shutdown.ShutdownResult(True, {})
+
+    control = desktop_control.DesktopControlServer(
+        0,
+        "secret",
+        lambda: (_ for _ in ()).throw(AssertionError("full shutdown was called")),
+        completed.set,
+        gui_only_shutdown=gui_only_shutdown,
+    )
+    control.start()
+    try:
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{control.port}/desktop/gui-only",
+            data=b"",
+            method="POST",
+            headers={"X-Palsitter-Token": "secret"},
+        )
+        with urllib.request.urlopen(request, timeout=2) as response:
+            assert response.status == 200
+            assert json.load(response)["ok"] is True
+        assert gui_only_called.wait(2)
+        assert completed.wait(2)
+    finally:
+        control.close()

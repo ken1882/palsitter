@@ -38,6 +38,8 @@ UPDATER_REMOTE = "https://github.com/ken1882/palsitter.git"
 
 UPDATER_BRANCH = "main"
 
+UPDATER_REPOSITORY = Path(__file__).resolve().parents[3]
+
 
 def _put_updater_loading(shape: str, color: str, *, fill: bool = False) -> None:
     put_asset_widget(
@@ -85,11 +87,13 @@ def _run_git(*args: str, timeout: float = 10) -> subprocess.CompletedProcess:
         "http.extraHeader=",
         "-c",
         "http.https://github.com/.extraHeader=",
+        "-c",
+        f"safe.directory={UPDATER_REPOSITORY}",
         *args,
     ]
     return subprocess.run(
         git_args,
-        cwd=Path(__file__).parent,
+        cwd=UPDATER_REPOSITORY,
         capture_output=True,
         text=True,
         timeout=timeout,

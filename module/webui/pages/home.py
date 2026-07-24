@@ -3,7 +3,7 @@ import datetime as dt
 import threading
 from pywebio.exceptions import SessionException
 from pywebio.output import clear, put_button, put_buttons, put_markdown, put_scope, put_text, use_scope
-from pywebio.session import local, register_thread
+from pywebio.session import info, local, register_thread
 from module.games import get_game
 from module.instances import list_instances, load_instance
 from module.webui.i18n import language_options, t
@@ -56,6 +56,7 @@ def _home() -> None:
 def _render_home() -> None:
     if _set_frame(t("nav.home"), "Home") is None:
         return
+    palsitter_port = info.server_host.rsplit(":", 1)[-1]
     _render_home_menu()
     clear("content")
     with use_scope("content"):
@@ -81,6 +82,7 @@ def _render_home() -> None:
 {t("home.description")}
 
 {t("home.repository")}: `https://github.com/ken1882/palsitter.git`
+{t("home.pageurl", palsitter_port=palsitter_port)}
                             """,
                         ),
                     ],

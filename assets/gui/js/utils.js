@@ -26,8 +26,8 @@
             if (!button) return;
             const remaining = Math.max(0, Math.ceil(Number(forceAt) - Date.now() / 1000));
             button.textContent = remaining > 0
-                ? `Force Shutdown (${remaining})`
-                : "Force Shutdown";
+                ? `${t("utils.force_shutdown")} (${remaining})`
+                : t("utils.force_shutdown");
             button.disabled = !enabled || remaining > 0;
             if (remaining === 0) {
                 clearInterval(shutdownTimer);

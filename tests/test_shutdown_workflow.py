@@ -54,3 +54,21 @@ def test_shared_force_request_kills_and_wins_over_graceful_worker(monkeypatch):
     state = shutdown_workflow.load_state()
     assert state["phase"] == "completed"
     assert state["instances"]["alpha"]["status"] == "force_stopped"
+
+
+def test_gui_only_shutdown_closes_gui_without_running_instance_shutdown(monkeypatch):
+    completed = threading.Event()
+    shutdown_called = threading.Event()
+
+    monkeypatch.setattr(shutdown_workflow, "_ON_COMPLETE", completed.set)
+    monkeypatch.setattr(
+        shutdown_workflow,
+        "shutdown_all",
+        lambda: shutdown_called.set(),
+    )
+
+    result = shutdown_workflow.stop_gui_only()
+
+    assert result.ok is True
+    assert completed.wait(2)
+    assert not shutdown_called.is_set()

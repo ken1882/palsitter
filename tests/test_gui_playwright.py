@@ -448,6 +448,10 @@ def test_home_has_home_updater_utils_and_no_add_server(tmp_path, monkeypatch):
         page.locator("#pywebio-scope-menu").get_by_text("Home").wait_for(timeout=5000)
         page.locator("#pywebio-scope-menu").get_by_text("Updater").wait_for(timeout=5000)
         page.locator("#pywebio-scope-menu").get_by_text("Utils").wait_for(timeout=5000)
+        palsitter_port = page.url.rsplit(":", 1)[-1].rstrip("/")
+        page.get_by_text(
+            f"Browser url: http://localhost:{palsitter_port}", exact=True
+        ).wait_for(timeout=5000)
         assert page.locator("#pywebio-scope-aside svg.icon-develop").count() == 1
         assert page.locator("#pywebio-scope-aside svg.icon-run").count() == 1
         assert page.locator("#pywebio-scope-aside svg.aside-icon-add").count() == 1
@@ -670,7 +674,10 @@ def test_utils_matches_actions_live_log_css_and_gated_code(tmp_path, monkeypatch
         page.get_by_role("button", name="Shutdown Palsitter", exact=True).click()
         modal = page.locator(".modal.show")
         modal.get_by_text("Shutdown Palsitter?", exact=True).wait_for(timeout=2000)
-        modal.get_by_role("button", name="Shutdown", exact=True).click()
+        assert modal.get_by_role("button", name="Cancel", exact=True).count() == 1
+        assert modal.get_by_role("button", name="GUI only", exact=True).count() == 1
+        assert modal.get_by_role("button", name="Stop all", exact=True).count() == 1
+        modal.get_by_role("button", name="Stop all", exact=True).click()
         shutdown_overlay = page.locator("#pywebio-scope-shutdown_overlay")
         shutdown_overlay.locator(".shutdown-overlay-card").wait_for(timeout=5000)
         force_button = shutdown_overlay.get_by_role("button", name="Force Shutdown", exact=True)

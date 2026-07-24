@@ -35,6 +35,36 @@ Download the latest portable archive from [Releases](https://github.com/ken1882/
 extract it to a writable directory, and launch `Palsitter.exe`. The portable release
 stores configuration, profiles, and logs in its local `data/` directory.
 
+To build the portable Windows Electron release manually, use Windows PowerShell with
+Node.js 24, Python 3.12 with `pip`, Git for Windows, and 7-Zip installed. From the
+repository root, run:
+
+```powershell
+Set-Location desktop
+npm.cmd ci
+Set-Location ..
+
+.\desktop\scripts\build-runtime.ps1
+.\desktop\scripts\build-git.ps1
+.\desktop\scripts\prepare-source.ps1
+python -m compileall -q .
+
+Set-Location desktop
+npm.cmd run build:win
+Set-Location ..
+.\desktop\scripts\archive-release.ps1
+```
+
+If 7-Zip is not installed, install it with Chocolatey before creating the archive:
+
+```powershell
+choco install 7zip -y --no-progress
+```
+
+The unpacked application is created at `desktop/dist/win-unpacked/`; the portable
+archive and SHA-256 checksum are written to `desktop/dist/Palsitter-win-x64.7z` and
+`desktop/dist/Palsitter-win-x64.7z.sha256`.
+
 ### Native Linux
 
 To run a server directly on the machine, first prepare the required Python environment

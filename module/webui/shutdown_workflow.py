@@ -75,6 +75,20 @@ def start_workflow() -> ShutdownResult:
     return _request_result("shutdown_started")
 
 
+def request_gui_only_shutdown() -> ShutdownResult:
+    return ShutdownResult(True, {})
+
+
+def stop_gui_only() -> ShutdownResult:
+    callback: Callable[[], None] | None
+    result = request_gui_only_shutdown()
+    with _STATE_LOCK:
+        callback = _ON_COMPLETE if result.ok else None
+    if callback is not None:
+        threading.Thread(target=callback, daemon=True).start()
+    return result
+
+
 def request_force_shutdown() -> ShutdownResult:
     global _WORKFLOW_THREAD
     with _STATE_LOCK:
@@ -231,6 +245,8 @@ __all__ = [
     "configure_completion",
     "load_state",
     "mount_overlay",
+    "request_gui_only_shutdown",
     "request_force_shutdown",
+    "stop_gui_only",
     "start_workflow",
 ]

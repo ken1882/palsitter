@@ -6,7 +6,7 @@ the `Home` item is active in the [Left Sidebar](./left-sidebar.md); see
 
 - The landing Home tab shows a responsive card grid containing every stored instance,
   followed by the language selector (see [Language / i18n](../features/i18n.md)), theme
-  selector, project description, and repository link.
+  selector, project description, repository link, and the browser URL for the running UI.
 - A fresh installation shows an empty-state explanation and an `Add instance` action
   that opens the normal [Add Instance](./add-instance.md) flow.
 - Cards render a loading placeholder immediately, then refresh through the selected game

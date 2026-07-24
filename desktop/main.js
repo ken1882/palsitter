@@ -49,7 +49,14 @@ function gitPath() {
 
 function refreshPackagedRepository() {
   if (!app.isPackaged) return;
-  spawnSync(gitPath(), ['-C', backendRoot(), 'update-index', '--refresh'], {
+  spawnSync(gitPath(), [
+    '-c',
+    `safe.directory=${path.resolve(backendRoot())}`,
+    '-C',
+    backendRoot(),
+    'update-index',
+    '--refresh',
+  ], {
     windowsHide: true,
     stdio: 'ignore',
   });
@@ -111,6 +118,22 @@ function killPort(port) {
     { cwd: backendRoot(), windowsHide: true, stdio: 'ignore' },
   );
   return !result.error && result.status === 0;
+}
+
+function forceKillBackend() {
+  if (!backend || backendExited) return;
+  if (process.platform === 'win32' && backend.pid) {
+    spawnSync('taskkill.exe', ['/PID', String(backend.pid), '/T', '/F'], {
+      windowsHide: true,
+      stdio: 'ignore',
+    });
+    return;
+  }
+  try {
+    backend.kill('SIGKILL');
+  } catch (_) {
+    // The backend may have exited between the state check and the kill.
+  }
 }
 
 async function reservePortWithPrompt(preferred) {
@@ -231,18 +254,22 @@ async function requestExit() {
   if (exiting) return;
   const result = await dialog.showMessageBox(mainWindow, {
     type: 'warning',
-    buttons: ['Cancel', 'Exit Palsitter'],
+    buttons: ['Cancel', 'GUI only', 'Stop all'],
     defaultId: 0,
     cancelId: 0,
     title: 'Exit Palsitter',
-    message: 'Exit Palsitter and stop all active servers?',
-    detail: 'Palsitter will save state, gracefully stop every agent and game server, then close the GUI.',
+    message: 'How should Palsitter exit?',
+    detail: 'GUI only leaves agents and game servers running. Stop all saves state and gracefully stops them before closing the GUI.',
   });
-  if (result.response !== 1) return;
+  if (result.response === 0) return;
 
   exiting = true;
-  showWindow();
-  void performGracefulShutdown();
+  if (result.response === 1) {
+    void performGuiOnlyShutdown();
+  } else {
+    showWindow();
+    void performGracefulShutdown();
+  }
 }
 
 function waitForBackendExit(timeoutMs = SHUTDOWN_TIMEOUT_MS + 10_000) {
@@ -263,8 +290,47 @@ function waitForBackendExit(timeoutMs = SHUTDOWN_TIMEOUT_MS + 10_000) {
   });
 }
 
+async function performGuiOnlyShutdown() {
+  try {
+    if (controlPort == null || !controlToken) throw new Error('GUI control endpoint unavailable');
+    const response = await fetch(`http://${WEB_HOST}:${controlPort}/desktop/gui-only`, {
+      method: 'POST',
+      headers: { 'X-Palsitter-Token': controlToken },
+    });
+    const body = await response.json();
+    if (!response.ok || !body.ok) throw new Error(body.error || 'GUI shutdown request failed');
+    await waitForBackendExit();
+    finishExit();
+  } catch (_) {
+    forceKillBackend();
+    finishExit();
+  }
+}
+
+async function forceExitAfterShutdownFailure() {
+  if (controlPort != null && controlToken) {
+    try {
+      const response = await fetch(`http://${WEB_HOST}:${controlPort}/desktop/force-shutdown`, {
+        method: 'POST',
+        headers: { 'X-Palsitter-Token': controlToken },
+      });
+      const body = await response.json();
+      if (response.ok && body.ok) {
+        await waitForBackendExit();
+        finishExit();
+        return;
+      }
+    } catch (_) {
+      // Fall through to terminating the backend process tree.
+    }
+  }
+  forceKillBackend();
+  finishExit();
+}
+
 async function performGracefulShutdown() {
   try {
+    if (controlPort == null || !controlToken) throw new Error('GUI control endpoint unavailable');
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), SHUTDOWN_TIMEOUT_MS);
     let response;
@@ -281,14 +347,8 @@ async function performGracefulShutdown() {
     if (!response.ok || !body.ok) throw new Error(body.error || 'Shutdown request failed');
     await waitForBackendExit();
     finishExit();
-  } catch (error) {
-    exiting = false;
-    await dialog.showMessageBox(mainWindow, {
-      type: 'error',
-      title: 'Palsitter shutdown failed',
-      message: 'Palsitter is still running.',
-      detail: String(error.message || error),
-    });
+  } catch (_) {
+    await forceExitAfterShutdownFailure();
   }
 }
 

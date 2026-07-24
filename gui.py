@@ -15,6 +15,7 @@ from module.webui.restart import RESTART_EXIT_CODE
 from module.webui.shutdown import shutdown_all
 from module.webui.shutdown_workflow import (
     configure_completion,
+    request_gui_only_shutdown,
     request_force_shutdown,
     start_workflow as start_shutdown_workflow,
 )
@@ -77,6 +78,7 @@ def _run_desktop_server(host: str, port: int, control_port: int) -> int:
         stop_web_server,
         request_force_shutdown,
         start_shutdown_workflow,
+        gui_only_shutdown=request_gui_only_shutdown,
     )
     control.start()
     web_thread = threading.Thread(

@@ -33,11 +33,14 @@ def test_run_git_disables_interactive_credentials(monkeypatch):
         "http.extraHeader=",
         "-c",
         "http.https://github.com/.extraHeader=",
+        "-c",
+        f"safe.directory={updater.UPDATER_REPOSITORY}",
         "fetch",
         "origin",
         "main",
     ]
     env = captured["kwargs"]["env"]
+    assert captured["kwargs"]["cwd"] == updater.UPDATER_REPOSITORY
     assert {
         key for key in env if key.startswith("GIT_CONFIG_")
     } == {"GIT_CONFIG_NOSYSTEM"}
@@ -56,7 +59,9 @@ def test_run_git_works_with_a_credentialless_git_executable(tmp_path, monkeypatc
         "test \"$1\" = -c && test \"$2\" = 'credential.helper='\n"
         "test \"$3\" = -c && test \"$4\" = 'http.extraHeader='\n"
         "test \"$5\" = -c && test \"$6\" = 'http.https://github.com/.extraHeader='\n"
-        "test \"$7\" = version\n",
+        "test \"$7\" = -c\n"
+        "test \"$8\" = 'safe.directory='*\n"
+        "test \"$9\" = version\n",
         encoding="ascii",
     )
     git.chmod(0o755)

@@ -41,6 +41,12 @@ def test_packaged_data_stays_next_to_the_portable_executable():
     assert "path.join(path.dirname(process.execPath), 'data')" in source
 
 
+def test_packaged_git_refresh_allows_the_backend_repository_owner_to_differ():
+    source = (DESKTOP / "main.js").read_text(encoding="utf-8")
+
+    assert "`safe.directory=${path.resolve(backendRoot())}`" in source
+
+
 def test_exit_uses_the_shared_shutdown_workflow():
     package = json.loads((DESKTOP / "package.json").read_text(encoding="utf-8"))
     files = set(package["build"]["files"])
@@ -48,6 +54,11 @@ def test_exit_uses_the_shared_shutdown_workflow():
 
     assert "main.js" in files
     assert "http://${WEB_HOST}:${controlPort}/desktop/shutdown" in source
+    assert "http://${WEB_HOST}:${controlPort}/desktop/gui-only" in source
+    assert "http://${WEB_HOST}:${controlPort}/desktop/force-shutdown" in source
+    assert "buttons: ['Cancel', 'GUI only', 'Stop all']" in source
+    assert "taskkill.exe" in source
+    assert "forceExitAfterShutdownFailure" in source
 
 
 def test_startup_handles_port_conflicts_with_kill_and_alternate_port_prompts():

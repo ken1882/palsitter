@@ -27,12 +27,14 @@
 - Managed restore connects to an existing agent and requests only `ping`/`status`. It
   never creates a missing restore agent and never sends `start`; an existing idle agent
   remains idle until the user explicitly starts it after reconnect.
-- `Shutdown Palsitter` opens a confirmation popup, then uses a shared full-screen
-  stopping overlay. It immediately exposes the stopping state, saves active instances,
-  requests graceful shutdown, and closes the GUI after every lifecycle instance stops.
-  The overlay enables `Force Shutdown (5)` after five seconds, counts down once per
-  second, removes the counter at zero, and force-kills managed instances only when the
-  operator clicks it. The same workflow is used by the Windows Electron tray exit.
+- `Shutdown Palsitter` opens a confirmation popup with `Cancel`, `GUI only`, and `Stop
+  all`. `GUI only` closes the GUI while leaving active agents and game servers running.
+  `Stop all` uses a shared full-screen stopping overlay: it immediately exposes the
+  stopping state, saves active instances, requests graceful shutdown, and closes the GUI
+  after every lifecycle instance stops. The overlay enables `Force Shutdown (5)` after
+  five seconds, counts down once per second, removes the counter at zero, and force-kills
+  managed instances only when the operator clicks it. The same choices and workflows are
+  used by the Windows Electron tray exit.
 - Restart state is stored atomically under the configured data directory. Refreshing or
   reconnecting reconstructs the active overlay. The initiating browser connection is
   expected to drop while the GUI child is replaced. A completion or failure overlay is

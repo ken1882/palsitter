@@ -18,12 +18,14 @@ class DesktopControlServer:
         on_success: Callable[[], None],
         force_shutdown: Callable[[], ShutdownResult] | None = None,
         start_shutdown: Callable[[], ShutdownResult] | None = None,
+        gui_only_shutdown: Callable[[], ShutdownResult] | None = None,
     ) -> None:
         if not token:
             raise ValueError("PALSITTER_DESKTOP_TOKEN is required")
         self._shutdown = shutdown
         self._force_shutdown = force_shutdown
         self._start_shutdown = start_shutdown
+        self._gui_only_shutdown = gui_only_shutdown
         self._on_success = on_success
         self._token = token.encode("utf-8")
 
@@ -42,7 +44,11 @@ class DesktopControlServer:
                 self.wfile.write(body)
 
             def do_POST(self) -> None:
-                if self.path not in {"/desktop/shutdown", "/desktop/force-shutdown"}:
+                if self.path not in {
+                    "/desktop/shutdown",
+                    "/desktop/force-shutdown",
+                    "/desktop/gui-only",
+                }:
                     self._send(404, {"ok": False, "error": "Not found"})
                     return
                 supplied = self.headers.get("X-Palsitter-Token", "").encode("utf-8")
@@ -54,6 +60,8 @@ class DesktopControlServer:
                 if self.path == "/desktop/force-shutdown":
                     shutdown = owner._force_shutdown
                     on_success = owner._on_success if owner._start_shutdown is None else None
+                elif self.path == "/desktop/gui-only":
+                    shutdown = owner._gui_only_shutdown
                 elif owner._start_shutdown is not None:
                     shutdown = owner._start_shutdown
                     on_success = None

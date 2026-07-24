@@ -11,6 +11,7 @@ from module.instances import list_instances
 from module.webui.i18n import t
 from module.webui.restart import load_state, render_overlay, start_workflow
 from module.webui.shutdown_workflow import render_overlay as render_shutdown_overlay
+from module.webui.shutdown_workflow import stop_gui_only
 from module.webui.shutdown_workflow import start_workflow as start_shutdown_workflow
 from module.webui.session import page_context, register_page_stop_event, run_if_current
 from module.webui.assets import client_call, client_query, put_asset_widget
@@ -210,10 +211,16 @@ def _shutdown_palsitter() -> None:
         put_row(
             [
                 put_button(t("common.cancel"), onclick=close_popup, color="secondary"),
+                put_button(t("utils.shutdown_gui_only"), onclick=_confirm_gui_only, color="primary"),
                 put_button(t("utils.shutdown_continue"), onclick=_confirm_shutdown, color="danger"),
             ],
             size="auto auto",
         )
+
+
+def _confirm_gui_only() -> None:
+    close_popup()
+    stop_gui_only()
 
 
 def _confirm_shutdown() -> None:

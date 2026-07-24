@@ -18,7 +18,8 @@ if (-not $sevenZip) {
 if (Test-Path -LiteralPath $OutputArchive) {
     Remove-Item -LiteralPath $OutputArchive -Force
 }
-& $sevenZip a -t7z $OutputArchive (Join-Path $inputPath '*') | Out-Host
+# Keep 7-Zip's progress indicator on stdout so PowerShell displays live updates.
+& $sevenZip a -t7z -bsp1 $OutputArchive (Join-Path $inputPath '*')
 if ($LASTEXITCODE -ne 0) {
     throw "7z failed with exit code $LASTEXITCODE"
 }
