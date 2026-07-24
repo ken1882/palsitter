@@ -956,6 +956,7 @@
   "startup.useAlternate": "Use another port",
   "startup.exit": "Exit",
   "startup.errorTitle": "Palsitter could not start",
+  "startup.starting": "Starting Palsitter…",
   "common.save": "Save",
   "common.reset": "Reset",
   "common.cancel": "Cancel",

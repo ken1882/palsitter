@@ -10,9 +10,11 @@ const DEFAULT_CONTROL_PORT = 22369;
 const SHUTDOWN_TIMEOUT_MS = 65_000;
 
 let mainWindow = null;
+let splashWindow = null;
 let tray = null;
 let backend = null;
 let backendExited = false;
+let backendReady = false;
 let backendRestarting = false;
 let exiting = false;
 let allowWindowClose = false;
@@ -48,17 +50,23 @@ function gitPath() {
 }
 
 function refreshPackagedRepository() {
-  if (!app.isPackaged) return;
-  spawnSync(gitPath(), [
-    '-c',
-    `safe.directory=${path.resolve(backendRoot())}`,
-    '-C',
-    backendRoot(),
-    'update-index',
-    '--refresh',
-  ], {
-    windowsHide: true,
-    stdio: 'ignore',
+  if (!app.isPackaged) return Promise.resolve();
+  // Run git asynchronously so the splash window keeps painting instead of
+  // freezing the main process while the packaged repository is refreshed.
+  return new Promise((resolve) => {
+    const child = spawn(gitPath(), [
+      '-c',
+      `safe.directory=${path.resolve(backendRoot())}`,
+      '-C',
+      backendRoot(),
+      'update-index',
+      '--refresh',
+    ], {
+      windowsHide: true,
+      stdio: 'ignore',
+    });
+    child.once('exit', () => resolve());
+    child.once('error', () => resolve());
   });
 }
 
@@ -228,6 +236,36 @@ function createTray() {
   tray.on('click', toggleWindow);
 }
 
+function createSplashWindow() {
+  splashWindow = new BrowserWindow({
+    width: 420,
+    height: 260,
+    frame: false,
+    resizable: false,
+    center: true,
+    show: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    skipTaskbar: true,
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  });
+  splashWindow.once('ready-to-show', () => {
+    if (splashWindow && !splashWindow.isDestroyed()) splashWindow.show();
+  });
+  splashWindow.loadFile(path.join(__dirname, 'assets', 'splash.html'), {
+    query: { message: startupText('starting') },
+  });
+}
+
+function closeSplash() {
+  if (splashWindow && !splashWindow.isDestroyed()) splashWindow.destroy();
+  splashWindow = null;
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1440,
@@ -247,7 +285,10 @@ function createWindow() {
       mainWindow.hide();
     }
   });
-  mainWindow.once('ready-to-show', showWindow);
+  mainWindow.once('ready-to-show', () => {
+    closeSplash();
+    showWindow();
+  });
 }
 
 async function requestExit() {
@@ -385,6 +426,7 @@ async function startBackend({ restarting = false } = {}) {
     stdio: ['ignore', 'ignore', 'ignore'],
   });
   backendExited = false;
+  backendReady = false;
   const child = backend;
   backend.on('exit', () => {
     if (backend !== child) return;
@@ -394,12 +436,25 @@ async function startBackend({ restarting = false } = {}) {
     if (backend !== child) return;
     if (code === 75 && !exiting && !backendRestarting) {
       void restartBackend();
+      return;
+    }
+    // The backend stopped on its own — typically the in-app "Shutdown
+    // Palsitter" action, which stops the web server directly. Nothing is
+    // left to supervise, so exit the desktop process immediately instead of
+    // lingering with a dead backend. Guard on backendReady so a crash during
+    // startup still surfaces the startup error dialog rather than exiting
+    // silently.
+    if (backendReady && !exiting && !backendRestarting) {
+      exiting = true;
+      exitFinished = true;
+      app.exit(0);
     }
   });
   backend.on('error', (error) => {
     if (!exiting) dialog.showErrorBox('Palsitter backend failed', String(error));
   });
   await waitForBackend(`http://${WEB_HOST}:${webPort}/`);
+  backendReady = true;
 }
 
 async function restartBackend() {
@@ -427,13 +482,15 @@ async function main() {
   }
   app.on('second-instance', showWindow);
   await app.whenReady();
-  refreshPackagedRepository();
+  createSplashWindow();
   createWindow();
   createTray();
   try {
+    await refreshPackagedRepository();
     await startBackend();
     await mainWindow.loadURL(`http://${WEB_HOST}:${webPort}/`);
   } catch (error) {
+    closeSplash();
     if (!(error instanceof StartupCancelledError)) {
       dialog.showErrorBox(
         startupText('errorTitle'),
@@ -452,6 +509,7 @@ app.on('before-quit', (event) => {
 });
 
 main().catch((error) => {
+  closeSplash();
   if (!(error instanceof StartupCancelledError)) {
     dialog.showErrorBox(startupText('errorTitle'), String(error.message || error));
   }

@@ -956,6 +956,7 @@
   "startup.useAlternate": "使用其他連接埠",
   "startup.exit": "離開",
   "startup.errorTitle": "Palsitter 無法啟動",
+  "startup.starting": "正在啟動 Palsitter…",
   "common.save": "儲存",
   "common.reset": "重設",
   "common.cancel": "取消",

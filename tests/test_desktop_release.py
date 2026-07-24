@@ -72,6 +72,28 @@ def test_startup_handles_port_conflicts_with_kill_and_alternate_port_prompts():
     assert "class StartupCancelledError" in source
 
 
+def test_electron_shows_a_splash_window_while_the_backend_starts():
+    source = (DESKTOP / "main.js").read_text(encoding="utf-8")
+
+    # A splash window must appear immediately after the app is ready, before
+    # the (potentially slow) repository refresh and backend startup, and it
+    # must be dismissed once the main window is ready to show.
+    assert (DESKTOP / "assets" / "splash.html").is_file()
+    assert "function createSplashWindow()" in source
+    assert "'assets', 'splash.html'" in source
+    assert "startupText('starting')" in source
+    create_splash = source.index("createSplashWindow();")
+    refresh = source.index("await refreshPackagedRepository();")
+    assert create_splash < refresh
+    assert "closeSplash();\n    showWindow();" in source
+
+    for language in ("en-US", "zh-TW", "ja-JP"):
+        catalog = json.loads(
+            (ROOT / "module" / "webui" / "locales" / f"{language}.json").read_text(encoding="utf-8")
+        )
+        assert catalog.get("startup.starting")
+
+
 def test_electron_reloads_after_the_shared_restart_exit():
     source = (DESKTOP / "main.js").read_text(encoding="utf-8")
 
@@ -87,6 +109,16 @@ def test_electron_shutdown_waits_for_backend_process_exit():
     source = (DESKTOP / "main.js").read_text(encoding="utf-8")
 
     assert "backend.once('exit', () =>" in source
+
+
+def test_electron_exits_when_backend_stops_on_its_own():
+    source = (DESKTOP / "main.js").read_text(encoding="utf-8")
+
+    # The in-app "Shutdown Palsitter" action stops the backend directly, so a
+    # clean backend exit (not a restart, not an Electron-initiated exit) must
+    # terminate the desktop process instead of lingering with a dead backend.
+    assert "if (backendReady && !exiting && !backendRestarting) {" in source
+    assert "app.exit(0);" in source
 
 
 def test_runtime_builder_exposes_backend_to_embedded_python():

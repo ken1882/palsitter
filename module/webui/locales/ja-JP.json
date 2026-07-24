@@ -956,6 +956,7 @@
   "startup.useAlternate": "別のポートを使用",
   "startup.exit": "終了",
   "startup.errorTitle": "Palsitter を起動できませんでした",
+  "startup.starting": "Palsitter を起動しています…",
   "common.save": "保存",
   "common.reset": "リセット",
   "common.cancel": "キャンセル",
