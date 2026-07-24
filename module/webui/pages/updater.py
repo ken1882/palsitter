@@ -63,25 +63,42 @@ def _git_commit(ref: str = "HEAD", count: int = 1) -> list[list[str]]:
 
 def _run_git(*args: str, timeout: float = 10) -> subprocess.CompletedProcess:
     env = os.environ.copy()
+    for key in tuple(env):
+        if key.startswith("GIT_CONFIG_") or key in {
+            "GIT_ASKPASS",
+            "SSH_ASKPASS",
+            "GIT_SSH_COMMAND",
+        }:
+            del env[key]
     env.update(
         {
-            # The updater only reads the public upstream repository. Do not let
-            # a user's global credential helper open an interactive login flow.
-            "GIT_CONFIG_COUNT": "1",
-            "GIT_CONFIG_KEY_0": "credential.helper",
-            "GIT_CONFIG_VALUE_0": "",
+            "GIT_CONFIG_NOSYSTEM": "1",
             "GIT_TERMINAL_PROMPT": "0",
             "GCM_INTERACTIVE": "Never",
         }
     )
+    git_args = [
+        os.getenv("PALSITTER_GIT", "git"),
+        "-c",
+        "credential.helper=",
+        "-c",
+        "http.extraHeader=",
+        "-c",
+        "http.https://github.com/.extraHeader=",
+        *args,
+    ]
     return subprocess.run(
-            [os.getenv("PALSITTER_GIT", "git"), *args],
-            cwd=Path(__file__).parent,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            env=env,
-        )
+        git_args,
+        cwd=Path(__file__).parent,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        env=env,
+    )
+
+
+def _git_diagnostic(result: subprocess.CompletedProcess) -> str:
+    return (result.stderr or "").strip() or f"Git exited with status {result.returncode}"
 
 def _render_updater_tables() -> None:
     with use_scope("updater_info", clear=True):
@@ -113,7 +130,7 @@ def _render_updater_tables() -> None:
             ],
         )
 
-def _render_updater_state(state) -> None:
+def _render_updater_state(state, *, error: str | None = None) -> None:
     clear("updater_loading")
     clear("updater_state")
     clear("updater_btn")
@@ -154,6 +171,8 @@ def _render_updater_state(state) -> None:
         _put_updater_loading("grow", "success")
         put_text(t("updater.finished"), scope="updater_state")
         _render_updater_tables()
+    if error:
+        put_text(t("updater.git_error", error=error), scope="updater_state")
 
 def _check_updater() -> None:
     from module.webui.shutdown import is_shutting_down
@@ -166,28 +185,39 @@ def _check_updater() -> None:
     context = page_context()
 
     def check() -> None:
+        diagnostic = None
         try:
-            _run_git("remote", "set-url", "origin", UPDATER_REMOTE)
-            fetched = _run_git("fetch", "origin", UPDATER_BRANCH, timeout=30)
-            result = _run_git(
-                "rev-list",
-                "--count",
-                f"HEAD..origin/{UPDATER_BRANCH}",
-            )
-            available = (
-                fetched.returncode == 0
-                and result.returncode == 0
-                and int((result.stdout or "0").strip() or "0") > 0
-            )
-        except (OSError, ValueError, subprocess.SubprocessError):
+            configured = _run_git("remote", "set-url", "origin", UPDATER_REMOTE)
+            if configured.returncode != 0:
+                diagnostic = _git_diagnostic(configured)
+                available = False
+            else:
+                fetched = _run_git("fetch", "origin", UPDATER_BRANCH, timeout=30)
+                if fetched.returncode != 0:
+                    diagnostic = _git_diagnostic(fetched)
+                    available = False
+                else:
+                    result = _run_git(
+                        "rev-list",
+                        "--count",
+                        f"HEAD..origin/{UPDATER_BRANCH}",
+                    )
+                    if result.returncode != 0:
+                        diagnostic = _git_diagnostic(result)
+                    available = (
+                        result.returncode == 0
+                        and int((result.stdout or "0").strip() or "0") > 0
+                    )
+        except (OSError, ValueError, subprocess.SubprocessError) as exc:
             available = False
+            diagnostic = str(exc)
         if stop_event.is_set():
             return
         try:
             run_if_current(
                 context,
                 lambda: (
-                    _render_updater_state(1 if available else 0),
+                    _render_updater_state(1 if available else 0, error=diagnostic),
                     _render_updater_tables(),
                 ),
             )
@@ -199,7 +229,7 @@ def _check_updater() -> None:
     thread.start()
 
 
-def _pull_update() -> bool:
+def _pull_update(*, on_error=None) -> bool:
     try:
         result = _run_git(
             "pull",
@@ -208,8 +238,12 @@ def _pull_update() -> bool:
             UPDATER_BRANCH,
             timeout=120,
         )
+        if result.returncode != 0 and on_error is not None:
+            on_error(_git_diagnostic(result))
         return result.returncode == 0
-    except (OSError, subprocess.SubprocessError):
+    except (OSError, subprocess.SubprocessError) as exc:
+        if on_error is not None:
+            on_error(str(exc))
         return False
 
 def _run_updater() -> None:
@@ -223,11 +257,18 @@ def _run_updater() -> None:
     context = page_context()
 
     def update() -> None:
-        succeeded = _pull_update()
+        diagnostics = []
+        succeeded = _pull_update(on_error=diagnostics.append)
         if not stop_event.is_set():
             try:
                 if not succeeded:
-                    run_if_current(context, lambda: _render_updater_state("failed"))
+                    run_if_current(
+                        context,
+                        lambda: _render_updater_state(
+                            "failed",
+                            error=diagnostics[0] if diagnostics else None,
+                        ),
+                    )
                     return
                 def finish_update() -> None:
                     _render_updater_state("finish")

@@ -34,9 +34,55 @@ try {
 }
 
 Copy-Item -LiteralPath (Join-Path $repositoryRoot '.git') -Destination $metadataPath -Recurse -Force
+& git -c safe.directory=* --git-dir $metadataPath remote set-url origin "https://github.com/ken1882/palsitter.git"
+if ($LASTEXITCODE -ne 0) {
+    throw "Could not set the packaged updater remote"
+}
 & git -c safe.directory=* --git-dir $metadataPath config core.autocrlf false
 if ($LASTEXITCODE -ne 0) {
     throw "Could not configure packaged Git metadata"
+}
+
+function Remove-PackagedGitConfigValue {
+    param([string]$Key)
+
+    & git -c safe.directory=* --git-dir $metadataPath config --local --unset-all $Key 2>$null
+    if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne 5) {
+        throw "Could not remove credential-related Git config: $Key"
+    }
+}
+
+foreach ($key in @(
+    "credential.helper",
+    "http.extraheader",
+    "http.https://github.com/.extraheader"
+)) {
+    Remove-PackagedGitConfigValue $key
+}
+
+$remoteNames = @(& git -c safe.directory=* --git-dir $metadataPath remote)
+if ($LASTEXITCODE -ne 0) {
+    throw "Could not inspect packaged Git remotes"
+}
+foreach ($remoteName in $remoteNames) {
+    $remoteUrls = @(& git -c safe.directory=* --git-dir $metadataPath remote get-url --all $remoteName)
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not inspect packaged Git remote: $remoteName"
+    }
+    foreach ($remoteUrl in $remoteUrls) {
+        if ($remoteUrl -match '^[a-z][a-z0-9+.-]*://[^/\s@]*@') {
+            throw "Packaged Git remote contains embedded credentials: $remoteName"
+        }
+    }
+}
+
+& git -c safe.directory=* --git-dir $metadataPath config --local --get-regexp '(^credential\.helper$|^http\..*\.extraheader$)' 2>$null
+if ($LASTEXITCODE -eq 0) {
+    throw "Packaged Git metadata still contains credential-related config"
+}
+$metadataConfig = Get-Content -LiteralPath (Join-Path $metadataPath 'config') -Raw
+if ($metadataConfig -match '(?i)authorization|bearer|extraheader|credential\.helper|token|[a-z][a-z0-9+.-]*://[^/\s@]*@') {
+    throw "Packaged Git metadata contains credential material"
 }
 & git -c safe.directory=* -c core.autocrlf=true --git-dir $metadataPath --work-tree $outputPath add --all
 if ($LASTEXITCODE -ne 0) {
