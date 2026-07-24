@@ -109,13 +109,13 @@ def diagnose_ini(path: str | Path) -> Optional[str]:
 def _managed_defaults(profile: PalworldProfile) -> dict[str, Any]:
     values = {field.key: field.default for field in WORLD_OPTION_FIELDS}
     values.update(dict(profile.world_settings or {}))
+    values.pop("EnableGameDataAPI", None)
     values.update(
         {
             "PublicPort": profile.game_port,
             "RESTAPIEnabled": True,
             "RESTAPIPort": profile.rest_port,
             "AdminPassword": profile.rest_password,
-            "EnableGameDataAPI": profile.launch_enable_gamedata_api,
         }
     )
     return values

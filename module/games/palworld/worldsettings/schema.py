@@ -190,15 +190,6 @@ WORLD_OPTION_FIELDS: list[WorldOptionField] = [
     _f("ChatPostLimitPerMinute", "server_admin_network", "int", 30, "chat_post_limit_per_minute"),
     _f("AutoSaveSpan", "server_admin_network", "int", 30, "auto_save_span"),
     _f("bIsUseBackupSaveData", "server_admin_network", "bool", True, "is_use_backup_save_data"),
-    _f(
-        "EnableGameDataAPI",
-        "server_admin_network",
-        "bool",
-        True,
-        "enable_gamedata_api",
-        persisted=False,
-    ),
-
     # -- logging --
     _f("LogFormatType", "logging", "enum", "Text", "log_format_type", ("Text", "Json")),
 ]

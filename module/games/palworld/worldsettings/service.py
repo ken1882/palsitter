@@ -48,6 +48,7 @@ def find_world_sav_path(profile: PalworldProfile) -> Optional[Path]:
 def _fill_defaults(values: Dict[str, Any]) -> Dict[str, Any]:
     filled = {field_.key: field_.default for field_ in WORLD_OPTION_FIELDS}
     filled.update(values)
+    filled.pop("EnableGameDataAPI", None)
     crossplay = filled.get("CrossplayPlatforms", [])
     if isinstance(crossplay, str):
         filled["CrossplayPlatforms"] = [
@@ -65,8 +66,10 @@ def _sav_values(values: Dict[str, Any]) -> Dict[str, Any]:
         key: value
         for key, value in values.items()
         if (
-            WORLD_OPTION_FIELDS_BY_KEY.get(key) is None
+            key != "EnableGameDataAPI"
+            and (WORLD_OPTION_FIELDS_BY_KEY.get(key) is None
             or WORLD_OPTION_FIELDS_BY_KEY[key].persisted
+            )
         )
     }
     crossplay = serialized.get("CrossplayPlatforms", [])
@@ -106,7 +109,6 @@ def migrate_world_option_sav_to_ini(profile: PalworldProfile) -> Optional[Path]:
 
     codec = WorldOptionSavCodec()
     values = _fill_defaults(extract_option_values(codec.read(sav_path)))
-    values["EnableGameDataAPI"] = profile.launch_enable_gamedata_api
     values["PublicPort"] = profile.game_port
     values["RESTAPIPort"] = profile.rest_port
     if profile.rest_password:
@@ -126,7 +128,6 @@ def load_world_settings(
     if not values and profile.world_settings:
         values = dict(profile.world_settings)
     filled = _fill_defaults(values)
-    filled["EnableGameDataAPI"] = profile.launch_enable_gamedata_api
     if not values:
         filled["PublicPort"] = profile.game_port
         filled["RESTAPIPort"] = profile.rest_port
@@ -144,7 +145,9 @@ def save_world_settings(
     sav_codec: Optional[WorldOptionSavCodec] = None,
 ) -> None:
     normalized = _fill_defaults(values)
-    profile.launch_enable_gamedata_api = bool(normalized["EnableGameDataAPI"])
+    if "EnableGameDataAPI" in values:
+        profile.launch_enable_gamedata_api = bool(values["EnableGameDataAPI"])
+    normalized.pop("EnableGameDataAPI", None)
     if fmt == "sav":
         (backup_service or BackupService(profile)).create_backup()
         codec = sav_codec or WorldOptionSavCodec()

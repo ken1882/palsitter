@@ -48,3 +48,50 @@ def test_automatic_attach_adopts_managed_runtime(monkeypatch):
             "adopt_managed": True,
         }
     ]
+
+
+def test_low_disk_warning_waits_for_confirmation(monkeypatch):
+    class FakeManager:
+        def __init__(self):
+            self.start_calls = 0
+
+        def start(self):
+            self.start_calls += 1
+
+    class FakePopup:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    manager = FakeManager()
+    buttons = []
+    monkeypatch.setattr(overview, "_manager", lambda name: manager)
+    monkeypatch.setattr(overview, "fixed_palserver_dir", lambda name: overview.Path("C:/server"))
+    monkeypatch.setattr(
+        overview,
+        "_available_disk_space",
+        lambda path: overview.LOW_DISK_SPACE_BYTES - 1,
+    )
+    monkeypatch.setattr(overview, "popup", lambda *args, **kwargs: FakePopup())
+    monkeypatch.setattr(overview, "close_popup", lambda: None)
+    monkeypatch.setattr(overview, "put_warning", lambda *args, **kwargs: None)
+    monkeypatch.setattr(overview, "put_row", lambda *args, **kwargs: None)
+    monkeypatch.setattr(overview, "_update_scheduler_controls", lambda name: None)
+    monkeypatch.setattr(overview, "_status_code", lambda name: 0)
+    monkeypatch.setattr(overview, "_set_status", lambda state: None)
+    monkeypatch.setattr(
+        overview,
+        "put_button",
+        lambda label, **kwargs: buttons.append((label, kwargs)) or buttons[-1],
+    )
+
+    overview._confirm_low_disk_start("default")
+
+    assert manager.start_calls == 0
+    continue_button = next(
+        button for button in buttons if button[0] == "Continue"
+    )
+    continue_button[1]["onclick"]()
+    assert manager.start_calls == 1

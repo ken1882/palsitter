@@ -9,8 +9,8 @@ Palsitter itself. `PublicPort` is synchronized to the internal launch/status gam
 `RESTAPIPort` and `AdminPassword` are synchronized to Palsitter's REST client, which
 always connects to `localhost` using the fixed account `admin`.
 
-The `Server Admin & Network` category also contains the launch-only `Enable Game Data
-API` switch. When enabled (the default), Palsitter appends `-enable-gamedata-api` to
+The launch-only `Enable Game Data API` switch lives on Server Settings below Worker
+threads. When enabled (the default), Palsitter appends `-enable-gamedata-api` to
 PalServer's launch command, enabling the REST `/game-data` world actor snapshot API.
 This switch is stored in the Palsitter profile and is not written into
 `PalWorldSettings.ini` or `WorldOption.sav`.

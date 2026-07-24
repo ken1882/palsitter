@@ -2,11 +2,23 @@ from __future__ import annotations
 import datetime as dt
 import json
 import re
+import shutil
 import threading
 from pathlib import Path
 from pywebio.exceptions import SessionException
 from pywebio.input import input
-from pywebio.output import clear, close_popup, popup, put_button, put_row, put_scope, put_text, toast, use_scope
+from pywebio.output import (
+    clear,
+    close_popup,
+    popup,
+    put_button,
+    put_row,
+    put_scope,
+    put_text,
+    put_warning,
+    toast,
+    use_scope,
+)
 from pywebio.pin import pin, put_input
 from pywebio.session import local, register_thread
 from module.games.palworld.backup import BackupService
@@ -117,6 +129,7 @@ CONSOLE_COMMANDS = (
 )
 
 LOG_TYPES = ("palsitter", "palserver", "steamcmd", "ue4ss")
+LOW_DISK_SPACE_BYTES = 10 * 1024 * 1024 * 1024 # 10GB
 _LOG_SOURCE_PATTERN = re.compile(
     r"^(?:\d{2}:\d{2}:\d{2} )?(?:\[[^\]\r\n]+\] )?(PalServer|SteamCMD|UE4SS):"
 )
@@ -308,10 +321,55 @@ def _toggle_server(name: str) -> None:
         manager.stop()
         toast(t("action.stop_requested", name=name))
     else:
-        manager.start()
-        toast(t("action.started", name=name))
+        _confirm_low_disk_start(name)
     _update_scheduler_controls(name)
     _set_status(_status_code(name))
+
+
+def _disk_usage_path(path: Path) -> Path:
+    candidate = path
+    while not candidate.exists() and candidate != candidate.parent:
+        candidate = candidate.parent
+    return candidate
+
+
+def _available_disk_space(path: Path) -> int | None:
+    try:
+        return shutil.disk_usage(_disk_usage_path(path)).free
+    except OSError:
+        return None
+
+
+def _start_server(name: str) -> None:
+    _manager(name).start()
+    toast(t("action.started", name=name))
+
+
+def _continue_low_disk_start(name: str) -> None:
+    close_popup()
+    _start_server(name)
+    _update_scheduler_controls(name)
+    _set_status(_status_code(name))
+
+
+def _confirm_low_disk_start(name: str) -> None:
+    available = _available_disk_space(fixed_palserver_dir(name))
+    if available is None or available >= LOW_DISK_SPACE_BYTES:
+        _start_server(name)
+        return
+    with popup(t("scheduler.low_disk_title"), closable=True):
+        put_warning(t("scheduler.low_disk_warning"))
+        put_row(
+            [
+                put_button(t("common.cancel"), onclick=close_popup, color="secondary"),
+                put_button(
+                    t("scheduler.low_disk_continue"),
+                    onclick=lambda: _continue_low_disk_start(name),
+                    color="danger",
+                ),
+            ],
+            size="auto auto",
+        )
 
 def _render_metrics(name: str, row: list[str] | None = None):
     update_info = _manager(name).update_info

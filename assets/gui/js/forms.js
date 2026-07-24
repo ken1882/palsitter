@@ -22,10 +22,11 @@
             const form = {scopeId, dirty: false, controller};
             dirtyForm?.controller?.abort();
             dirtyForm = form;
-            for (const element of scope.querySelectorAll("input, textarea, select")) {
-                element.addEventListener("input", () => mark(form), {signal: controller.signal});
-                element.addEventListener("change", () => mark(form), {signal: controller.signal});
-            }
+            const markIfControl = event => {
+                if (event.target.matches?.("input, textarea, select")) mark(form);
+            };
+            scope.addEventListener("input", markIfControl, {signal: controller.signal});
+            scope.addEventListener("change", markIfControl, {signal: controller.signal});
         },
         mark() {
             if (dirtyForm) mark(dirtyForm);

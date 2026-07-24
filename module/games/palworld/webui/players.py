@@ -39,6 +39,20 @@ def _player_action_button(name: str, userid: str, action: str):
     )
 
 
+def _format_player_id(userid: str, *, hidden: bool) -> str:
+    parts = userid.split("_")
+    stem = "" if len(parts) == 1 else parts[0]
+    value = "****" if hidden else parts[-1]
+    return f"{stem}_{value}" if stem else value
+
+
+def _player_id_values(userid: str) -> dict[str, str]:
+    return {
+        "userid_masked": _format_player_id(userid, hidden=True),
+        "userid_visible": _format_player_id(userid, hidden=False),
+    }
+
+
 def _player_name(name: str, userid: str) -> str:
     snapshot = get_pal_rest_cache(name).snapshot()
     rows = snapshot.players.get("players", []) if snapshot.players else []
@@ -169,7 +183,15 @@ def _put_compact_player_row(name: str, player: dict) -> None:
                     [
                         put_asset_widget(
                             "palworld.player_compact_identity",
-                            {"name": f"{player_name} (Lv: {level})", "userid": userid},
+                            {
+                                "name": f"{player_name} (Lv: {level})",
+                                "userid": userid,
+                                **_player_id_values(userid),
+                                "show": t("players.reveal_id"),
+                                "hide": t("players.hide_id"),
+                                "icon": put_asset_icon("eye"),
+                                "hidden_icon": put_asset_icon("eye-off"),
+                            },
                         ),
                         _player_action_button(name, userid, "kick"),
                         _player_action_button(name, userid, "ban"),
@@ -408,10 +430,13 @@ def _player_details(player: dict) -> object:
         {
             **values,
             "userid": userid,
+            **_player_id_values(userid),
             "online": bool(player.get("online", True)),
             "show": t("players.reveal_id"),
             "hide": t("players.hide_id"),
             "copy": t("players.copy_id"),
+            "icon": put_asset_icon("eye"),
+            "hidden_icon": put_asset_icon("eye-off"),
         },
     )
 

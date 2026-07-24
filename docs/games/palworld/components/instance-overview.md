@@ -21,6 +21,8 @@ adding lifecycle controls to those pages.
 - Overview's `Start` action updates or installs PalServer before launch. It applies the
   `Validate server files` option from Server Settings. The Operations card does not expose
   separate Check update, Update, Validate/Repair, Retry, or operation-progress controls.
+- When the disk containing the PalServer installation has less than 10 GB available,
+  clicking `Start` shows a warning and requires explicit confirmation before starting.
 - On Windows, Start first launches or connects to the instance's detached agent and then
   sends its explicit `start` command. Agent startup alone never launches PalServer. After
   GUI replacement, restore uses only `connect_existing` and `ping`/`status`; it does not
@@ -65,6 +67,7 @@ adding lifecycle controls to those pages.
   separate Auto Restart page.
 - The compact Players card reads the shared REST cache every three seconds, retains the
   last successful online roster, and links to the dedicated [Players page](./instance-players.md). It
+  displays each player ID as `stem_****` by default with a borderless inline eye toggle, and
   contains only vertically centered boot-icon Kick and prohibited-circle-icon Ban actions,
   each with a localized hover/focus tooltip, and has no Unban control. Existing player
   rows and action nodes are updated in place by stable user id; only joins and departures
@@ -163,8 +166,9 @@ adding lifecycle controls to those pages.
 **Tests:** `tests/test_gui_playwright.py` proves the persistent action scope and obsolete
 scheduler operations are absent, verifies the Start/Save/Backup action row and disabled
 Save state, Start update/validation, Stopping status, shutdown payload, status recovery,
-readiness gating, KILL only after owned graceful Stop, external attach/Detach, the live
-PalServer and UE4SS Overview logs, and responsive layout. Lifecycle tests fake SteamCMD,
+readiness gating, the low-disk Start confirmation, KILL only after owned graceful Stop,
+external attach/Detach, the live PalServer and UE4SS Overview logs, and responsive layout.
+Lifecycle tests fake SteamCMD,
 PalServer, process state, REST, and network probes.
 Menu assertions follow the current ordered menu, including `Tools`, and asynchronous log
 assertions use a settled state rather than the transient initial placeholder.

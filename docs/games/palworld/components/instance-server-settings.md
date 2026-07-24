@@ -41,14 +41,20 @@ embeds the profile form directly in the content area (no modal).
   keys and describing the behavior implemented by the code path for that field.
 - The Launch Options section has typed controls for `-useperfthreads`,
   `-NoAsyncLoadingThread`, `-UseMultithreadForDS`, `-NumberOfWorkerThreadsServer`,
-  `-publiclobby`, and `-logformat`, plus an Advanced extra-arguments list. New profiles
+  `-enable-gamedata-api`, `-publiclobby`, and `-logformat`, plus an Advanced extra-
+  arguments list. The `Enable Game Data API` control is below `Worker threads`. The extra
+  arguments use one text input per argument, with add and remove icon buttons. New profiles
   enable `-useperfthreads` and `-UseMultithreadForDS`, leave `-NoAsyncLoadingThread`
   disabled, and set `-NumberOfWorkerThreadsServer` to the detected logical CPU count
   minus one (minimum 1). Existing profiles retain their saved values. Tooltips describe
   these defaults and link to the official launch-argument guidance.
-- Advanced arguments preserve order and casing for unrecognized values. Save rejects a
-  recognized option repeated there, case-insensitively, so one setting cannot produce
-  conflicting arguments.
+- Enabled typed launch options are prepended to the extra-arguments list as disabled,
+  read-only rows. Their input and remove button show `Controlled by other options` on
+  hover. The controlled rows update immediately when their source toggle changes or the
+  worker-thread number is edited. Advanced arguments preserve order and casing for
+  unrecognized values. Save rejects a recognized option repeated there, case-insensitively,
+  so one setting cannot produce conflicting arguments. The only editable row has no remove
+  button until a second row is added.
 - Schema-v2 migration parses recognized legacy executable arguments into typed fields and
   retains all unrecognized arguments in their original order. Migration is atomic and
   does not change an existing profile's effective command line.

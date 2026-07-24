@@ -5,6 +5,7 @@
   const api = palworld.players = palworld.players || {};
   let compactTimer = null;
   let detailTimer = null;
+  let compactController = null;
   let detailController = null;
   let compactStartTimer = null;
   let detailStartTimer = null;
@@ -40,8 +41,33 @@
     else detailStartTimer = starter;
   };
 
+  const bindPlayerIdControls = (scopeName, controller) => {
+    document.getElementById(`pywebio-scope-${scopeName}`)?.addEventListener("click", event => {
+      const toggle = event.target.closest("[data-player-id-toggle]");
+      if (toggle) {
+        const row = toggle.closest("[data-player-id-row]");
+        const value = row?.querySelector("[data-player-id-value]");
+        if (!value) return;
+        const visible = value.dataset.playerIdVisible === "true";
+        value.dataset.playerIdVisible = String(!visible);
+        value.textContent = visible
+          ? value.dataset.playerIdMaskedValue
+          : value.dataset.playerIdVisibleValue;
+        toggle.setAttribute("aria-label", visible ? toggle.dataset.show : toggle.dataset.hide);
+        row.querySelector('[data-player-id-icon="show"]').hidden = !visible;
+        row.querySelector('[data-player-id-icon="hide"]').hidden = visible;
+        return;
+      }
+      const copy = event.target.closest("[data-player-id-copy]");
+      if (copy) navigator.clipboard.writeText(copy.parentElement.querySelector("[data-userid]").dataset.userid);
+    }, { signal: controller.signal });
+  };
+
   api.mountCompact = ({ interval, generation }) => {
     if (generation != null && !root.Palsitter.page.isCurrent(generation)) return;
+    compactController?.abort();
+    compactController = new AbortController();
+    bindPlayerIdControls("players_panel", compactController);
     startTimer("compact", "players_auto_refresh", interval || 3000);
   };
   api.destroyCompact = function () {
@@ -49,24 +75,15 @@
     if (compactStartTimer) clearTimeout(compactStartTimer);
     compactTimer = null;
     compactStartTimer = null;
+    compactController?.abort();
+    compactController = null;
   };
   api.mountDetail = function ({ interval, generation }) {
     if (generation != null && !root.Palsitter.page.isCurrent(generation)) return;
     startTimer("detail", "players_detail_auto_refresh", interval || 1000);
     detailController?.abort();
     detailController = new AbortController();
-    document.getElementById("pywebio-scope-players_detail_panel")?.addEventListener("click", event => {
-      const reveal = event.target.closest("[data-player-id-reveal]");
-      if (reveal) {
-        const value = reveal.parentElement.querySelector("[data-userid]");
-        const hidden = value.textContent === "••••";
-        value.textContent = hidden ? value.dataset.userid : "••••";
-        reveal.textContent = hidden ? reveal.dataset.hide : reveal.dataset.show;
-        return;
-      }
-      const copy = event.target.closest("[data-player-id-copy]");
-      if (copy) navigator.clipboard.writeText(copy.parentElement.querySelector("[data-userid]").dataset.userid);
-    }, { signal: detailController.signal });
+    bindPlayerIdControls("players_detail_panel", detailController);
   };
   api.destroyDetail = function () {
     if (detailTimer) clearInterval(detailTimer);

@@ -75,6 +75,14 @@
       state.query = String(event.target.value || "").trim().toLocaleLowerCase();
       apply();
     }, { signal });
+    form.addEventListener("input", event => {
+      if (event.target.name !== "settings_launch_worker_threads_server") return;
+      const value = String(event.target.value || "").trim();
+      form.querySelectorAll('input[name^="settings_extra_args_controlled_"]').forEach(control => {
+        if (!control.value.startsWith("-NumberOfWorkerThreadsServer=")) return;
+        control.value = `-NumberOfWorkerThreadsServer=${value}`;
+      });
+    }, { signal });
     apply();
   };
   server.destroy = () => {
@@ -176,6 +184,8 @@
         const show = input.type === "password";
         input.type = show ? "text" : "password";
         button.setAttribute("aria-label", show ? hideLabel : showLabel);
+        button.querySelector('[data-password-icon="show"]').hidden = show;
+        button.querySelector('[data-password-icon="hide"]').hidden = !show;
       });
     });
   };

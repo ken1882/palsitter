@@ -55,7 +55,6 @@ def _show_field_error(*args, **kwargs):
     return implementation(*args, **kwargs)
 
 _WORLD_PASSWORD_FIELDS = {"ServerPassword", "AdminPassword"}
-
 _WORLD_INPUT_TYPE_BY_FTYPE = {"int": "number", "float": "float", "string": "text"}
 
 def render(name: str) -> None:
@@ -220,12 +219,12 @@ def _toggle_world_field(key: str) -> None:
 def _world_password_input(key: str, value):
     pin_name = _world_pin(key)
     button = put_asset_widget(
-        "shared.icon_button",
+        "palworld.password_eye_button",
         {
-            "color": "secondary",
-            "classes": "password-eye",
             "label": "Show password",
+            "hide_label": "Hide password",
             "icon": put_asset_icon("eye"),
+            "hidden_icon": put_asset_icon("eye-off"),
         },
     )
     output = put_row(
@@ -325,7 +324,11 @@ def _collect_world_values() -> dict:
     return values
 
 def _validate_world_settings_form(values: dict) -> bool:
-    pin_names = [_world_pin(field_.key) for field_ in WORLD_OPTION_FIELDS if field_.ftype != "bool"]
+    pin_names = [
+        _world_pin(field_.key)
+        for field_ in WORLD_OPTION_FIELDS
+        if field_.ftype != "bool"
+    ]
     _clear_field_errors(pin_names)
     valid = True
     for field_ in WORLD_OPTION_FIELDS:

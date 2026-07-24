@@ -832,17 +832,19 @@ def test_side_add_server_is_overlay_modal(tmp_path, monkeypatch):
         page.locator("#pywebio-scope-world_toggle_RESTAPIEnabled").get_by_role(
             "button", name="On", exact=True
         ).wait_for(timeout=5000)
-        page.locator("#pywebio-scope-world_toggle_EnableGameDataAPI").get_by_role(
-            "button", name="On", exact=True
-        ).wait_for(timeout=5000)
+        assert page.locator("#pywebio-scope-world_toggle_EnableGameDataAPI").count() == 0
 
         eye = admin_password.locator("xpath=ancestor::div[contains(@style, 'grid-auto-flow')]").locator(
             "button.password-eye"
         )
         assert eye.get_attribute("aria-label") == "Show password"
+        assert eye.locator('[data-password-icon="show"] svg:visible').count() == 1
+        assert eye.locator('[data-password-icon="hide"] svg:visible').count() == 0
         eye.click()
         assert admin_password.get_attribute("type") == "text"
         assert eye.get_attribute("aria-label") == "Hide password"
+        assert eye.locator('[data-password-icon="show"] svg:visible').count() == 0
+        assert eye.locator('[data-password-icon="hide"] svg:visible').count() == 1
         eye.click()
         assert admin_password.get_attribute("type") == "password"
 
@@ -1314,6 +1316,46 @@ def test_scheduler_stops_attached_external_server_and_refreshes_controls(tmp_pat
             paths = [path for path, _ in calls]
             assert "/v1/api/shutdown" in paths
             assert "/v1/api/stop" in paths
+
+
+@pytest.mark.playwright
+def test_start_warns_before_running_with_low_disk_space(tmp_path, monkeypatch):
+    _prepare_fixed_palserver_python(tmp_path)
+    _prepare_fixed_steamcmd(tmp_path)
+    with _gui_page(
+        tmp_path,
+        monkeypatch,
+        profile_overrides={
+            "launch_enable_gamedata_api": False,
+            "executable_args": ["-c", "import time; time.sleep(60)"],
+            "shutdown_wait_seconds": 0,
+        },
+        extra_env={"PALSITTER_FAKE_STEAMCMD_CALLS": str(tmp_path / "steamcmd.txt")},
+    ) as (page, _):
+        page.locator("#pywebio-scope-aside").get_by_text("default", exact=True).click()
+        scheduler = page.locator("#pywebio-scope-scheduler_panel")
+        start = scheduler.get_by_role("button", name="Start", exact=True)
+        start.wait_for(timeout=5000)
+        start.click()
+
+        low_disk = shutil.disk_usage(tmp_path).free < 10 * 1024 * 1024 * 1024
+        if low_disk:
+            modal = page.locator(".modal.show")
+            modal.get_by_text(
+                "Palsitter is running on a disk with available space below 10 GB. "
+                "Errors and data loss might occur. Continue?",
+                exact=True,
+            ).wait_for(timeout=5000)
+            modal.get_by_role("button", name="Cancel", exact=True).click()
+            start.wait_for(timeout=5000)
+            start.click()
+            modal = page.locator(".modal.show")
+            modal.get_by_role("button", name="Continue", exact=True).click()
+
+        stop = scheduler.get_by_role("button", name="Stop", exact=True)
+        stop.wait_for(timeout=10000)
+        stop.click()
+        scheduler.get_by_role("button", name="Start", exact=True).wait_for(timeout=10000)
 
 
 @pytest.mark.playwright
@@ -3196,7 +3238,15 @@ def test_players_panel_lists_roster_and_manages_file_backed_bans(tmp_path, monke
             page.locator(".log-box").get_by_text(
                 '{"version": "v1.2.3"}', exact=False
             ).wait_for(timeout=5000)
-            players_panel.get_by_text("uid: steam_1", exact=True).wait_for(timeout=15000)
+            compact_id = compact_row.locator(".player-uid")
+            compact_id.get_by_text("steam_****", exact=True).wait_for(timeout=15000)
+            compact_toggle = compact_row.get_by_role("button", name="Reveal ID", exact=True)
+            assert compact_toggle.locator('svg:visible').count() == 1
+            assert compact_toggle.evaluate("button => getComputedStyle(button).borderStyle") == "none"
+            assert compact_toggle.evaluate("button => getComputedStyle(button).backgroundColor") == "rgba(0, 0, 0, 0)"
+            compact_toggle.click()
+            assert compact_id.inner_text() == "steam_1"
+            assert compact_row.get_by_role("button", name="Hide ID", exact=True).count() == 1
             assert players_panel.get_by_role("button", name="Refresh", exact=True).count() == 0
             assert page.locator("#pywebio-scope-players_list").evaluate(
                 "element => getComputedStyle(element).overflowY"
@@ -3748,6 +3798,7 @@ def test_world_settings_menu_position_and_field_types_save_to_ini(tmp_path, monk
         page.locator("#pywebio-scope-aside").get_by_text("default").click()
         page.locator("#pywebio-scope-menu").get_by_text("World Settings").click()
         page.locator("#pywebio-scope-world_settings_form").wait_for(timeout=5000)
+        assert page.locator("#pywebio-scope-world_toggle_EnableGameDataAPI").count() == 0
 
         assert page.locator(".modal.show").count() == 0
         assert page.locator("#pywebio-scope-menu .menu-button").all_inner_texts() == [
@@ -3778,9 +3829,6 @@ def test_world_settings_menu_position_and_field_types_save_to_ini(tmp_path, monk
         page.locator('input[name="world_ServerDescription"]').fill("Hello World")
         xbox = page.get_by_label("Xbox", exact=True)
         xbox.uncheck()
-        game_data_api = page.locator("#pywebio-scope-world_toggle_EnableGameDataAPI")
-        game_data_api.get_by_role("button", name="On", exact=True).click()
-        game_data_api.get_by_role("button", name="Off", exact=True).wait_for(timeout=2000)
 
         page.locator("#pywebio-scope-world_settings_actions").get_by_role(
             "button", name="Save", exact=True
@@ -3799,32 +3847,29 @@ def test_world_settings_menu_position_and_field_types_save_to_ini(tmp_path, monk
         assert "EnableGameDataAPI" not in saved
         profile_copy = load_profile("default")
         assert profile_copy.world_settings["CrossplayPlatforms"] == ["Steam", "PS5", "Mac"]
-        assert profile_copy.launch_enable_gamedata_api is False
-        assert "-enable-gamedata-api" not in profile_copy.build_executable_args()
+        assert profile_copy.launch_enable_gamedata_api is True
+        assert "-enable-gamedata-api" in profile_copy.build_executable_args()
 
 
 @pytest.mark.playwright
-def test_world_settings_game_data_api_toggle_controls_launch_argument(tmp_path, monkeypatch):
+def test_server_settings_game_data_api_toggle_controls_launch_argument(tmp_path, monkeypatch):
     with _gui_page(tmp_path, monkeypatch) as (page, config_dir):
         page.locator("#pywebio-scope-aside").get_by_text("default", exact=True).click()
-        page.locator("#pywebio-scope-menu").get_by_text("World Settings", exact=True).click()
-        page.locator("#pywebio-scope-world_settings_form").wait_for(timeout=5000)
+        page.locator("#pywebio-scope-menu").get_by_text("Server Settings", exact=True).click()
+        page.locator("#pywebio-scope-settings_form").wait_for(timeout=5000)
 
-        toggle = page.locator("#pywebio-scope-world_toggle_EnableGameDataAPI")
+        toggle = page.locator("#pywebio-scope-settings_toggle_launch_enable_gamedata_api")
         toggle.get_by_role("button", name="On", exact=True).click()
         toggle.get_by_role("button", name="Off", exact=True).wait_for(timeout=2000)
-        page.locator("#pywebio-scope-world_settings_actions").get_by_role(
+        page.locator("#pywebio-scope-settings_actions").get_by_role(
             "button", name="Save", exact=True
         ).click()
-        page.get_by_text("World settings saved", exact=True).wait_for(timeout=5000)
+        page.get_by_text("Settings saved", exact=True).wait_for(timeout=5000)
 
         monkeypatch.setenv("PALSITTER_CONFIG_DIR", str(config_dir))
         saved = load_profile("default")
         assert saved.launch_enable_gamedata_api is False
         assert "-enable-gamedata-api" not in saved.build_executable_args()
-        assert "EnableGameDataAPI" not in read_ini_option_settings(
-            resolve_ini_path(saved)
-        )
 
 
 @pytest.mark.playwright
@@ -3949,7 +3994,7 @@ def test_external_overview_operations_and_players_page(tmp_path, monkeypatch):
             detail.get_by_text("Buildings 7", exact=False).wait_for(timeout=5000)
             assert detail.get_by_text("203.0.113.5", exact=False).count() == 0
             masked = detail.locator(".player-userid-value")
-            assert masked.inner_text() == "••••"
+            assert masked.inner_text() == "steam_****"
             reveal = detail.get_by_role("button", name="Reveal ID", exact=True)
             copy = detail.get_by_role("button", name="Copy ID", exact=True)
             reveal_before = reveal.bounding_box()
@@ -3962,6 +4007,7 @@ def test_external_overview_operations_and_players_page(tmp_path, monkeypatch):
             assert copy_before is not None and copy_after is not None
             assert abs(reveal_before["x"] - reveal_after["x"]) < 1
             assert abs(copy_before["x"] - copy_after["x"]) < 1
+            assert reveal_after["x"] < copy_after["x"]
             assert detail.get_by_role("button", name="Copy ID", exact=True).count() == 1
             assert detail.get_by_role("button", name="Broadcast", exact=True).count() == 0
             assert detail.locator('input[name="players_broadcast_message"]').count() == 0
@@ -4023,7 +4069,15 @@ def test_players_poll_retains_stale_roster_on_api_failure(tmp_path, monkeypatch)
 
 @pytest.mark.playwright
 def test_world_filters_structured_launch_and_auto_restart_settings(tmp_path, monkeypatch):
-    with _gui_page(tmp_path, monkeypatch) as (page, config_dir):
+    with _gui_page(
+        tmp_path,
+        monkeypatch,
+        profile_overrides={
+            "launch_useperfthreads": True,
+            "launch_use_multithread_for_ds": True,
+            "launch_worker_threads_server": 8,
+        },
+    ) as (page, config_dir):
         page.locator("#pywebio-scope-aside").get_by_text("default", exact=True).click()
         page.locator("#pywebio-scope-menu").get_by_text("World Settings", exact=True).click()
         page.locator("#pywebio-scope-world_settings_form").wait_for(timeout=5000)
@@ -4063,11 +4117,66 @@ def test_world_filters_structured_launch_and_auto_restart_settings(tmp_path, mon
         assert page.evaluate(
             "document.querySelector('input[name=settings_launch_worker_threads_server]') === window.__settingsWorkerNode"
         )
-        page.locator("#pywebio-scope-settings_toggle_launch_useperfthreads").get_by_role(
-            "button", name="Off", exact=True
-        ).click()
+        worker_box = worker.bounding_box()
+        gamedata_box = page.locator(
+            "#pywebio-scope-settings_toggle_launch_enable_gamedata_api"
+        ).bounding_box()
+        assert worker_box is not None and gamedata_box is not None
+        assert gamedata_box["y"] > worker_box["y"]
         worker.fill("4")
-        page.locator('textarea[name="settings_extra_args"]').fill("-UsePerfThreads")
+        argument_list = page.locator("#pywebio-scope-settings_extra_args_argument_list")
+        controlled_inputs = argument_list.locator(
+            'input[name^="settings_extra_args_controlled_"]'
+        )
+        assert controlled_inputs.count() >= 3
+        assert controlled_inputs.evaluate_all("elements => elements.every(element => element.disabled)")
+        assert argument_list.locator(
+            'button[aria-label="Remove argument"][disabled]'
+        ).count() == controlled_inputs.count()
+        assert argument_list.locator(
+            'button[aria-label="Remove argument"][disabled]'
+        ).first.get_attribute("title") == "Controlled by other options"
+        assert argument_list.locator(
+            ".argument-controlled-input"
+        ).first.get_attribute("title") == "Controlled by other options"
+        assert argument_list.locator(
+            'button[aria-label="Remove argument"]:not([disabled])'
+        ).count() == 0
+        page.wait_for_function(
+            "() => Array.from(document.querySelectorAll('#pywebio-scope-settings_extra_args_argument_list input[name^=\\\"settings_extra_args_controlled_\\\"]')).some(input => input.value === '-NumberOfWorkerThreadsServer=4')",
+            timeout=3000,
+        )
+        perf_toggle = page.locator(
+            "#pywebio-scope-settings_toggle_launch_useperfthreads"
+        )
+        perf_toggle.get_by_role("button", name="On", exact=True).click()
+        page.wait_for_function(
+            "() => document.querySelectorAll('#pywebio-scope-settings_extra_args_argument_list input[name^=\\\"settings_extra_args_controlled_\\\"]').length === 3",
+            timeout=3000,
+        )
+        perf_toggle.get_by_role("button", name="Off", exact=True).click()
+        page.wait_for_function(
+            "() => document.querySelectorAll('#pywebio-scope-settings_extra_args_argument_list input[name^=\\\"settings_extra_args_controlled_\\\"]').length >= 4",
+            timeout=3000,
+        )
+
+        editable_inputs = argument_list.locator('input[name^="settings_extra_args_"]:not([name*="controlled"])')
+        assert editable_inputs.count() == 1
+        editable_inputs.first.fill("-UsePerfThreads")
+        argument_list.get_by_role("button", name="Add argument", exact=True).click()
+        editable_inputs = argument_list.locator('input[name^="settings_extra_args_"]:not([name*="controlled"])')
+        assert argument_list.locator(
+            'button[aria-label="Remove argument"]:not([disabled])'
+        ).count() == 2
+        editable_inputs.nth(1).fill("-custom=value")
+        argument_list.locator('button[aria-label="Remove argument"]:not([disabled])').nth(1).click()
+        page.wait_for_function(
+            "() => document.querySelectorAll('#pywebio-scope-settings_extra_args_argument_list input[name^=\\\"settings_extra_args_\\\"]:not([name*=\\\"controlled\\\"])').length === 1",
+            timeout=3000,
+        )
+        editable_inputs = argument_list.locator('input[name^="settings_extra_args_"]:not([name*="controlled"])')
+        assert editable_inputs.count() == 1
+        assert editable_inputs.first.input_value() == "-UsePerfThreads"
         assert page.locator("#pywebio-scope-instance_actions").count() == 0
         assert page.locator("#pywebio-scope-settings_actions").is_visible()
         page.locator("#pywebio-scope-settings_actions").get_by_role(
@@ -4077,7 +4186,7 @@ def test_world_filters_structured_launch_and_auto_restart_settings(tmp_path, mon
             "Advanced arguments cannot duplicate structured launch option", exact=False
         ).wait_for(timeout=5000)
 
-        page.locator('textarea[name="settings_extra_args"]').fill("-custom=value")
+        editable_inputs.first.fill("-custom=value")
         page.locator("#pywebio-scope-settings_actions").get_by_role(
             "button", name="Save", exact=True
         ).click()

@@ -11,6 +11,7 @@ from .schema import WorldOptionField, WORLD_OPTION_FIELDS, WORLD_OPTION_FIELDS_B
 
 SECTION = "[/Script/Pal.PalGameWorldSettings]"
 OPTION_PREFIX = "OptionSettings="
+LAUNCH_ONLY_OPTION_KEYS = frozenset({"EnableGameDataAPI"})
 
 
 def coerce_integer(value: Any) -> int:
@@ -154,6 +155,7 @@ def read_ini_option_settings(path: Path) -> Dict[str, Any]:
             return {
                 key: coerce_ini_value(WORLD_OPTION_FIELDS_BY_KEY.get(key), raw_value)
                 for key, raw_value in pairs.items()
+                if key not in LAUNCH_ONLY_OPTION_KEYS
             }
     return {}
 
@@ -162,8 +164,10 @@ def write_ini_option_settings(path: Path, values: Dict[str, Any]) -> None:
     values = {
         key: value
         for key, value in values.items()
-        if (WORLD_OPTION_FIELDS_BY_KEY.get(key) is None
+        if (key not in LAUNCH_ONLY_OPTION_KEYS
+            and (WORLD_OPTION_FIELDS_BY_KEY.get(key) is None
             or WORLD_OPTION_FIELDS_BY_KEY[key].persisted)
+        )
     }
     existing_raw: Dict[str, str] = {}
     lines: Optional[list[str]] = None
@@ -184,8 +188,10 @@ def write_ini_option_settings(path: Path, values: Dict[str, Any]) -> None:
     merged_keys = [
         key
         for key in existing_raw
-        if (WORLD_OPTION_FIELDS_BY_KEY.get(key) is None
+        if (key not in LAUNCH_ONLY_OPTION_KEYS
+            and (WORLD_OPTION_FIELDS_BY_KEY.get(key) is None
             or WORLD_OPTION_FIELDS_BY_KEY[key].persisted)
+        )
     ]
     for key in values:
         if key not in existing_raw:

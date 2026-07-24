@@ -1,7 +1,10 @@
 <div class="player-name" data-player-field="name">{{name}}</div>
 <div class="player-detail-meta">{{#online}}<span data-player-field="ping">{{ping}}</span> · {{/online}}<span data-player-field="coordinates">{{coordinates}}</span><span data-player-field="buildings">{{buildings}}</span></div>
-<div class="player-userid-row">
-  <span class="player-userid-value" data-userid="{{userid}}">••••</span>
-  <button type="button" class="btn btn-sm btn-secondary player-id-reveal" data-player-id-reveal data-show="{{show}}" data-hide="{{hide}}">{{show}}</button>
+<div class="player-userid-row" data-player-id-row>
+  <span class="player-userid-value" data-userid="{{userid}}" data-player-id-value data-player-id-masked-value="{{userid_masked}}" data-player-id-visible-value="{{userid_visible}}">{{userid_masked}}</span>
+  <button type="button" class="player-id-toggle" data-player-id-toggle aria-label="{{show}}" data-show="{{show}}" data-hide="{{hide}}">
+    <span data-player-id-icon="show">{{#icon}}{{& pywebio_output_parse}}{{/icon}}</span>
+    <span data-player-id-icon="hide" hidden>{{#hidden_icon}}{{& pywebio_output_parse}}{{/hidden_icon}}</span>
+  </button>
   <button type="button" class="btn btn-sm btn-secondary" data-player-id-copy>{{copy}}</button>
 </div>

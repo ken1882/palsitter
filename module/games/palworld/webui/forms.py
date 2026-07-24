@@ -15,8 +15,24 @@ def _clear_field_errors(*args, **kwargs):
     from module.webui.forms import _clear_field_errors as implementation
     return implementation(*args, **kwargs)
 
+def _clear_field_error(*args, **kwargs):
+    from module.webui.forms import _clear_field_error as implementation
+    return implementation(*args, **kwargs)
+
 def _field_error_scope(*args, **kwargs):
     from module.webui.forms import _field_error_scope as implementation
+    return implementation(*args, **kwargs)
+
+def _argument_list_values(*args, **kwargs):
+    from module.webui.forms import argument_list_values as implementation
+    return implementation(*args, **kwargs)
+
+def _put_argument_list(*args, **kwargs):
+    from module.webui.forms import put_argument_list as implementation
+    return implementation(*args, **kwargs)
+
+def _render_argument_list(*args, **kwargs):
+    from module.webui.forms import render_argument_list as implementation
     return implementation(*args, **kwargs)
 
 def _mark_dirty_form(*args, **kwargs):
@@ -147,6 +163,9 @@ def _toggle_setting(key: str) -> None:
             _render_settings_toggle(dependent)
     for field in SETTINGS_FIELD_PARENT:
         _render_dependent_field(field)
+    refresh = getattr(local, "settings_argument_list_refresh", None)
+    if refresh is not None:
+        refresh()
 
 
 def _setting_enabled(key: str) -> bool:

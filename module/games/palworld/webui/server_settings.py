@@ -56,6 +56,26 @@ def _settings_textarea(*args, **kwargs):
     from module.games.palworld.webui.forms import _settings_textarea as implementation
     return implementation(*args, **kwargs)
 
+def _argument_list_values(*args, **kwargs):
+    from module.games.palworld.webui.forms import _argument_list_values as implementation
+    return implementation(*args, **kwargs)
+
+def _put_argument_list(*args, **kwargs):
+    from module.games.palworld.webui.forms import _put_argument_list as implementation
+    return implementation(*args, **kwargs)
+
+def _render_argument_list(*args, **kwargs):
+    from module.games.palworld.webui.forms import _render_argument_list as implementation
+    return implementation(*args, **kwargs)
+
+def _clear_field_error(*args, **kwargs):
+    from module.games.palworld.webui.forms import _clear_field_error as implementation
+    return implementation(*args, **kwargs)
+
+def _field_error_scope(*args, **kwargs):
+    from module.games.palworld.webui.forms import _field_error_scope as implementation
+    return implementation(*args, **kwargs)
+
 def _settings_toggle(*args, **kwargs):
     from module.games.palworld.webui.forms import _settings_toggle as implementation
     return implementation(*args, **kwargs)
@@ -77,6 +97,7 @@ SETTINGS_TOGGLE_KEYS = (
     "launch_useperfthreads",
     "launch_no_async_loading_thread",
     "launch_use_multithread_for_ds",
+    "launch_enable_gamedata_api",
     "launch_public_lobby",
     "launch_log_format",
 )
@@ -90,9 +111,11 @@ def render(name: str) -> None:
         "launch_useperfthreads": profile.launch_useperfthreads,
         "launch_no_async_loading_thread": profile.launch_no_async_loading_thread,
         "launch_use_multithread_for_ds": profile.launch_use_multithread_for_ds,
+        "launch_enable_gamedata_api": profile.launch_enable_gamedata_api,
         "launch_public_lobby": profile.launch_public_lobby,
         "launch_log_format": profile.launch_log_format,
     }
+    local.settings_argument_list_refresh = lambda: _render_extra_args_list()
     clear("content")
     with use_scope("content"):
         put_scope(
@@ -149,14 +172,27 @@ def render(name: str) -> None:
                 type="number",
                 escape_label=False,
             )
-            _settings_toggle(_settings_label("launch_public_lobby"), "launch_public_lobby", escape_label=False)
-            _settings_toggle(_settings_label("launch_log_format"), "launch_log_format", escape_label=False)
-            _settings_textarea(
-                _settings_label("extra_args"),
-                "extra_args",
-                "\n".join(profile.extra_args),
+            _settings_toggle(
+                _settings_label("launch_enable_gamedata_api"),
+                "launch_enable_gamedata_api",
                 escape_label=False,
             )
+            _settings_toggle(_settings_label("launch_public_lobby"), "launch_public_lobby", escape_label=False)
+            _settings_toggle(_settings_label("launch_log_format"), "launch_log_format", escape_label=False)
+            _settings_field_row(
+                _settings_label("extra_args"),
+                _put_argument_list(
+                    _settings_pin("extra_args"),
+                    profile.extra_args,
+                    controlled=_launch_controlled_arguments(),
+                    tooltip=t("settings.argument_controlled"),
+                    add_label=t("settings.argument_add"),
+                    remove_label=t("settings.argument_remove"),
+                ),
+                error_scope=_field_error_scope(_settings_pin("extra_args")),
+                escape_label=False,
+            )
+            _render_extra_args_list()
             _settings_category(t("settings.category_instance"), "instance")
             _settings_field(
                 _settings_label("dedicated_server_name"),
@@ -196,6 +232,37 @@ def _settings(name: str) -> None:
 
 def _settings_pin(key: str) -> str:
     return f"settings_{key}"
+
+
+def _launch_controlled_arguments() -> list[str]:
+    toggles = local.settings_toggles
+    arguments: list[str] = []
+    if toggles.get("launch_useperfthreads"):
+        arguments.append("-useprefthreads")
+    if toggles.get("launch_no_async_loading_thread"):
+        arguments.append("-NoAsyncLoadingThread")
+    if toggles.get("launch_use_multithread_for_ds"):
+        arguments.append("-UseMultithreadForDS")
+    worker_threads = str(getattr(pin, _settings_pin("launch_worker_threads_server"), "") or "").strip()
+    if worker_threads:
+        arguments.append(f"-NumberOfWorkerThreadsServer={worker_threads}")
+    if toggles.get("launch_enable_gamedata_api"):
+        arguments.append("-enable-gamedata-api")
+    if toggles.get("launch_public_lobby"):
+        arguments.append("-publiclobby")
+    if toggles.get("launch_log_format"):
+        arguments.append("-logformat")
+    return arguments
+
+
+def _render_extra_args_list() -> None:
+    _render_argument_list(
+        _settings_pin("extra_args"),
+        controlled=_launch_controlled_arguments(),
+        tooltip=t("settings.argument_controlled"),
+        add_label=t("settings.argument_add"),
+        remove_label=t("settings.argument_remove"),
+    )
 
 def _settings_category(label: str, category: str) -> None:
     put_asset_widget("palworld.settings_category", {"category": category, "label": label})
@@ -286,6 +353,7 @@ def _save_settings(name: str, *, rerender: bool = True) -> bool:
     for key in server_form_fields:
         pin_name = _settings_pin(key)
         data[key] = getattr(pin, pin_name)
+    _clear_field_error(_settings_pin("extra_args"))
     if not _validate_settings_form(
         data,
         {
@@ -301,11 +369,7 @@ def _save_settings(name: str, *, rerender: bool = True) -> bool:
     worker_threads = str(data.get("launch_worker_threads_server", "") or "").strip()
     data["launch_worker_threads_server"] = int(worker_threads) if worker_threads else None
     data["auto_update_idle_minutes"] = int(data["auto_update_idle_minutes"])
-    data["extra_args"] = [
-        line.strip()
-        for line in str(getattr(pin, _settings_pin("extra_args"), "")).splitlines()
-        if line.strip()
-    ]
+    data["extra_args"] = _argument_list_values(_settings_pin("extra_args"))
     try:
         updated = Profile.from_dict(data)
         updated.to_game_config()

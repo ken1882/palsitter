@@ -14,9 +14,10 @@ It is a dedicated REST-backed administration page; the Overview keeps a compact 
 - Each cached row records the last login in `yyyy/mm/dd hh:mm:ss` format and total play time;
   total play time is shown in hours and increases by the REST players-poll interval while the
   player is online.
-- User ids are masked initially in a fixed-width region. Reveal/Hide and Copy retain
-  stable positions for both masked and full values. Reveal changes only that row; Copy
-  copies the full id without revealing every other row.
+- User ids are displayed as `stem_****` initially, preserving the prefix before the first
+  underscore, and the eye control reveals or hides the final component. The control is
+  icon-only with a localized accessible label and appears immediately before Copy ID.
+  Copy retains its existing behavior and copies the full id without revealing every other row.
 - Kick and Ban use vertically centered boot and prohibited-circle SVG icon buttons with
   localized text tooltips on hover or keyboard focus. Their dialogs show the selected
   player, accept an optional message, and send no request until confirmed. The boot glyph
@@ -45,7 +46,7 @@ It is a dedicated REST-backed administration page; the Overview keeps a compact 
 - Below 600 px, player-row content/actions stack without horizontal page overflow.
 
 **Tests:** `tests/test_gui_playwright.py` verifies the action SVGs, hover tooltips, and
-vertical centering, then clicks reveal/copy, Kick, Ban, and cached-player Unban through
+vertical centering, then clicks the eye/copy controls, Kick, Ban, and cached-player Unban through
 the real page. It also verifies stable row identity and revealed-id state across a cache
 update, the removed controls and stale refreshes, and proves
 polling stops on navigation. Storage tests verify cache upserts, timestamps, login/play-time
