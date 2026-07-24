@@ -23,4 +23,4 @@ jobs:
           python -m pip install -r requirements.txt
 
       - name: Run non-Playwright tests
-        run: python -m pytest -q -n 0 -m "not playwright"
+        run: python -m pytest -vv -s -n 0 -m "not playwright"

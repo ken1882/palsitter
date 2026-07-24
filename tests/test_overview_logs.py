@@ -1,5 +1,8 @@
+from types import SimpleNamespace
+
 import pytest
 
+from module.games import OperationProgress
 from module.games.palworld.webui import overview
 from module.games.palworld.webui.overview import _log_type
 
@@ -48,6 +51,16 @@ def test_automatic_attach_adopts_managed_runtime(monkeypatch):
             "adopt_managed": True,
         }
     ]
+
+
+def test_scheduler_update_operation_can_be_stopped_during_steamcmd_download():
+    manager = SimpleNamespace(
+        operation_busy=True,
+        operation_progress=OperationProgress("update", "downloading", 20.0),
+        state="updating",
+    )
+
+    assert overview._can_stop_update(manager)
 
 
 def test_low_disk_warning_waits_for_confirmation(monkeypatch):

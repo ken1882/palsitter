@@ -247,10 +247,11 @@ def force_shutdown_all() -> ShutdownResult:
             if manager.active or manager.alive:
                 if not manager.kill(shutdown=True):
                     raise RuntimeError("Could not force-stop the instance")
-            elif _agent_running(record):
-                from module.games.palworld.server.agent import AgentClient
-
-                AgentClient.connect_existing(record.name).kill()
+            else:
+                # Let the selected adapter handle detached agents and fall
+                # back to terminating the exact server process if its agent
+                # pipe is unavailable.
+                get_game(record.game).force_stop(record)
             statuses[record.name] = {
                 "status": "force_stopped",
                 "message": "Force-stopped",

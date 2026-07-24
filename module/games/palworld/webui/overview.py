@@ -249,13 +249,7 @@ def _update_scheduler_save(name: str) -> None:
 def _update_scheduler_toggle(name: str) -> None:
     manager = _manager(name)
     if manager.operation_busy:
-        operation = manager.operation_progress
-        if (
-            manager.state in ("installing", "updating")
-            and operation is not None
-            and operation.phase == "updating"
-            and operation.kind in ("install", "update", "validate")
-        ):
+        if _can_stop_update(manager):
             put_button(t("scheduler.stop"), onclick=lambda: _toggle_server(name), color="danger")
         else:
             put_button(t("scheduler.start"), onclick=lambda: None, disabled=True)
@@ -272,6 +266,17 @@ def _update_scheduler_toggle(name: str) -> None:
         put_button(t("scheduler.stop"), onclick=lambda: _toggle_server(name), color="danger")
     else:
         put_button(t("scheduler.start"), onclick=lambda: _toggle_server(name), color="success")
+
+
+def _can_stop_update(manager) -> bool:
+    operation = manager.operation_progress
+    return (
+        manager.state in ("installing", "updating")
+        and operation is not None
+        and operation.kind in ("install", "update", "validate")
+        and operation.phase not in ("preparing", "complete", "failed")
+    )
+
 
 @use_scope("scheduler_maintenance", clear=True)
 def _update_scheduler_maintenance(name: str) -> None:

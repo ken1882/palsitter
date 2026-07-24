@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 
 
@@ -80,3 +81,58 @@ def test_runtime_builder_exposes_backend_to_embedded_python():
 def test_release_scripts_stage_source_and_bundle_git():
     assert (DESKTOP / "scripts" / "prepare-source.ps1").is_file()
     assert (DESKTOP / "scripts" / "build-git.ps1").is_file()
+
+
+def test_packaged_git_metadata_removes_credentials_and_rejects_credentialed_remotes():
+    script = (DESKTOP / "scripts" / "prepare-source.ps1").read_text(encoding="utf-8")
+    copied = script.index("Copy-Item -LiteralPath (Join-Path $repositoryRoot '.git')")
+    remote = script.index("remote set-url origin", copied)
+    assert copied < remote
+    assert "$repositoryRoot remote set-url" not in script
+
+    for key in (
+        "credential.helper",
+        "http.extraheader",
+        "http.https://github.com/.extraheader",
+    ):
+        assert f'"{key}"' in script
+    assert "config --local --unset-all" in script
+    assert "embedded credentials" in script
+    assert "https://github.com/ken1882/palsitter.git" in script
+    assert "contains credential material" in script
+
+
+def test_generated_git_metadata_has_no_credential_config(tmp_path):
+    metadata = tmp_path / "git-metadata"
+    subprocess.run(["git", "init", "--quiet", str(metadata)], check=True)
+    for key, value in (
+        ("credential.helper", "store"),
+        ("http.extraheader", "Authorization: Basic redacted"),
+        ("http.https://github.com/.extraheader", "Authorization: Bearer redacted"),
+    ):
+        subprocess.run(["git", "-C", str(metadata), "config", key, value], check=True)
+
+    for key in (
+        "credential.helper",
+        "http.extraheader",
+        "http.https://github.com/.extraheader",
+    ):
+        subprocess.run(
+            ["git", "-C", str(metadata), "config", "--unset-all", key],
+            check=True,
+        )
+
+    result = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(metadata),
+            "config",
+            "--get-regexp",
+            r"(^credential\.helper$|^http\..*\.extraheader$)",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 1
+    assert result.stdout == ""

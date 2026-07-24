@@ -14,6 +14,7 @@
   `origin/main`, and compares it with `HEAD`.
 - Updater Git operations read the public upstream without using inherited credential
   helpers or opening an interactive GitHub login prompt.
+- Failed fetch and pull operations display Git's stderr diagnostic in the updater.
 - Click to update performs a fast-forward-only pull from `origin/main`.
 - A successful pull waits for the operator to confirm the restart. Confirming starts the
   persisted GUI replacement workflow. Dismissing the popup leaves the updated files in

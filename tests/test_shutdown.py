@@ -94,6 +94,27 @@ def test_force_shutdown_kills_every_active_instance(monkeypatch):
     assert all(item["status"] == "force_stopped" for item in result.instances.values())
 
 
+def test_force_shutdown_uses_adapter_fallback_when_manager_is_inactive(monkeypatch):
+    record = SimpleNamespace(name="alpha", game="palworld")
+    manager = FakeManager()
+    manager._active = False
+    force_stop_calls = []
+    adapter = SimpleNamespace(
+        force_stop=lambda current: force_stop_calls.append(current.name),
+    )
+
+    monkeypatch.setattr(shutdown, "_active_records", lambda: [record])
+    monkeypatch.setattr(shutdown, "_agent_running", lambda current: True)
+    monkeypatch.setattr(shutdown.ProcessManager, "get", lambda name: manager)
+    monkeypatch.setattr(shutdown, "get_game", lambda game: adapter)
+
+    result = shutdown.force_shutdown_all()
+
+    assert result.ok is True
+    assert force_stop_calls == ["alpha"]
+    assert result.instances["alpha"]["status"] == "force_stopped"
+
+
 def test_desktop_control_requires_token_and_runs_shutdown():
     completed = threading.Event()
     control = desktop_control.DesktopControlServer(
