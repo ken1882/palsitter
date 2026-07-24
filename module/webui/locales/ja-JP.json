@@ -971,7 +971,7 @@
   "add.profile_name": "プロファイル名",
   "add.copy_from": "コピー元",
   "add.import_dedicated": "専用サーバーセーブをインポート",
-  "add.import_path": "Level.sav ファイル",
+  "add.import_path": "Level.sav ファイルをインポート",
   "add.import_path_placeholder": "Level.sav を選択",
   "add.browse_save": "参照",
   "add.no_dedicated_worlds": "Level.sav を含む専用ワールドが見つかりません。",

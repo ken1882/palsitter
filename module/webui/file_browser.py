@@ -447,6 +447,14 @@ def _browse_render_toolbar() -> None:
                     value=current_location_token,
                 ),
                 None,
+                _browse_icon_button(
+                    "arrow-up",
+                    t("settings.browse_up"),
+                    _browse_up,
+                    color="secondary",
+                    disabled=at_boundary or state["loading"],
+                ),
+                None,
                 _autocomplete_input(
                     BROWSE_ADDRESS_PIN,
                     label=t("settings.browse_address"),
@@ -461,14 +469,6 @@ def _browse_render_toolbar() -> None:
                     color="primary",
                 ),
                 None,
-                _browse_icon_button(
-                    "arrow-up",
-                    t("settings.browse_up"),
-                    _browse_up,
-                    color="secondary",
-                    disabled=at_boundary or state["loading"],
-                ),
-                None,
                 put_button(
                     t("settings.browse_refresh"),
                     onclick=_browse_refresh,
@@ -476,7 +476,7 @@ def _browse_render_toolbar() -> None:
                     disabled=state["loading"],
                 ),
             ],
-            size="7.5rem .5rem 1fr .5rem auto .5rem auto .5rem auto",
+            size="7.5rem .5rem auto .5rem 1fr .5rem auto .5rem auto",
         )
     _autocomplete_register(
         BROWSE_ADDRESS_PIN,
@@ -540,7 +540,12 @@ def _browse_show_error(status: str) -> None:
         put_warning(t(key))
 
 
-def _browse_request(path: str | Path, *, preserve_selection: bool = False) -> None:
+def _browse_request(
+    path: str | Path,
+    *,
+    preserve_selection: bool = False,
+    select_name: str | None = None,
+) -> None:
     state = local.browse
     state["address_value"] = str(path)
     if not state["worker_slots"].acquire(blocking=False):
@@ -578,7 +583,7 @@ def _browse_request(path: str | Path, *, preserve_selection: bool = False) -> No
         except queue.Empty:
             result = {"request_id": request_id, "status": "timeout"}
         try:
-            _browse_apply_result(state, result, preserve_selection)
+            _browse_apply_result(state, result, preserve_selection, select_name)
         except SessionException:
             return
 
@@ -597,14 +602,24 @@ def _browse_deactivate(state: dict) -> None:
         close_popup()
 
 
-def _browse_apply_result(state: dict, result: dict, preserve_selection: bool) -> None:
+def _browse_apply_result(
+    state: dict,
+    result: dict,
+    preserve_selection: bool,
+    select_name: str | None = None,
+) -> None:
     return run_if_current(
         state.get("page_context"),
-        lambda: _browse_apply_result_current(state, result, preserve_selection),
+        lambda: _browse_apply_result_current(state, result, preserve_selection, select_name),
     )
 
 
-def _browse_apply_result_current(state: dict, result: dict, preserve_selection: bool) -> None:
+def _browse_apply_result_current(
+    state: dict,
+    result: dict,
+    preserve_selection: bool,
+    select_name: str | None = None,
+) -> None:
     if not state["active"] or getattr(local, "browse", None) is not state:
         return
     with state["lock"]:
@@ -633,6 +648,13 @@ def _browse_apply_result_current(state: dict, result: dict, preserve_selection: 
             if entry["name"] == old_name and entry["kind"] == old_type:
                 state["selected_entry"] = old_name
                 state["selected_type"] = old_type
+                break
+    elif select_name is not None:
+        target_key = select_name.casefold()
+        for entry in mapping.values():
+            if entry["kind"] in {"file", "symlink_file"} and entry["name"].casefold() == target_key:
+                state["selected_entry"] = entry["name"]
+                state["selected_type"] = entry["kind"]
                 break
     pin_update("browse_address_value", value=str(state["current_dir"]))
     datatable_update(BROWSE_TABLE_ID, rows)
@@ -764,6 +786,14 @@ def _browse_confirm() -> None:
     _browse_confirm_path(path)
 
 
+def _browse_file_matches_filter(name: str, state: dict) -> bool:
+    if state["allowed_extensions"] and Path(name).suffix.casefold() not in state["allowed_extensions"]:
+        return False
+    if state["allowed_names"] and name.casefold() not in state["allowed_names"]:
+        return False
+    return True
+
+
 def _browse_confirm_address() -> None:
     state = local.browse
     if state["loading"]:
@@ -774,7 +804,30 @@ def _browse_confirm_address() -> None:
         _browse_restore_original_field(state)
         _browse_show_error("invalid")
         return
-    _browse_confirm_path(path)
+
+    if state["base_dir"] is not None and not _browse_is_within(path, state["base_dir"]):
+        _browse_show_error("outside_base")
+        return
+
+    try:
+        exists = path.exists()
+        is_dir = exists and path.is_dir()
+        is_file = exists and path.is_file()
+    except OSError:
+        _browse_show_error("unavailable")
+        return
+
+    if is_dir:
+        _browse_request(path)
+        return
+    if is_file:
+        if state["mode"] == "file" and _browse_file_matches_filter(path.name, state):
+            _browse_request(path.parent, select_name=path.name)
+        else:
+            _browse_request(path.parent)
+        return
+
+    _browse_show_error("missing")
 
 
 def _browse_check_address() -> None:

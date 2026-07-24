@@ -971,7 +971,7 @@
   "add.profile_name": "Profile name",
   "add.copy_from": "Copy from",
   "add.import_dedicated": "Import dedicated save",
-  "add.import_path": "Level.sav file",
+  "add.import_path": "Import Level.sav file",
   "add.import_path_placeholder": "Select Level.sav",
   "add.browse_save": "Browse",
   "add.no_dedicated_worlds": "No dedicated worlds containing Level.sav were found.",

@@ -971,7 +971,7 @@
   "add.profile_name": "設定檔名稱",
   "add.copy_from": "複製來源",
   "add.import_dedicated": "匯入專用伺服器存檔",
-  "add.import_path": "Level.sav 檔案",
+  "add.import_path": "匯入 Level.sav 檔案",
   "add.import_path_placeholder": "選擇 Level.sav",
   "add.browse_save": "瀏覽",
   "add.no_dedicated_worlds": "找不到包含 Level.sav 的專用伺服器世界。",
