@@ -1,5 +1,4 @@
 import json
-import threading
 from pathlib import Path
 from string import Formatter
 
@@ -51,14 +50,14 @@ def test_japanese_language_normalization():
     assert t("nav.server_settings", language="ja-JP") == "サーバー設定"
 
 
-def test_translation_falls_back_outside_pywebio_session():
-    result = []
-    worker = threading.Thread(target=lambda: result.append(t("utils.restart_saved")))
+def test_translation_falls_back_outside_pywebio_session(monkeypatch):
+    class NoSessionLocal:
+        def __getattr__(self, _name):
+            raise RuntimeError("No active PyWebIO session")
 
-    worker.start()
-    worker.join()
+    monkeypatch.setattr("module.webui.i18n.local", NoSessionLocal())
 
-    assert result == ["World saved"]
+    assert t("utils.restart_saved") == "World saved"
 
 
 def test_ue4ss_linux_unavailable_reason_is_translated():
