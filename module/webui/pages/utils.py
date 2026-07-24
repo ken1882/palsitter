@@ -177,7 +177,7 @@ def _raise_diagnostic_exception() -> None:
 
     try:
         raise_exception(3)
-    except RuntimeError:
+    except RuntimeError as e:
         _append_util_log(traceback.format_exc().rstrip())
         toast(t("utils.exception_captured"), color="error")
 

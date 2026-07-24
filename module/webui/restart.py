@@ -12,7 +12,7 @@ from typing import Any
 
 from pywebio.exceptions import SessionException
 from pywebio.output import clear, put_button, put_scope, use_scope
-from pywebio.session import register_thread
+from pywebio.session import register_thread, run_js
 
 from module.games import get_game
 from module.instances import list_instances, load_instance
@@ -348,6 +348,8 @@ def run_workflow() -> None:
         return
     _detach_external(state)
     _update_state(phase="restarting_gui", summary={"handed_off": _managed_names(state)})
+    run_js('setTimeout(function() { window.location.reload(true); }, 1000);')
+    time.sleep(1)
     os._exit(RESTART_EXIT_CODE)
 
 
@@ -363,6 +365,7 @@ def start_workflow() -> dict[str, Any] | None:
             return state
         if _WORKFLOW_THREAD is None or not _WORKFLOW_THREAD.is_alive():
             _WORKFLOW_THREAD = threading.Thread(target=run_workflow, daemon=True)
+            register_thread(_WORKFLOW_THREAD)
             _WORKFLOW_THREAD.start()
         return state
 
