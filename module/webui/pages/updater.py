@@ -235,16 +235,26 @@ def _check_updater() -> None:
 
 def _pull_update(*, on_error=None) -> bool:
     try:
-        result = _run_git(
-            "pull",
-            "--ff-only",
+        fetched = _run_git(
+            "fetch",
             "origin",
             UPDATER_BRANCH,
             timeout=120,
         )
-        if result.returncode != 0 and on_error is not None:
-            on_error(_git_diagnostic(result))
-        return result.returncode == 0
+        if fetched.returncode != 0:
+            if on_error is not None:
+                on_error(_git_diagnostic(fetched))
+            return False
+
+        reset = _run_git(
+            "reset",
+            "--hard",
+            "FETCH_HEAD",
+            timeout=120,
+        )
+        if reset.returncode != 0 and on_error is not None:
+            on_error(_git_diagnostic(reset))
+        return reset.returncode == 0
     except (OSError, subprocess.SubprocessError) as exc:
         if on_error is not None:
             on_error(str(exc))

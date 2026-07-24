@@ -72,7 +72,7 @@ def test_run_git_works_with_a_credentialless_git_executable(tmp_path, monkeypatc
     assert result.returncode == 0
 
 
-def test_pull_update_uses_fast_forward_only(monkeypatch):
+def test_pull_update_fetches_then_resets_to_fetched_revision(monkeypatch):
     calls = []
 
     def run_git(*args, **kwargs):
@@ -83,7 +83,8 @@ def test_pull_update_uses_fast_forward_only(monkeypatch):
 
     assert updater._pull_update() is True
     assert calls == [
-        (("pull", "--ff-only", "origin", "main"), {"timeout": 120})
+        (("fetch", "origin", "main"), {"timeout": 120}),
+        (("reset", "--hard", "FETCH_HEAD"), {"timeout": 120}),
     ]
 
 
@@ -100,3 +101,23 @@ def test_pull_update_failure_does_not_report_success(monkeypatch):
 
     assert updater._pull_update(on_error=diagnostics.append) is False
     assert diagnostics == ["fatal: public repository unavailable"]
+
+
+def test_pull_update_reports_reset_failure(monkeypatch):
+    diagnostics = []
+    calls = []
+
+    def run_git(*args, **kwargs):
+        calls.append((args, kwargs))
+        if args[0] == "reset":
+            return SimpleNamespace(returncode=1, stderr="fatal: reset failed")
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(updater, "_run_git", run_git)
+
+    assert updater._pull_update(on_error=diagnostics.append) is False
+    assert diagnostics == ["fatal: reset failed"]
+    assert calls == [
+        (("fetch", "origin", "main"), {"timeout": 120}),
+        (("reset", "--hard", "FETCH_HEAD"), {"timeout": 120}),
+    ]
