@@ -279,7 +279,7 @@ function waitForBackendExit(timeoutMs = SHUTDOWN_TIMEOUT_MS + 10_000) {
       clearTimeout(deadline);
       resolve();
     } else if (backend) {
-      backend.once('close', () => {
+      backend.once('exit', () => {
         clearTimeout(deadline);
         resolve();
       });
@@ -386,9 +386,12 @@ async function startBackend({ restarting = false } = {}) {
   });
   backendExited = false;
   const child = backend;
-  backend.on('close', (code) => {
+  backend.on('exit', () => {
     if (backend !== child) return;
     backendExited = true;
+  });
+  backend.on('close', (code) => {
+    if (backend !== child) return;
     if (code === 75 && !exiting && !backendRestarting) {
       void restartBackend();
     }

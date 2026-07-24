@@ -77,9 +77,16 @@ def test_electron_reloads_after_the_shared_restart_exit():
 
     assert "async function restartBackend()" in source
     assert "reserveRestartPort" in source
+    assert "backend.on('exit', () =>" in source
     assert "backend.on('close', (code)" in source
     assert "if (code === 75 && !exiting && !backendRestarting)" in source
     assert "await mainWindow.loadURL(`http://${WEB_HOST}:${webPort}/`)" in source
+
+
+def test_electron_shutdown_waits_for_backend_process_exit():
+    source = (DESKTOP / "main.js").read_text(encoding="utf-8")
+
+    assert "backend.once('exit', () =>" in source
 
 
 def test_runtime_builder_exposes_backend_to_embedded_python():
