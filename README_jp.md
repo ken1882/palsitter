@@ -68,8 +68,9 @@ PALSITTER_PYTHON_MANAGER=uv ./script/linux/palsitter.sh run
 ./script/linux/palsitter.sh run --host 0.0.0.0 --port 22368
 ```
 
-認証付きリバースプロキシと適切なファイアウォールルールを用意せずに、Web UI を直接
-インターネットへ公開しないでください。
+Home → 設定で Web UI を選択したネットワークインターフェースにバインドできます。
+Basic Auth と適切なファイアウォールルールを有効にせず、ループバック以外のアドレスを
+選択しないでください。CLI と環境変数のホスト設定は保存済み設定より優先されます。
 
 ### Docker
 

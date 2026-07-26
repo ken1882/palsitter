@@ -30,6 +30,10 @@ def _utils(*args, **kwargs):
     from module.webui.pages.utils import _utils as implementation
     return implementation(*args, **kwargs)
 
+def _settings(*args, **kwargs):
+    from module.webui.pages.settings import _settings as implementation
+    return implementation(*args, **kwargs)
+
 def _force_restart(*args, **kwargs):
     from module.webui.pages.utils import _force_restart as implementation
     return implementation(*args, **kwargs)
@@ -306,6 +310,7 @@ def _render_updater() -> None:
     with use_scope("menu"):
         _menu_button(t("nav.home"), _home)
         _menu_button(t("nav.updater"), _updater, True)
+        _menu_button(t("nav.settings"), _settings)
         _menu_button(t("nav.utils"), _utils)
     clear("content")
     with use_scope("content"):

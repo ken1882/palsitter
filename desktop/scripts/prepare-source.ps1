@@ -10,8 +10,6 @@ $outputPath = if ([IO.Path]::IsPathRooted($Output)) {
     [IO.Path]::GetFullPath((Join-Path $PSScriptRoot $Output))
 }
 $repositoryRoot = (& git -c safe.directory=* rev-parse --show-toplevel).Trim()
-$archive = Join-Path $env:TEMP "palsitter-source-$([guid]::NewGuid().ToString('N')).tar"
-
 if (Test-Path -LiteralPath $outputPath) {
     Remove-Item -LiteralPath $outputPath -Recurse -Force
 }
@@ -19,21 +17,28 @@ if (Test-Path -LiteralPath $metadataPath) {
     Remove-Item -LiteralPath $metadataPath -Recurse -Force
 }
 New-Item -ItemType Directory -Path $outputPath -Force | Out-Null
-
-& git -c safe.directory=* -C $repositoryRoot archive --format=tar --output=$archive HEAD
-if ($LASTEXITCODE -ne 0) {
-    throw "Could not create a source archive from Git"
-}
-try {
-    tar -xf $archive -C $outputPath
-    if ($LASTEXITCODE -ne 0) {
-        throw "Could not extract the source archive"
-    }
-} finally {
-    Remove-Item -LiteralPath $archive -Force -ErrorAction SilentlyContinue
-}
-
 Copy-Item -LiteralPath (Join-Path $repositoryRoot '.git') -Destination $metadataPath -Recurse -Force
+
+& git -c safe.directory=* --git-dir $metadataPath --work-tree $outputPath config core.autocrlf false
+if ($LASTEXITCODE -ne 0) {
+    throw "Could not configure line endings for the packaged source"
+}
+
+@(
+    "/.gitignore",
+    "/gui.py",
+    "/module/",
+    "/assets/"
+) | & git -c safe.directory=* --git-dir $metadataPath --work-tree $outputPath sparse-checkout set --no-cone --stdin
+if ($LASTEXITCODE -ne 0) {
+    throw "Could not configure the packaged source checkout"
+}
+
+& git -c safe.directory=* --git-dir $metadataPath --work-tree $outputPath checkout --force
+if ($LASTEXITCODE -ne 0) {
+    throw "Could not check out the packaged source"
+}
+
 & git -c safe.directory=* --git-dir $metadataPath remote set-url origin "https://github.com/ken1882/palsitter.git"
 if ($LASTEXITCODE -ne 0) {
     throw "Could not set the packaged updater remote"
@@ -83,10 +88,6 @@ if ($LASTEXITCODE -eq 0) {
 $metadataConfig = Get-Content -LiteralPath (Join-Path $metadataPath 'config') -Raw
 if ($metadataConfig -match '(?i)authorization|bearer|extraheader|credential\.helper|token|[a-z][a-z0-9+.-]*://[^/\s@]*@') {
     throw "Packaged Git metadata contains credential material"
-}
-& git -c safe.directory=* -c core.autocrlf=true --git-dir $metadataPath --work-tree $outputPath add --all
-if ($LASTEXITCODE -ne 0) {
-    throw "Could not refresh packaged Git metadata"
 }
 $status = & git -c safe.directory=* --git-dir $metadataPath --work-tree $outputPath status --porcelain --untracked-files=all
 if ($status) {

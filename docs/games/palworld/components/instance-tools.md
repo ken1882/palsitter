@@ -34,17 +34,24 @@ The page also exposes Palworld player-ID migration for imported local worlds:
   passes when the configured UDP port is allowed. Matching deny/drop/reject rules take
   precedence, and executable matching is shown as not applicable.
 - Matching enabled inbound Block rules take precedence and make the result blocked.
-- If no matching Allow rule exists and no third-party Block rule prevents safe repair, the
-  page asks for confirmation before launching a narrowly scoped administrator repair.
-- Repair creates a Palsitter-owned executable rule by default on Windows, removes only a
-  matching Palsitter-owned Block rule, and rechecks the firewall afterward. On Linux it
-  creates an inbound UDP-port allow rule in the selected backend. If Linux elevation is
+- If no matching Allow rule exists, the page asks for confirmation before launching a
+  narrowly scoped administrator repair. The Fix Firewall confirmation identifies any
+  detected matching Block rules that will be removed.
+- Repair creates a Palsitter-owned executable rule by default on Windows, removes the
+  detected matching Block rules, and rechecks the firewall afterward. On Linux it
+  creates an inbound UDP-port allow rule in the selected backend and removes detected
+  matching deny/drop/reject rules. If Linux elevation is
   denied, the page displays the exact password-free sudo command being retried, asks for
   the root password, and sends it only to that one-time sudo retry; it is never included
   in a rule payload, command argument, instance profile, or log. Third-party Block rules
-  are reported for manual removal.
+  are included in the repair confirmation instead of requiring manual removal.
+- During player-ID migration, after `Level.sav` is decoded and before any save is
+  modified, the source and destination names are compared with each other and with the
+  names selected from the player-name cache. If either identity differs, the page asks
+  whether to continue; cancelling leaves the save documents unchanged.
 - Check and repair results are also written to the instance Overview log. Results are not
-  persisted as Audit events.
+  persisted as Audit events. Raw administrator-command stdout/stderr and exit codes from
+  repair are streamed to the same Overview log.
 - If Check or Fix completes after the operator navigates away, its persistent log entry may
   remain, but its status, error, toast, popup, and result rows are discarded and never
   appended to the replacement page.

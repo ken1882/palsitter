@@ -68,8 +68,9 @@ Pass additional arguments to `gui.py` after `run` when needed:
 ./script/linux/palsitter.sh run --host 0.0.0.0 --port 22368
 ```
 
-Do not expose the web UI directly to the public internet without an authenticated
-reverse proxy and appropriate firewall rules.
+The Home → Settings tab can bind the web UI to a selected network interface. Do not
+select a non-loopback address without enabling Basic Auth and appropriate firewall
+rules. CLI and environment host overrides take precedence over the saved setting.
 
 ### Docker
 

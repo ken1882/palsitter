@@ -10,7 +10,6 @@ from pywebio.output import (
     put_button,
     put_row,
     put_scope,
-    put_table,
     put_text,
     put_warning,
     toast,
@@ -33,6 +32,7 @@ from module.games.palworld.webui.forms import (
     _validate_settings_form,
 )
 from module.webui.forms import _clear_dirty_form, _register_dirty_form, _settings_label
+from module.webui.pagination_table import TableColumn, put_pagination_table
 from module.webui.i18n import t
 from module.webui.session import page_context, register_page_stop_event, run_if_current
 from module.webui.assets import client_call, put_asset_widget
@@ -276,7 +276,7 @@ def _launch_error_text(value: object) -> str | None:
     return " · ".join(parts)
 
 
-def _event_details(event: LifecycleEvent):
+def _event_details(event: LifecycleEvent) -> dict[str, object]:
     detail = event.detail
     lines: list[str] = []
     if event.reason == "memory_threshold" and detail:
@@ -306,16 +306,12 @@ def _event_details(event: LifecycleEvent):
     output = ""
     if event.termination and event.termination.diagnostic_output:
         output = "\n".join(event.termination.diagnostic_output)
-    return put_asset_widget(
-        "palworld.restart_event_details",
-        {
-            "lines": [{"text": line} for line in lines],
-            "has_output": bool(output),
-            "output_label": t("restart_history.final_output"),
-            "output": output,
-            "empty": not lines and not output,
-        },
-    )
+    return {
+        "lines": [{"text": line} for line in lines],
+        "has_output": bool(output),
+        "output_label": t("restart_history.final_output"),
+        "output": output,
+    }
 
 
 @use_scope("restart_history", clear=True)
@@ -343,24 +339,25 @@ def _render_restart_history(name: str) -> None:
     if not events:
         put_text(t("restart_history.empty"))
     else:
-        put_table(
+        put_pagination_table(
             [
-                [
-                    event.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
-                    t(f"restart_history.trigger.{event.reason}"),
-                    _termination_label(event.termination),
-                    t(f"restart_history.outcome.{event.outcome}"),
-                    _event_details(event),
-                ]
+                {
+                    "timestamp": event.timestamp,
+                    "trigger": t(f"restart_history.trigger.{event.reason}"),
+                    "cause": _termination_label(event.termination),
+                    "outcome": t(f"restart_history.outcome.{event.outcome}"),
+                    "details": _event_details(event),
+                }
                 for event in reversed(events)
             ],
-            header=[
-                t("restart_history.timestamp"),
-                t("restart_history.trigger"),
-                t("restart_history.cause"),
-                t("restart_history.outcome"),
-                t("restart_history.details"),
+            [
+                TableColumn("timestamp", t("restart_history.timestamp"), "datetime"),
+                TableColumn("trigger", t("restart_history.trigger")),
+                TableColumn("cause", t("restart_history.cause")),
+                TableColumn("outcome", t("restart_history.outcome")),
+                TableColumn("details", t("restart_history.details"), "details"),
             ],
+            scope_id="palworld-restart-history-table",
         )
     client_call("dom.addClasses", scope="restart_history", classes=["panel", "restart-history"])
 

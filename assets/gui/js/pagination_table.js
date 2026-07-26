@@ -150,6 +150,39 @@
                 ? `${date.toLocaleDateString()}\n${date.toLocaleTimeString()}`
                 : text(value);
         };
+        const formatDetails = value => {
+            if (!value || typeof value !== "object") return "";
+            const lines = Array.isArray(value.lines)
+                ? value.lines.map(line => text(line?.text)).filter(Boolean)
+                : [];
+            if (value.has_output && value.output) lines.push(text(value.output));
+            return lines.join("\n") || "-";
+        };
+        const formatCell = (value, column) => column.type === "datetime"
+            ? formatDate(value)
+            : column.type === "details"
+                ? formatDetails(value)
+                : text(value);
+        const renderDetails = (cell, value) => {
+            const details = value && typeof value === "object" ? value : {};
+            const lines = Array.isArray(details.lines) ? details.lines : [];
+            for (const line of lines) {
+                const element = document.createElement("div");
+                element.textContent = text(line?.text);
+                cell.appendChild(element);
+            }
+            if (details.has_output && details.output) {
+                const disclosure = document.createElement("details");
+                const summary = document.createElement("summary");
+                summary.textContent = text(details.output_label);
+                const output = document.createElement("pre");
+                output.className = "restart-output";
+                output.textContent = text(details.output);
+                disclosure.append(summary, output);
+                cell.appendChild(disclosure);
+            }
+            if (!lines.length && !(details.has_output && details.output)) cell.textContent = "-";
+        };
         const initializeColumnWidths = () => {
             if (!table || !columnTracks.length || !headerCells.length) return;
             const tableWidth = table.getBoundingClientRect().width;
@@ -170,9 +203,7 @@
                 const minimum = Math.max(96, measure(column.label) + padding);
                 const contentWidth = Math.max(
                     minimum,
-                    ...dataRows.map(row => measure(
-                        column.type === "datetime" ? formatDate(row[column.key]) : text(row[column.key])
-                    ) + padding)
+                    ...dataRows.map(row => measure(formatCell(row[column.key], column)) + padding)
                 );
                 minimumWidths.push(minimum);
                 preferredWidths.push(Math.min(contentWidth, Math.max(160, tableWidth * .55)));
@@ -207,7 +238,7 @@
                 if (tagValues.size && !selected.has(text(row[tagKey]))) return false;
                 if (!query) return true;
                 return tableColumns.filter(column => column.searchable).some(column => {
-                    const value = column.type === "datetime" ? formatDate(row[column.key]) : text(row[column.key]);
+                    const value = formatCell(row[column.key], column);
                     return value.toLocaleLowerCase().includes(query);
                 });
             });
@@ -260,7 +291,11 @@
                 const tr = document.createElement("tr");
                 for (const column of tableColumns) {
                     const td = document.createElement("td");
-                    td.textContent = column.type === "datetime" ? formatDate(row[column.key]) : text(row[column.key]);
+                    if (column.type === "details") {
+                        renderDetails(td, row[column.key]);
+                    } else {
+                        td.textContent = formatCell(row[column.key], column);
+                    }
                     tr.appendChild(td);
                 }
                 tbody.appendChild(tr);

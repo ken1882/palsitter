@@ -1,16 +1,3 @@
-.restart-history table td {
-    padding: .5rem .7rem;
-    color: #d3d3d3;
-    background: #2f3136;
-    border-color: #495057;
-    vertical-align: middle;
-}
-
-.restart-history table th:last-child,
-.restart-history table td:last-child {
-    width: 100%;
-}
-
 .restart-history details {
     margin-top: .35rem;
 }
@@ -63,6 +50,17 @@
 .backup-icon-danger {
     background: #e74c3c;
     border-color: #e74c3c;
+}
+
+.backup-icon-button:disabled,
+.backup-icon-button:disabled:hover,
+.backup-icon-button:disabled:focus {
+    background: #4b5158;
+    border-color: #6c757d;
+    color: #adb5bd;
+    cursor: not-allowed;
+    filter: none;
+    opacity: .55;
 }
 
 .log-box {

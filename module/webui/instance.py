@@ -47,6 +47,10 @@ def _utils(*args, **kwargs):
     from module.webui.pages.utils import _utils as implementation
     return implementation(*args, **kwargs)
 
+def _home_settings(*args, **kwargs):
+    from module.webui.pages.settings import _settings as implementation
+    return implementation(*args, **kwargs)
+
 def _manager(name: str) -> ProcessManager:
     return ProcessManager.get(name)
 
@@ -206,6 +210,7 @@ def _render_home_menu() -> None:
     with use_scope("menu"):
         _menu_button(t("nav.home"), _home, True)
         _menu_button(t("nav.updater"), _updater)
+        _menu_button(t("nav.settings"), _home_settings)
         _menu_button(t("nav.utils"), _utils)
 
 def _render_instance_menu(name: str, active: str = "overview") -> None:

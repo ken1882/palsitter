@@ -71,6 +71,12 @@ def _documents():
     }
 
 
+def _documents_with_names():
+    documents = _documents()
+    documents["Level.sav"] = _level_with_names()
+    return documents
+
+
 def _level_with_names():
     def entry(uid, name):
         return {
@@ -201,3 +207,55 @@ def test_migrate_player_ids_requires_stopped_server(tmp_path):
             is_server_active=lambda: True,
             codec=FakeCodec(_documents()),
         )
+
+
+def test_migrate_player_ids_confirms_level_names_before_modifying(tmp_path):
+    profile = _profile(tmp_path)
+    world = Path(profile.backup_source) / WORLD
+    (world / "Players").mkdir(parents=True)
+    (world / "Level.sav").write_bytes(b"level")
+    (world / "Players" / f"{OLD}.sav").write_bytes(b"old")
+    (world / "Players" / f"{NEW}.sav").write_bytes(b"new")
+    old_bytes = (world / "Players" / f"{OLD}.sav").read_bytes()
+    new_bytes = (world / "Players" / f"{NEW}.sav").read_bytes()
+    confirmation = []
+
+    with pytest.raises(PlayerMigrationError, match="names do not match"):
+        migrate_player_ids(
+            profile,
+            f"{OLD}.sav",
+            f"{NEW}.sav",
+            is_server_active=lambda: False,
+            backup_service=FakeBackup(tmp_path / "safety.zip"),
+            codec=FakeCodec(_documents_with_names()),
+            expected_names={OLD: "Stale source", NEW: "New"},
+            confirm_name_mismatch=lambda *values: confirmation.append(values) or False,
+        )
+
+    assert confirmation == [("Stale source", "Original", "New", "New")]
+    assert (world / "Players" / f"{OLD}.sav").read_bytes() == old_bytes
+    assert (world / "Players" / f"{NEW}.sav").read_bytes() == new_bytes
+
+
+def test_migrate_player_ids_confirms_when_source_and_destination_names_differ(tmp_path):
+    profile = _profile(tmp_path)
+    world = Path(profile.backup_source) / WORLD
+    (world / "Players").mkdir(parents=True)
+    (world / "Level.sav").write_bytes(b"level")
+    (world / "Players" / f"{OLD}.sav").write_bytes(b"old")
+    (world / "Players" / f"{NEW}.sav").write_bytes(b"new")
+    confirmation = []
+
+    with pytest.raises(PlayerMigrationError, match="names do not match"):
+        migrate_player_ids(
+            profile,
+            f"{OLD}.sav",
+            f"{NEW}.sav",
+            is_server_active=lambda: False,
+            backup_service=FakeBackup(tmp_path / "safety.zip"),
+            codec=FakeCodec(_documents_with_names()),
+            expected_names={OLD: "Original", NEW: "New"},
+            confirm_name_mismatch=lambda *values: confirmation.append(values) or False,
+        )
+
+    assert confirmation == [("Original", "Original", "New", "New")]

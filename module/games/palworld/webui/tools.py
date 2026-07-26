@@ -50,8 +50,9 @@ def _manager(name: str):
     return implementation(name)
 
 
-def _service() -> FirewallService:
-    return FirewallService()
+def _service(name: str | None = None) -> FirewallService:
+    logger = (lambda message: _log(name, message)) if name is not None else None
+    return FirewallService(logger=logger)
 
 
 def _log(name: str, message: str) -> None:
@@ -129,7 +130,14 @@ def _apply_check_result(name: str, status: FirewallStatus, ask_to_fix: bool, con
 
 def _confirm_fix(name: str, status: FirewallStatus, context) -> None:
     with popup(t("tools.fix_title"), closable=True):
-        put_text(t("tools.fix_prompt"))
+        put_text(
+            t(
+                "tools.fix_block_prompt",
+                rules=", ".join(status.external_block_rule_names),
+            )
+            if status.external_block_rule_names
+            else t("tools.fix_prompt")
+        )
         put_row(
             [
                 put_button(t("common.cancel"), onclick=close_popup, color="secondary"),
@@ -147,7 +155,7 @@ def _fix(name: str, status: FirewallStatus, context=None) -> None:
     context = context or page_context()
     close_popup()
     try:
-        _service().fix(load_profile(name), status)
+        _service(name).fix(load_profile(name), status)
     except FirewallPermissionDenied as exc:
         _log(name, "repair requires administrator authentication")
         command = exc.command
@@ -279,7 +287,7 @@ def _retry_fix_with_password(name: str, status: FirewallStatus, context) -> None
         )
         return
     try:
-        _service().fix(load_profile(name), status, root_password=password)
+        _service(name).fix(load_profile(name), status, root_password=password)
     except FirewallPermissionDenied:
         _log(name, "repair failed: administrator authentication was rejected")
         run_if_current(
@@ -356,7 +364,7 @@ def _render_migration(name: str) -> None:
                 put_button(
                     t("tools.name_cache_button"),
                     onclick=lambda: _confirm_name_cache(name),
-                    color="secondary",
+                    color="primary",
                     disabled=_manager(name).active,
                 ),
             ],
@@ -386,6 +394,75 @@ def _confirm_migration(name: str) -> None:
         )
 
 
+def _confirm_decoded_name_mismatch(
+    context,
+    source_expected: str,
+    source_actual: str,
+    destination_expected: str,
+    destination_actual: str,
+) -> bool:
+    decision = {"continue": False}
+    resolved = threading.Event()
+
+    def resolve(continue_migration: bool) -> None:
+        decision["continue"] = continue_migration
+        close_popup()
+        resolved.set()
+
+    run_if_current(
+        context,
+        lambda: _open_decoded_name_mismatch(
+            source_expected,
+            source_actual,
+            destination_expected,
+            destination_actual,
+            resolve,
+        ),
+    )
+    while not resolved.wait(0.1):
+        if context is not None and context.stop_event.is_set():
+            return False
+    return bool(decision["continue"])
+
+
+def _open_decoded_name_mismatch(
+    source_expected: str,
+    source_actual: str,
+    destination_expected: str,
+    destination_actual: str,
+    resolve,
+) -> None:
+    with popup(
+        t("tools.migration_name_mismatch_title"),
+        closable=False,
+        implicit_close=False,
+    ):
+        put_text(
+            t(
+                "tools.migration_name_mismatch",
+                source_expected=source_expected,
+                source_actual=source_actual,
+                destination_expected=destination_expected,
+                destination_actual=destination_actual,
+            )
+        )
+        put_row(
+            [
+                put_button(
+                    t("common.cancel"),
+                    onclick=lambda: resolve(False),
+                    color="secondary",
+                ),
+                put_button(
+                    t("tools.migration_continue"),
+                    onclick=lambda: resolve(True),
+                    color="warning",
+                ),
+            ],
+            size="1fr auto",
+        )
+
+
 def _confirm_name_cache(name: str) -> None:
     if _manager(name).active:
         with use_scope("tools_migration_status", clear=True):
@@ -399,7 +476,7 @@ def _confirm_name_cache(name: str) -> None:
                 put_button(
                     t("tools.name_cache_button"),
                     onclick=lambda: _build_name_cache(name),
-                    color="secondary",
+                    color="primary",
                 ),
             ],
             size="1fr auto",
@@ -467,6 +544,7 @@ def _migrate(name: str, old_player: str, new_player: str) -> None:
     close_popup()
     _open_migration_progress()
     progress_events: list[tuple[str, str | None]] = []
+    expected_names = load_player_name_cache(_migration_world(name))
 
     def progress(phase: str, filename: str | None) -> None:
         progress_events.append((phase, filename))
@@ -479,7 +557,7 @@ def _migrate(name: str, old_player: str, new_player: str) -> None:
         put_text(t("tools.migration_working"))
     task = threading.Thread(
         target=lambda: _run_migration(
-            name, old_player, new_player, context, progress
+            name, old_player, new_player, context, progress, expected_names
         ),
         daemon=True,
     )
@@ -493,6 +571,7 @@ def _run_migration(
     new_player: str,
     context,
     progress,
+    expected_names,
 ) -> None:
     try:
         result = migrate_player_ids(
@@ -504,6 +583,14 @@ def _run_migration(
                 load_profile(name), logger=_manager(name).append_log
             ),
             progress=progress,
+            expected_names=expected_names,
+            confirm_name_mismatch=lambda source_expected, source_actual, destination_expected, destination_actual: _confirm_decoded_name_mismatch(
+                context,
+                source_expected,
+                source_actual,
+                destination_expected,
+                destination_actual,
+            ),
         )
     except PlayerMigrationUnavailable as exc:
         _manager(name).append_log(f"Player migration unavailable: {exc}")

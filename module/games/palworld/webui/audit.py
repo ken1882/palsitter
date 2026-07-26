@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from module.games.palworld.audit import AUDIT_TYPES, AuditStore
+from module.webui.global_audit import GLOBAL_AUDIT_TYPES, GlobalAuditStore
 from module.webui.i18n import t
 from module.webui.pagination_table import (
     PaginationTableLabels,
@@ -13,15 +14,44 @@ from module.webui.assets import put_asset_widget
 
 
 def render(name: str) -> None:
-    events = AuditStore(name).load()
+    instance_events = AuditStore(name).load()
+    global_events = GlobalAuditStore().load()
+    events = sorted(
+        [
+            {
+                "timestamp": event.timestamp,
+                "type": event.type,
+                "username": "",
+                "source_ip": "",
+                "message": event.message,
+                "_tag": event.type,
+            }
+            for event in instance_events
+        ]
+        + [
+            {
+                "timestamp": event.timestamp,
+                "type": event.type,
+                "username": event.username,
+                "source_ip": event.source_ip,
+                "message": event.message,
+                "_tag": event.type,
+            }
+            for event in global_events
+        ],
+        key=lambda event: event["timestamp"],
+        reverse=True,
+    )
     columns = (
         TableColumn("timestamp", t("audit.timestamp"), "datetime"),
         TableColumn("type", t("audit.type")),
+        TableColumn("username", t("audit.username")),
+        TableColumn("source_ip", t("audit.source_ip")),
         TableColumn("message", t("audit.message")),
     )
     tags = tuple(
         TableTag(event_type, t(f"audit.type_{event_type}"))
-        for event_type in AUDIT_TYPES
+        for event_type in (*AUDIT_TYPES, *GLOBAL_AUDIT_TYPES)
     )
     labels = PaginationTableLabels(
         search=t("audit.search"),
@@ -56,10 +86,8 @@ def render(name: str) -> None:
         put_pagination_table(
             [
                 {
-                    "timestamp": event.timestamp,
-                    "type": t(f"audit.type_{event.type}"),
-                    "message": event.message,
-                    "_tag": event.type,
+                    **event,
+                    "type": t(f"audit.type_{event['type']}"),
                 }
                 for event in events
             ],

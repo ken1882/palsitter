@@ -4,7 +4,7 @@ const fs = require('fs');
 const net = require('net');
 const path = require('path');
 
-const WEB_HOST = '127.0.0.1';
+const CONTROL_HOST = '127.0.0.1';
 const DEFAULT_WEB_PORT = 22368;
 const DEFAULT_CONTROL_PORT = 22369;
 const SHUTDOWN_TIMEOUT_MS = 65_000;
@@ -21,6 +21,8 @@ let allowWindowClose = false;
 let controlToken = null;
 let controlPort = null;
 let webPort = null;
+let webListenHost = CONTROL_HOST;
+let webConnectHost = CONTROL_HOST;
 let exitFinished = false;
 
 function applicationRoot() {
@@ -70,23 +72,44 @@ function refreshPackagedRepository() {
   });
 }
 
-function reservePort(preferred) {
+function configuredWebHost(dataRoot) {
+  const candidate = process.env.PALSITTER_HOST;
+  if (candidate) return candidate;
+  try {
+    const data = JSON.parse(fs.readFileSync(
+      path.join(dataRoot, 'config', 'webui', 'settings.json'),
+      'utf8',
+    ));
+    if (data && typeof data.bind_address === 'string' && data.bind_address) {
+      return data.bind_address;
+    }
+  } catch (_) {
+    // Use the loopback default when settings have not been created yet.
+  }
+  return CONTROL_HOST;
+}
+
+function connectionHost(listenHost) {
+  return listenHost === '0.0.0.0' ? CONTROL_HOST : listenHost;
+}
+
+function reservePort(preferred, host = CONTROL_HOST) {
   return new Promise((resolve, reject) => {
     const server = net.createServer();
     server.once('error', reject);
-    server.listen(preferred, WEB_HOST, () => {
+    server.listen(preferred, host, () => {
       const port = server.address().port;
       server.close(() => resolve(port));
     });
   });
 }
 
-async function reserveRestartPort(preferred) {
+async function reserveRestartPort(preferred, host = CONTROL_HOST) {
   try {
-    return await reservePort(preferred);
+    return await reservePort(preferred, host);
   } catch (error) {
     if (error.code !== 'EADDRINUSE') throw error;
-    return reservePort(0);
+    return reservePort(0, host);
   }
 }
 
@@ -144,9 +167,9 @@ function forceKillBackend() {
   }
 }
 
-async function reservePortWithPrompt(preferred) {
+async function reservePortWithPrompt(preferred, host = CONTROL_HOST) {
   try {
-    return await reservePort(preferred);
+    return await reservePort(preferred, host);
   } catch (error) {
     if (error.code !== 'EADDRINUSE') throw error;
   }
@@ -162,7 +185,7 @@ async function reservePortWithPrompt(preferred) {
   });
   if (killResult.response === 1 && killPort(preferred)) {
     try {
-      return await reservePort(preferred);
+      return await reservePort(preferred, host);
     } catch (_) {
       // The process may still hold the port or another process may have won
       // the race. Offer the alternate-port path below.
@@ -179,7 +202,7 @@ async function reservePortWithPrompt(preferred) {
     detail: startupText('alternateDetail'),
   });
   if (alternateResult.response !== 1) throw new StartupCancelledError();
-  return reservePort(0);
+  return reservePort(0, host);
 }
 
 async function waitForBackend(url) {
@@ -279,6 +302,16 @@ function createWindow() {
       sandbox: true,
     },
   });
+  mainWindow.webContents.session.webRequest.onBeforeSendHeaders(
+    { urls: ['http://*/*'] },
+    (details, callback) => {
+      const expected = `http://${webConnectHost}:${webPort}/`;
+      if (controlToken && details.url.startsWith(expected)) {
+        details.requestHeaders['X-Palsitter-Desktop-Token'] = controlToken;
+      }
+      callback({ requestHeaders: details.requestHeaders });
+    },
+  );
   mainWindow.on('close', (event) => {
     if (!allowWindowClose) {
       event.preventDefault();
@@ -334,7 +367,7 @@ function waitForBackendExit(timeoutMs = SHUTDOWN_TIMEOUT_MS + 10_000) {
 async function performGuiOnlyShutdown() {
   try {
     if (controlPort == null || !controlToken) throw new Error('GUI control endpoint unavailable');
-    const response = await fetch(`http://${WEB_HOST}:${controlPort}/desktop/gui-only`, {
+    const response = await fetch(`http://${CONTROL_HOST}:${controlPort}/desktop/gui-only`, {
       method: 'POST',
       headers: { 'X-Palsitter-Token': controlToken },
     });
@@ -351,7 +384,7 @@ async function performGuiOnlyShutdown() {
 async function forceExitAfterShutdownFailure() {
   if (controlPort != null && controlToken) {
     try {
-      const response = await fetch(`http://${WEB_HOST}:${controlPort}/desktop/force-shutdown`, {
+      const response = await fetch(`http://${CONTROL_HOST}:${controlPort}/desktop/force-shutdown`, {
         method: 'POST',
         headers: { 'X-Palsitter-Token': controlToken },
       });
@@ -376,7 +409,7 @@ async function performGracefulShutdown() {
     const timer = setTimeout(() => controller.abort(), SHUTDOWN_TIMEOUT_MS);
     let response;
     try {
-      response = await fetch(`http://${WEB_HOST}:${controlPort}/desktop/shutdown`, {
+      response = await fetch(`http://${CONTROL_HOST}:${controlPort}/desktop/shutdown`, {
         method: 'POST',
         headers: { 'X-Palsitter-Token': controlToken },
         signal: controller.signal,
@@ -404,18 +437,22 @@ function finishExit() {
 
 async function startBackend({ restarting = false } = {}) {
   const reserve = restarting ? reserveRestartPort : reservePortWithPrompt;
+  const dataRoot = app.getPath('userData');
+  webListenHost = configuredWebHost(dataRoot);
+  webConnectHost = connectionHost(webListenHost);
   webPort = await reserve(
     Number(restarting ? webPort : (process.env.PALSITTER_PORT || DEFAULT_WEB_PORT)),
+    webListenHost,
   );
   controlPort = await reserve(
     Number(restarting ? controlPort : (process.env.PALSITTER_CONTROL_PORT || DEFAULT_CONTROL_PORT)),
+    CONTROL_HOST,
   );
   controlToken = require('crypto').randomBytes(32).toString('hex');
-  const dataRoot = app.getPath('userData');
   const args = [
     path.join(backendRoot(), 'gui.py'),
     '--desktop-server',
-    '--host', WEB_HOST,
+    '--host', webListenHost,
     '--port', String(webPort),
     '--control-port', String(controlPort),
   ];
@@ -453,7 +490,7 @@ async function startBackend({ restarting = false } = {}) {
   backend.on('error', (error) => {
     if (!exiting) dialog.showErrorBox('Palsitter backend failed', String(error));
   });
-  await waitForBackend(`http://${WEB_HOST}:${webPort}/`);
+  await waitForBackend(`http://${webConnectHost}:${webPort}/`);
   backendReady = true;
 }
 
@@ -462,7 +499,7 @@ async function restartBackend() {
   backendRestarting = true;
   try {
     await startBackend({ restarting: true });
-    await mainWindow.loadURL(`http://${WEB_HOST}:${webPort}/`);
+    await mainWindow.loadURL(`http://${webConnectHost}:${webPort}/`);
   } catch (error) {
     dialog.showErrorBox(
       startupText('errorTitle'),
@@ -488,7 +525,7 @@ async function main() {
   try {
     await refreshPackagedRepository();
     await startBackend();
-    await mainWindow.loadURL(`http://${WEB_HOST}:${webPort}/`);
+    await mainWindow.loadURL(`http://${webConnectHost}:${webPort}/`);
   } catch (error) {
     closeSplash();
     if (!(error instanceof StartupCancelledError)) {

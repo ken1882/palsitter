@@ -13,6 +13,7 @@ These rules belong to the multi-game application rather than one game integratio
 - [Left Sidebar](./components/left-sidebar.md)
 - [Add Instance](./components/add-instance.md)
 - [Home](./components/home.md)
+- [Settings](./components/settings.md)
 - [Updater](./components/updater.md)
 - [Utils](./components/utils.md)
 

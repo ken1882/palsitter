@@ -58,7 +58,8 @@ PALSITTER_PYTHON_MANAGER=uv ./script/linux/palsitter.sh run
 ./script/linux/palsitter.sh run --host 0.0.0.0 --port 22368
 ```
 
-請勿在未加入驗證反向代理及適當防火牆規則的情況下，直接將網頁 UI 暴露到公開網際網路。
+首頁 → 設定可以將 Web UI 繫結到選定的網路介面。未啟用 Basic Auth 與適當防火牆
+規則前，請勿選擇非本機迴路位址。命令列與環境變數的主機設定優先於儲存的設定。
 
 ### Docker
 

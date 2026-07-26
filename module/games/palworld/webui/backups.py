@@ -375,7 +375,7 @@ def _render_backup_files(name: str) -> None:
             [
                 details,
                 _icon_button(t("backups.rollback"), "↻", lambda p=path: _confirm_backup_rollback(name, p)),
-                _icon_button(t("backups.delete"), "🗑", lambda p=path: _confirm_backup_delete(name, p), danger=True),
+                _icon_button(t("backups.delete"), "×", lambda p=path: _confirm_backup_delete(name, p), danger=True),
             ]
         )
     put_table(rows, header=[t("backups.file"), "", ""])

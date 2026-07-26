@@ -7,11 +7,12 @@ import sys
 import threading
 from pathlib import Path
 
-from pywebio import start_server
-
 from module.webui.app import app
+from module.webui.auth import WebAuth
 from module.webui.desktop_control import DesktopControlServer
 from module.webui.restart import RESTART_EXIT_CODE
+from module.webui.server import run_server
+from module.webui.settings import load_web_settings, resolve_bind_address
 from module.webui.shutdown import shutdown_all
 from module.webui.shutdown_workflow import (
     configure_completion,
@@ -24,7 +25,7 @@ from module.process import kill_by_port
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Palsitter web GUI")
-    parser.add_argument("--host", default=os.getenv("PALSITTER_HOST", "127.0.0.1"))
+    parser.add_argument("--host", default=None)
     parser.add_argument("--port", type=int, default=int(os.getenv("PALSITTER_PORT", "22368")))
     parser.add_argument(
         "--desktop-server",
@@ -42,7 +43,7 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _run_server(host: str, port: int, loop_ready=None) -> None:
+def _run_server(host: str | None, port: int, loop_ready=None) -> None:
     import tornado.ioloop
 
     loop = tornado.ioloop.IOLoop.current()
@@ -53,10 +54,17 @@ def _run_server(host: str, port: int, loop_ready=None) -> None:
     log_dir = Path(os.getenv("PALSITTER_LOG_DIR", str(Path(__file__).resolve().parent / "logs")))
     log_dir.mkdir(parents=True, exist_ok=True)
     static_dir = Path(__file__).resolve().parent / "assets"
-    start_server(app, host=host, port=port, debug=False, static_dir=str(static_dir))
+    settings = load_web_settings()
+    run_server(
+        app,
+        host=resolve_bind_address(host),
+        port=port,
+        static_dir=static_dir,
+        auth=WebAuth(settings, os.environ.get("PALSITTER_DESKTOP_TOKEN", "")),
+    )
 
 
-def _run_desktop_server(host: str, port: int, control_port: int) -> int:
+def _run_desktop_server(host: str | None, port: int, control_port: int) -> int:
     loop_ready = threading.Event()
     loop_holder: dict[str, object] = {}
 
@@ -108,12 +116,12 @@ def main() -> int:
     command = [
         sys.executable,
         str(Path(__file__).resolve()),
-        "--host",
-        args.host,
         "--port",
         str(args.port),
         "--server-child",
     ]
+    if args.host is not None:
+        command[2:2] = ["--host", args.host]
     while True:
         child = subprocess.Popen(command, cwd=str(Path(__file__).resolve().parent))
         try:

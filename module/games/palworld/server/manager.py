@@ -1831,6 +1831,13 @@ class PalServerManager:
         if not self.alive:
             if self.process is None:
                 return
+            # Process wrappers can briefly report an exit while the game
+            # process is still settling. Do not audit or restart until both
+            # the wrapper and the exact configured game process are gone.
+            if self.alive:
+                return
+            if self.running_probe(self.profile):
+                return
             if self.stop_requested():
                 self.log("Process stopped intentionally")
                 self.warning = False

@@ -138,7 +138,13 @@ run() {
   export PALSITTER_CONFIG_DIR="$DATA_DIR/config"
   export PALSITTER_PROFILE_DIR="$DATA_DIR/profile"
   export PALSITTER_LOG_DIR="$DATA_DIR/logs"
-  export PALSITTER_HOST="${PALSITTER_HOST:-127.0.0.1}"
+  # Leave the host unset unless the operator explicitly supplied an
+  # environment override so the Home -> Settings value can take effect.
+  if [ -n "${PALSITTER_HOST:-}" ]; then
+    export PALSITTER_HOST
+  else
+    unset PALSITTER_HOST
+  fi
   export PALSITTER_PORT="${PALSITTER_PORT:-22368}"
 
   cd "$PROJECT_ROOT"

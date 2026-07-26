@@ -10,7 +10,7 @@ from module.webui.checkbox_groups import mount_checkbox_group
 from module.webui.session import register_page_cleanup
 
 
-ColumnType = Literal["text", "datetime"]
+ColumnType = Literal["text", "datetime", "details"]
 
 
 @dataclass(frozen=True)
@@ -73,6 +73,10 @@ def _serialize_value(value: Any, column_type: ColumnType) -> Any:
         if not isinstance(value, dt.datetime):
             raise TypeError("datetime table cells must contain datetime values")
         return value.isoformat()
+    if column_type == "details":
+        if not isinstance(value, Mapping):
+            raise TypeError("details table cells must contain mappings")
+        return dict(value)
     return str(value)
 
 

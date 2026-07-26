@@ -25,6 +25,7 @@ from module.games.palworld.server.history import (
     classify_process_exit,
 )
 from module.games.palworld.audit import AuditEvent, AuditStore
+from module.webui.global_audit import GlobalAuditEvent, GlobalAuditStore
 from module.games.palworld.players_cache import PlayerCache
 from module.games.palworld.version_cache import update_version_cache
 from module.worldsettings.ini_codec import read_ini_option_settings
@@ -306,6 +307,7 @@ def _mock_ue4ss_server():
             b"Other = 1\r\nbUseUObjectArrayCache = true\r\n",
         )
         archive.writestr("ue4ss/Mods/ExampleLua/Scripts/main.lua", b"print('ok')")
+        archive.writestr("ue4ss/Mods/Keybinds/Scripts/main.lua", b"print('builtin')")
         archive.writestr("ue4ss/Mods/shared/helper.lua", b"shared")
     archive_bytes = archive_buffer.getvalue()
 
@@ -443,15 +445,13 @@ def _gui_page(
 
 
 @pytest.mark.playwright
-def test_home_has_home_updater_utils_and_no_add_server(tmp_path, monkeypatch):
+def test_home_has_home_updater_settings_utils_and_no_add_server(tmp_path, monkeypatch):
     with _gui_page(tmp_path, monkeypatch) as (page, _):
         page.locator("#pywebio-scope-menu").get_by_text("Home").wait_for(timeout=5000)
         page.locator("#pywebio-scope-menu").get_by_text("Updater").wait_for(timeout=5000)
+        page.locator("#pywebio-scope-menu").get_by_text("Settings").wait_for(timeout=5000)
         page.locator("#pywebio-scope-menu").get_by_text("Utils").wait_for(timeout=5000)
-        palsitter_port = page.url.rsplit(":", 1)[-1].rstrip("/")
-        page.get_by_text(
-            f"Browser url: http://localhost:{palsitter_port}", exact=True
-        ).wait_for(timeout=5000)
+        page.get_by_text("Browser url: http://localhost:", exact=False).wait_for(timeout=5000)
         assert page.locator("#pywebio-scope-aside svg.icon-develop").count() == 1
         assert page.locator("#pywebio-scope-aside svg.icon-run").count() == 1
         assert page.locator("#pywebio-scope-aside svg.aside-icon-add").count() == 1
@@ -463,6 +463,74 @@ def test_home_has_home_updater_utils_and_no_add_server(tmp_path, monkeypatch):
         assert page.locator("#pywebio-scope-content").get_by_text(
             "Automatic git update is not available yet."
         ).count() == 0
+
+
+@pytest.mark.playwright
+def test_home_settings_requires_auth_for_exposed_bind_and_required_credentials(
+    tmp_path, monkeypatch
+):
+    with _gui_page(tmp_path, monkeypatch) as (page, config_dir):
+        page.locator("#pywebio-scope-menu").get_by_text("Settings", exact=True).click()
+        panel = page.locator("#pywebio-scope-webui_settings_panel")
+        panel.wait_for(timeout=5000)
+        address = page.locator('select[name="webui_bind_address"]')
+        assert address.get_by_text("localhost — 127.0.0.1", exact=True).count() == 1
+        assert address.get_by_text("All interfaces — 0.0.0.0", exact=True).count() == 1
+
+        address.select_option(value='"0.0.0.0"')
+        page.locator("#pywebio-scope-webui_settings_actions").get_by_role(
+            "button", name="Save", exact=True
+        ).click()
+        page.get_by_text("Unauthenticated network access", exact=True).wait_for(timeout=5000)
+        page.get_by_role("button", name="Cancel", exact=True).click()
+        existing = json.loads((config_dir / "webui" / "settings.json").read_text(encoding="utf-8"))
+        assert "bind_address" not in existing
+
+        page.get_by_label("Enable Basic Auth", exact=True).check()
+        page.locator("#pywebio-scope-webui_settings_actions").get_by_role(
+            "button", name="Save", exact=True
+        ).click()
+        page.get_by_text("Username is required when Basic Auth is enabled.", exact=True).wait_for(
+            timeout=5000
+        )
+        page.locator('input[name="web_auth_username"]').fill("admin")
+        page.locator("#pywebio-scope-webui_settings_actions").get_by_role(
+            "button", name="Save", exact=True
+        ).click()
+        page.get_by_text("Password is required when Basic Auth is enabled.", exact=True).wait_for(
+            timeout=5000
+        )
+        page.locator('input[name="web_auth_password"]').fill("secret")
+        page.locator("#pywebio-scope-webui_settings_actions").get_by_role(
+            "button", name="Save", exact=True
+        ).click()
+        page.get_by_text("Restart Palsitter?", exact=True).wait_for(timeout=5000)
+        page.get_by_role("button", name="Cancel", exact=True).click()
+        saved = json.loads((config_dir / "webui" / "settings.json").read_text(encoding="utf-8"))
+        assert saved["bind_address"] == "0.0.0.0"
+        assert saved["web_auth"]["enabled"] is True
+        assert saved["web_auth"]["username"] == "admin"
+        assert saved["web_auth"]["password_hash"] != "secret"
+
+
+@pytest.mark.playwright
+def test_home_settings_exposure_actions_stay_horizontal_in_cjk(tmp_path, monkeypatch):
+    with _gui_page(tmp_path, monkeypatch, preferred_language="zh-TW") as (page, _):
+        page.locator("#pywebio-scope-menu").get_by_text("設定", exact=True).click()
+        page.locator('select[name="webui_bind_address"]').select_option(value='"0.0.0.0"')
+        page.locator("#pywebio-scope-webui_settings_actions").get_by_role(
+            "button", name="儲存", exact=True
+        ).click()
+        page.get_by_text("未驗證的網路存取", exact=True).wait_for(timeout=5000)
+
+        actions = page.locator("#pywebio-scope-webui_exposure_actions")
+        buttons = actions.get_by_role("button")
+        cancel_box = buttons.nth(0).bounding_box()
+        save_box = buttons.nth(1).bounding_box()
+        assert cancel_box is not None and save_box is not None
+        assert save_box["x"] > cancel_box["x"]
+        assert cancel_box["width"] > cancel_box["height"]
+        assert save_box["width"] > save_box["height"]
 
 
 @pytest.mark.playwright
@@ -1021,6 +1089,7 @@ def test_instance_overview_status_log_and_console(tmp_path, monkeypatch):
             "announce <message>\nSend a message to all players",
             "ban <user_id> [message]\nBan a player from the server",
             "backup\nCreate a save backup",
+            "clear\nClear the visible log output",
             "info\nShow server information",
             "kick <user_id> [message]\nKick a player from the server",
             "metrics\nShow server metrics",
@@ -1036,6 +1105,7 @@ def test_instance_overview_status_log_and_console(tmp_path, monkeypatch):
             "Send a message to all players",
             "Ban a player from the server",
             "Create a save backup",
+            "Clear the visible log output",
             "Show server information",
             "Kick a player from the server",
             "Show server metrics",
@@ -1087,6 +1157,12 @@ def test_instance_overview_status_log_and_console(tmp_path, monkeypatch):
         page.locator(".log-box").get_by_text("Unknown console command: nonsense").wait_for(timeout=5000)
         assert console.input_value() == ""
         assert autocomplete.is_hidden()
+        console.fill("clear")
+        console.press("Enter")
+        page.locator(".log-box").get_by_text("No log output yet.", exact=True).wait_for(
+            timeout=5000
+        )
+        assert "Unknown console command: nonsense" not in page.locator(".log-box").inner_text()
 
 
 @pytest.mark.playwright
@@ -1701,6 +1777,9 @@ def test_audit_page_supports_monthly_rows_search_tags_time_and_pagination(tmp_pa
         AuditEvent(now - dt.timedelta(days=2), "game_command", "older-game-command")
     )
     with _gui_page(tmp_path, monkeypatch) as (page, _):
+        GlobalAuditStore().append(
+            GlobalAuditEvent(now, "web_login_success", "admin", "192.168.1.20", "basic", "Global login")
+        )
         page.locator("#pywebio-scope-aside").get_by_text("default", exact=True).click()
         page.locator("#pywebio-scope-menu").get_by_text("Game Map", exact=True).click()
         page.locator("#palworld-map-viewport").wait_for(timeout=5000)
@@ -1755,8 +1834,9 @@ def test_audit_page_supports_monthly_rows_search_tags_time_and_pagination(tmp_pa
         assert header.get_by_role("heading", name="Audit logs", exact=True).count() == 1
         assert audit.bounding_box()["y"] > header.bounding_box()["y"]
         assert audit.get_by_role("columnheader").all_text_contents() == [
-            "Timestamp", "Type", "Message"
+            "Timestamp", "Type", "Username", "Source IP", "Message"
         ]
+        audit.get_by_text("Global login", exact=True).wait_for(timeout=5000)
         assert audit.locator("thead th").nth(1).bounding_box()["width"] >= 140
         first_header = audit.locator("thead th").nth(0)
         handle = first_header.locator(".pagination-table-resize-handle")
@@ -1831,7 +1911,7 @@ def test_audit_page_supports_monthly_rows_search_tags_time_and_pagination(tmp_pa
 @pytest.mark.playwright
 def test_palworld_tools_checks_and_repairs_windows_firewall(tmp_path, monkeypatch):
     firewall_state = tmp_path / "firewall-state.txt"
-    firewall_state.write_text("blocked", encoding="utf-8")
+    firewall_state.write_text("blocked:third-party-block", encoding="utf-8")
     with _gui_page(
         tmp_path,
         monkeypatch,
@@ -1851,6 +1931,7 @@ def test_palworld_tools_checks_and_repairs_windows_firewall(tmp_path, monkeypatc
         tools_panel.get_by_role("button", name="Check", exact=True).click()
         modal = page.locator(".modal.show")
         modal.get_by_text("Fix Firewall", exact=True).wait_for(timeout=5000)
+        modal.get_by_text("third-party-block", exact=False).wait_for(timeout=5000)
         modal.get_by_text("Administrator approval is required", exact=False).wait_for(
             timeout=5000
         )
@@ -2014,6 +2095,109 @@ def test_palworld_tools_player_migration_uses_real_selection_and_confirmation(
             re.compile("(Player migration is unavailable|Could not migrate the player ID)"),
             exact=False,
         ).wait_for(timeout=10000)
+
+
+@pytest.mark.playwright
+def test_palworld_tools_migration_confirms_decoded_name_mismatch(tmp_path, monkeypatch):
+    world_id = "D" * 32
+    source = _fixed_backup_source(tmp_path)
+    world = source / world_id
+    players = world / "Players"
+    players.mkdir(parents=True)
+    old_guid = "00000000000000000000000000000001"
+    new_guid = "8E910AC2000000000000000000000000"
+
+    def player(guid):
+        return {
+            "properties": {
+                "SaveData": {
+                    "value": {
+                        "PlayerUId": {"value": guid},
+                        "IndividualId": {"value": {"PlayerUId": {"value": guid}}},
+                    }
+                }
+            }
+        }
+
+    def level_entry(guid, name):
+        return {
+            "key": {"PlayerUId": {"value": guid}},
+            "value": {
+                "RawData": {
+                    "value": {
+                        "object": {
+                            "SaveParameter": {
+                                "value": {
+                                    "IsPlayer": {"value": True},
+                                    "NickName": {"value": name},
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+        }
+
+    level = {
+        "properties": {
+            "worldSaveData": {
+                "value": {
+                    "CharacterSaveParameterMap": {
+                        "value": [
+                            level_entry(old_guid, "Original"),
+                            level_entry(new_guid, "New"),
+                        ]
+                    }
+                }
+            }
+        }
+    }
+    (world / "Level.sav").write_text(json.dumps(level), encoding="utf-8")
+    (players / f"{old_guid}.sav").write_text(
+        json.dumps(player(old_guid)), encoding="utf-8"
+    )
+    (players / f"{new_guid}.sav").write_text(
+        json.dumps(player(new_guid)), encoding="utf-8"
+    )
+    (world / ".palsitter-player-names.json").write_text(
+        json.dumps({old_guid: "Original", new_guid: "New"}),
+        encoding="utf-8",
+    )
+    original_level = (world / "Level.sav").read_bytes()
+
+    with _gui_page(
+        tmp_path,
+        monkeypatch,
+        profile_overrides={
+            "backup_source": str(source),
+            "dedicated_server_name": world_id,
+        },
+        extra_env={"PALSITTER_TEST_PLAYER_MIGRATION_CODEC": "json"},
+    ) as (page, _):
+        page.locator("#pywebio-scope-aside").get_by_text("default", exact=True).click()
+        page.locator("#pywebio-scope-menu").get_by_text("Tools", exact=True).click()
+        migration = page.locator("#pywebio-scope-tools_migration")
+        migration.get_by_label("Original player save", exact=True).select_option(
+            label=f"Original — {old_guid}.sav"
+        )
+        migration.get_by_label("New server player save", exact=True).select_option(
+            label=f"New — {new_guid}.sav"
+        )
+        migration.get_by_role("button", name="Migrate player ID", exact=True).click()
+        page.locator(".modal.show").get_by_role(
+            "button", name="Migrate player ID", exact=True
+        ).click()
+
+        mismatch = page.locator(".modal.show").last
+        mismatch.get_by_text("Player name mismatch", exact=True).wait_for(timeout=10000)
+        mismatch.get_by_text("Original", exact=False).wait_for(timeout=5000)
+        mismatch.get_by_text("Original", exact=False).wait_for(timeout=5000)
+        mismatch.get_by_role("button", name="Cancel", exact=True).click()
+        migration.get_by_text(
+            "Could not migrate the player ID", exact=False
+        ).wait_for(timeout=10000)
+
+    assert (world / "Level.sav").read_bytes() == original_level
 
 
 @pytest.mark.playwright
@@ -2523,6 +2707,15 @@ def test_overview_replays_persisted_server_logs_after_gui_start(tmp_path, monkey
         page.locator("#overview-log-box").get_by_text(
             "Running Palworld dedicated server on :8211",
         ).wait_for(timeout=5000)
+        page.locator("#pywebio-scope-log_bar").get_by_role(
+            "button", name="Clear", exact=True
+        ).click()
+        page.locator("#overview-log-box").get_by_text(
+            "No log output yet.", exact=True
+        ).wait_for(timeout=5000)
+        assert "Running Palworld dedicated server on :8211" in log_path.read_text(
+            encoding="utf-8"
+        )
 
 
 @pytest.mark.playwright
@@ -3007,6 +3200,19 @@ def test_auto_restart_history_persists_crash_cause_and_escaped_output(tmp_path, 
         )
 
         history.get_by_text("Access violation", exact=False).wait_for(timeout=5000)
+        restart_table = history.locator("#palworld-restart-history-table")
+        restart_table.wait_for(timeout=5000)
+        assert restart_table.locator(".pagination-table-resize-handle").count() == 4
+        first_header = restart_table.locator("thead th").first
+        handle = first_header.locator(".pagination-table-resize-handle")
+        handle.scroll_into_view_if_needed()
+        before_width = first_header.bounding_box()["width"]
+        handle_box = handle.bounding_box()
+        page.mouse.move(handle_box["x"] + handle_box["width"] / 2, handle_box["y"] + 8)
+        page.mouse.down()
+        page.mouse.move(handle_box["x"] + handle_box["width"] / 2 + 40, handle_box["y"] + 8)
+        page.mouse.up()
+        assert first_header.bounding_box()["width"] > before_width + 20
         assert "STATUS_ACCESS_VIOLATION" in history.inner_text()
         assert "0xC0000005" in history.inner_text()
         assert "0x0" not in history.inner_text()
@@ -4617,6 +4823,59 @@ def test_mods_page_installs_lists_opens_folders_and_removes_ue4ss(tmp_path, monk
             ).wait_for(timeout=10000)
             panel.get_by_text("Installed: experimental-palworld", exact=True).wait_for(timeout=5000)
             panel.get_by_text("ExampleLua", exact=True).wait_for(timeout=5000)
+            user_checkbox = panel.get_by_role(
+                "checkbox", name="Enabled ExampleLua", exact=True
+            )
+            user_checkbox.click()
+            enabled_marker = (
+                root
+                / "Pal"
+                / "Binaries"
+                / "Win64"
+                / "ue4ss"
+                / "Mods"
+                / "ExampleLua"
+                / "enabled.txt"
+            )
+            deadline = time.time() + 5
+            while not enabled_marker.exists() and time.time() < deadline:
+                time.sleep(0.05)
+            assert enabled_marker.exists()
+            user_checkbox = panel.get_by_role(
+                "checkbox", name="Enabled ExampleLua", exact=True
+            )
+            assert user_checkbox.is_checked()
+            user_checkbox.click()
+            deadline = time.time() + 5
+            while enabled_marker.exists() and time.time() < deadline:
+                time.sleep(0.05)
+            assert not enabled_marker.exists()
+            protected_delete = panel.get_by_role(
+                "button", name="Delete Keybinds", exact=True
+            )
+            assert protected_delete.is_disabled()
+            assert protected_delete.inner_text() == "×"
+            assert protected_delete.evaluate("element => getComputedStyle(element).opacity") == "0.55"
+            assert protected_delete.evaluate("element => getComputedStyle(element).cursor") == "not-allowed"
+            assert protected_delete.get_attribute("title") == (
+                "Built-in UE4SS mods cannot be deleted."
+            )
+            panel.get_by_role("button", name="Delete ExampleLua", exact=True).click()
+            delete_modal = page.locator(".modal.show")
+            delete_modal.get_by_text(
+                "Delete ExampleLua? This cannot be undone.", exact=True
+            ).wait_for(timeout=5000)
+            delete_modal.get_by_role("button", name="Delete", exact=True).click()
+            panel.get_by_text("ExampleLua", exact=True).wait_for(state="detached", timeout=5000)
+            assert not (
+                root
+                / "Pal"
+                / "Binaries"
+                / "Win64"
+                / "ue4ss"
+                / "Mods"
+                / "ExampleLua"
+            ).exists()
 
             win64 = root / "Pal" / "Binaries" / "Win64"
             settings = win64 / "ue4ss" / "UE4SS-settings.ini"

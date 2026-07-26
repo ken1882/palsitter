@@ -5,7 +5,8 @@ It displays new audit events recorded by Palsitter in monthly files under the in
 `logs` directory. Existing Overview and restart logs are not imported.
 
 - Files are named `audit-YYYYMM.jsonl`; event timestamps are stored as UTC ISO datetimes.
-- The table columns are Timestamp, Type, and Message.
+- The table columns are Timestamp, Type, Username, Source IP, and Message. Username and
+  Source IP are blank for instance-local events.
 - Types include Palsitter commands, in-game commands, player login/logout, server start,
   update, crash, stop, server exit, and agent exit.
 - The page supports search, type checkboxes, custom calendar/time bounds, quick ranges for
@@ -19,6 +20,10 @@ It displays new audit events recorded by Palsitter in monthly files under the in
   positioning constants.
 - adminpassword command arguments are never written to audit or Overview logs; they
   are recorded as adminpassword (result: success) or adminpassword (result: fail).
+- The table also merges shared web authentication events stored under `config/webui/`.
+  These global events include authentication method, username, source IP when available,
+  and success/failure. They are read-only projections and are not copied into the
+  instance's monthly audit files.
 - The page loads a snapshot when opened; it does not stream new rows or provide export or
   deletion controls.
 

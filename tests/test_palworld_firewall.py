@@ -1,3 +1,4 @@
+import base64
 import json
 import subprocess
 from pathlib import Path
@@ -8,8 +9,8 @@ import pytest
 from module.games.palworld.config import PalworldProfile
 from module.games.palworld.firewall import (
     FirewallPermissionDenied,
-    FirewallRepairUnavailable,
     FirewallService,
+    _fix_script,
     detect_firewall_backend,
     port_rule_name,
     program_rule_name,
@@ -247,7 +248,7 @@ def test_matching_block_rule_takes_precedence(tmp_path):
     assert result.blocked
     assert not result.allowed
     assert result.external_block_rule_names == ("third-party-block",)
-    assert not result.repairable
+    assert result.repairable
 
 
 def test_fix_creates_owned_program_rule_and_removes_owned_block(tmp_path):
@@ -266,16 +267,41 @@ def test_fix_creates_owned_program_rule_and_removes_owned_block(tmp_path):
     assert captured["remove_names"] == []
 
 
-def test_fix_rejects_external_block_rule(tmp_path):
+def test_fix_removes_external_block_rule(tmp_path):
     profile = _profile(tmp_path)
-    service = FirewallService(backend="windows", supported=True, run_command=_runner([]))
+    captured = {}
+
+    def elevated(payload):
+        captured.update(payload)
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    service = FirewallService(
+        backend="windows",
+        supported=True,
+        run_command=_runner([]),
+        elevated_runner=elevated,
+    )
     status = service.check(profile)
     status = status.__class__(
         **{**status.__dict__, "external_block_rule_names": ("third-party",), "port_blocked": True}
     )
 
-    with pytest.raises(FirewallRepairUnavailable):
-        service.fix(profile, status)
+    service.fix(profile, status)
+
+    assert captured["remove_names"] == ["third-party"]
+
+
+def test_windows_fix_suppresses_powershell_progress_clixml():
+    script = _fix_script("C:\\PalServer.exe", "rule-name", "display", ())
+
+    assert "$ProgressPreference = 'SilentlyContinue'" in script
+
+
+def test_windows_fix_removes_netsh_rule_names_as_display_names():
+    script = _fix_script("C:\\PalServer.exe", "rule-name", "display", ("Pal",))
+
+    assert "Get-NetFirewallRule -Name $name" in script
+    assert "Get-NetFirewallRule -DisplayName $name" in script
 
 
 def test_fix_surfaces_elevated_helper_failure(tmp_path):
@@ -292,6 +318,64 @@ def test_fix_surfaces_elevated_helper_failure(tmp_path):
 
     with pytest.raises(Exception, match="User cancelled UAC"):
         service.fix(profile, status)
+
+
+def test_fix_includes_raw_stdout_stderr_and_exit_code(tmp_path):
+    profile = _profile(tmp_path)
+    logs = []
+    service = FirewallService(
+        backend="windows",
+        supported=True,
+        logger=logs.append,
+        run_command=_runner([]),
+        elevated_runner=lambda payload: SimpleNamespace(
+            returncode=1,
+            stdout="raw stdout reason",
+            stderr="raw stderr reason",
+        ),
+    )
+    status = service.check(profile)
+
+    with pytest.raises(Exception) as error:
+        service.fix(profile, status)
+
+    message = str(error.value)
+    assert "stderr: raw stderr reason" in message
+    assert "stdout: raw stdout reason" in message
+    assert "exit code: 1" in message
+    assert logs == [
+        "stderr: raw stderr reason",
+        "stdout: raw stdout reason",
+        "exit code: 1",
+    ]
+
+
+def test_windows_elevated_fix_collects_helper_output_without_redirect_parameters(
+    monkeypatch,
+):
+    captured = {}
+
+    def run(args, **kwargs):
+        captured["script"] = base64.b64decode(args[-1]).decode("utf-16le")
+        return subprocess.CompletedProcess(args, 1, stdout="outer", stderr="")
+
+    monkeypatch.setattr(
+        "module.games.palworld.firewall._read_elevated_result",
+        lambda path: ("child stdout", "child stderr"),
+    )
+    service = FirewallService(
+        backend="windows",
+        supported=True,
+        run_command=run,
+    )
+
+    result = service._run_elevated({})
+
+    assert "-Verb RunAs" in captured["script"]
+    assert "-RedirectStandardOutput" not in captured["script"]
+    assert "-RedirectStandardError" not in captured["script"]
+    assert "outer\nchild stdout" == result.stdout
+    assert result.stderr == "child stderr"
 
 
 def test_non_windows_status_is_unsupported(tmp_path):
@@ -338,7 +422,28 @@ def test_iptables_matching_block_rule_prevents_repair(tmp_path):
 
     assert result.blocked
     assert result.external_block_rule_names == ("(unnamed rule)",)
-    assert not result.repairable
+    assert result.repairable
+
+
+def test_iptables_fix_removes_detected_external_block_rule(tmp_path):
+    profile = _profile(tmp_path)
+    captured = {}
+    service = FirewallService(
+        supported=True,
+        backend="iptables",
+        run_command=lambda args, **kwargs: subprocess.CompletedProcess(
+            args,
+            0,
+            stdout="-A INPUT -p udp --dport 8211 -m comment --comment third-party -j REJECT\n",
+            stderr="",
+        ),
+        elevated_runner=lambda payload: captured.update(payload)
+        or SimpleNamespace(returncode=0, stdout="", stderr=""),
+    )
+
+    service.fix(profile, service.check(profile))
+
+    assert captured["remove_block_rules"] == [["reject", "third-party"]]
 
 
 def test_ufw_checks_allow_and_deny_rules(tmp_path):
@@ -363,6 +468,7 @@ def test_ufw_checks_allow_and_deny_rules(tmp_path):
     assert result.port_allowed
     assert result.blocked
     assert result.external_block_rule_names == ("(unnamed rule)",)
+    assert result.repairable
     assert not result.allowed
 
 
@@ -400,6 +506,9 @@ def test_firewalld_checks_zone_ports_and_rich_rule_blocks(tmp_path):
     assert result.port_allowed
     assert result.blocked
     assert result.external_block_rule_names
+    assert result.external_block_rule_specs == (
+        ("public", '<rule family="ipv4"><port port="8211" protocol="udp"/><drop/></rule>'),
+    )
     assert not result.allowed
 
 
@@ -454,6 +563,33 @@ def test_linux_firewalld_fix_adds_permanent_port_and_reloads(tmp_path):
 
     assert captured["backend"] == "firewalld"
     assert captured["port"] == 8211
+
+
+def test_linux_firewalld_fix_removes_external_rich_rule(tmp_path):
+    profile = _profile(tmp_path)
+    captured = {}
+    rich_rule = '<rule family="ipv4"><port port="8211" protocol="udp"/><drop/></rule>'
+
+    def run(args, **kwargs):
+        if args == ["firewall-cmd", "--get-active-zones"]:
+            return subprocess.CompletedProcess(args, 0, stdout="public\n", stderr="")
+        if args[-1] == "--list-ports":
+            return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+        return subprocess.CompletedProcess(args, 0, stdout=rich_rule + "\n", stderr="")
+
+    def elevated(payload):
+        captured.update(payload)
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    service = FirewallService(
+        supported=True,
+        backend="firewalld",
+        run_command=run,
+        elevated_runner=elevated,
+    )
+    service.fix(profile, service.check(profile))
+
+    assert captured["remove_rich_rules"] == [["public", rich_rule]]
 
 
 def test_linux_sudo_password_is_sent_only_to_stdin_after_permission_denied(

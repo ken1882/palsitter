@@ -7,10 +7,12 @@ application-owned Electron JavaScript from `resources/app`, Python backend sourc
 The application is intentionally packaged with `asar: false`. Editing Palsitter-owned
 JavaScript, Python, or GUI assets takes effect on the next launch without rebuilding.
 
-The release also contains the repository's full `.git` history under
-`resources/backend/.git` and a portable Git runtime under `resources/git`. This keeps the
-Updater history, fetch, and pull operations functional without requiring Git to be
-installed separately.
+The release contains the repository's full `.git` history under `resources/backend/.git`
+and MinGit under `resources/git`. Only `.gitignore`, `gui.py`, `module`, and GUI `assets`
+are checked out; tests, documentation, CI definitions, desktop build files, and readmes
+are excluded.
+The sparse checkout persists across updater fetch/reset operations, so updates retain that
+production-only working tree without requiring Git to be installed separately.
 
 Packaged runtime data is stored beside `Palsitter.exe` in the portable release's `data`
 directory instead of `%APPDATA%`: configuration is under `data/config`, instance state
@@ -43,6 +45,10 @@ X-Palsitter-Token: <token>
 ```
 
 The executable starts the shared workflow through the authenticated control endpoint.
+The web listener follows the saved Home → Settings bind address unless
+`PALSITTER_HOST` is explicitly supplied. Electron injects its per-launch desktop token
+into requests to its own backend, while direct browser clients use the configured HTTP
+Basic Auth credentials when authentication is enabled.
 The explicit force path uses the same token and shared workflow:
 
 ```text

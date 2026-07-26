@@ -177,6 +177,8 @@ textarea.form-control.field-invalid {
 .menu-button:hover, .menu-active { border-left-color: #7a77bb; color: #7a77bb; font-weight: 700; }
 .menu-divider { display: flex; align-items: center; gap: .5rem; color: #adb5bd; font-size: .85rem; margin: .6rem 0 .4rem; }
 .menu-divider:before, .menu-divider:after { content: ""; flex: 1; border-top: 2px solid #adb5bd; opacity: .8; }
+#pywebio-scope-webui_exposure_actions > div { align-items: center; }
+#pywebio-scope-webui_exposure_actions button { white-space: nowrap; }
 .home-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr)); gap: .625rem; }
 .home-dashboard { max-width: 80rem; margin: 0 auto; }
 .home-section-title { margin: .25rem 0 .65rem; font-size: 1.25rem; font-weight: 600; }

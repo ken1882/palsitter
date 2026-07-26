@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Mapping, Optional
 
 from module.games.palworld.backup import BackupService
 from module.games.palworld.config import PalworldProfile
@@ -15,6 +16,7 @@ from module.games.palworld.config import PalworldProfile
 GUID_RE = re.compile(r"^[0-9A-Fa-f]{32}$")
 PLAYER_NAME_CACHE_FILENAME = ".palsitter-player-names.json"
 ProgressCallback = Callable[[str, str | None], None]
+NameMismatchConfirmation = Callable[[str, str, str, str], bool]
 
 
 class PlayerMigrationError(RuntimeError):
@@ -87,6 +89,26 @@ class _PalSavCodec:
             return self._compress(gvas.write(self._custom_properties), save.save_type)
         except Exception as exc:
             raise PlayerMigrationError(f"Could not encode player migration: {exc}") from exc
+
+
+class _JsonTestCodec:
+    def read(self, path: Path) -> _SaveDocument:
+        try:
+            document = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            raise PlayerMigrationError(f"Could not decode {path.name}: {exc}") from exc
+        if not isinstance(document, dict):
+            raise PlayerMigrationError(f"Could not decode {path.name}: expected an object")
+        return _SaveDocument(document, 49)
+
+    def encode(self, save: _SaveDocument) -> bytes:
+        return json.dumps(save.document, ensure_ascii=False, sort_keys=True).encode()
+
+
+def _default_codec() -> _PalSavCodec | _JsonTestCodec:
+    if os.getenv("PALSITTER_TEST_PLAYER_MIGRATION_CODEC") == "json":
+        return _JsonTestCodec()
+    return _PalSavCodec()
 
 
 def _normal_guid(value: object) -> str:
@@ -323,7 +345,7 @@ def build_player_name_cache(
     if is_server_active():
         raise PlayerNameCacheError("Stop the server before building the player name cache")
     world = _world_path(profile)
-    codec = codec or _PalSavCodec()
+    codec = codec or _default_codec()
 
     def report(phase: str, filename: str | None = None) -> None:
         if progress is not None:
@@ -360,6 +382,8 @@ def migrate_player_ids(
     backup_service: Optional[BackupService] = None,
     codec: Optional[_PalSavCodec] = None,
     progress: Optional[ProgressCallback] = None,
+    expected_names: Mapping[str, str] | None = None,
+    confirm_name_mismatch: Optional[NameMismatchConfirmation] = None,
 ) -> PlayerMigrationResult:
     if is_server_active():
         raise PlayerMigrationError("Stop the server before migrating player IDs")
@@ -371,7 +395,7 @@ def migrate_player_ids(
     world = _world_path(profile)
     old_path = _find_player_file(world, old_player)
     new_path = _find_player_file(world, new_player)
-    codec = codec or _PalSavCodec()
+    codec = codec or _default_codec()
 
     def report(phase: str, filename: str | None = None) -> None:
         if progress is not None:
@@ -404,6 +428,34 @@ def migrate_player_ids(
             f"Level.sav does not reference {new_path.name}; have the player join "
             "once and create the new character first"
         )
+
+    level_names = _extract_player_names(level.document)
+    expected = {
+        str(guid).casefold(): str(name).strip()
+        for guid, name in (expected_names or {}).items()
+        if str(name).strip()
+    }
+    source_expected = expected.get(old_guid)
+    destination_expected = expected.get(new_guid)
+    source_actual = level_names.get(old_guid)
+    destination_actual = level_names.get(new_guid)
+    names_mismatch = source_actual != destination_actual or (
+        source_expected is not None
+        and source_actual != source_expected
+    ) or (
+        destination_expected is not None
+        and destination_actual != destination_expected
+    )
+    if names_mismatch and (
+        confirm_name_mismatch is None
+        or not confirm_name_mismatch(
+            source_expected or "(unknown)",
+            source_actual or "(unknown)",
+            destination_expected or "(unknown)",
+            destination_actual or "(unknown)",
+        )
+    ):
+        raise PlayerMigrationError("Player names do not match Level.sav; migration cancelled")
 
     _swap_guids(level.document, old_guid, new_guid)
     _swap_guids(old_doc.document, old_guid, new_guid)

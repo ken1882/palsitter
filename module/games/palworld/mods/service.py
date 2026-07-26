@@ -35,6 +35,25 @@ PALWORLD_UE4SS_DOWNLOAD_URL = (
     "experimental-palworld/UE4SS-Palworld.zip"
 )
 
+UE4SS_DEFAULT_MODS = frozenset(
+    name.casefold()
+    for name in (
+        "ActorDumperMod",
+        "BPML_GenericFunctions",
+        "BPModLoaderMod",
+        "CheatManagerEnablerMod",
+        "ConsoleCommandsMod",
+        "ConsoleEnablerMod",
+        "CXXHeaderGeneratorMod",
+        "Keybinds",
+        "LineTraceMod",
+        "ObjectDumperMod",
+        "SplitScreenMod",
+        "UHTCompatibleHeaderGeneratorMod",
+        "jsbLuaProfilerMod",
+    )
+)
+
 _SETTING_RE = re.compile(
     r"^(?P<indent>[ \t]*)bUseUObjectArrayCache[ \t]*=.*$",
     re.IGNORECASE,
@@ -80,6 +99,7 @@ def _configured_palworld_release() -> UE4SSRelease:
 class InstalledMod:
     name: str
     enabled: bool = True
+    deletable: bool = True
 
 
 @dataclass(frozen=True)
@@ -235,6 +255,29 @@ class UE4SSService:
     def delete_pak(self, name: str) -> None:
         self._resolve_pak_path(name).unlink()
 
+    def set_lua_enabled(self, name: str, enabled: bool) -> InstalledMod:
+        self._ensure_manageable()
+        directory = self._resolve_lua_path(name)
+        marker = directory / "enabled.txt"
+        is_default = self._is_default_lua_mod(directory.name)
+        if enabled:
+            if not marker.exists():
+                marker.touch()
+        elif marker.exists():
+            if marker.is_dir() or marker.is_symlink():
+                marker.unlink()
+            else:
+                marker.unlink()
+        self._set_lua_config_enabled(directory.parent, directory.name, bool(enabled), is_default)
+        return InstalledMod(directory.name, bool(enabled), not is_default)
+
+    def delete_lua(self, name: str) -> None:
+        self._ensure_manageable()
+        directory = self._resolve_lua_path(name)
+        if self._is_default_lua_mod(directory.name):
+            raise PermissionError(f"Default UE4SS mod cannot be deleted: {directory.name}")
+        shutil.rmtree(directory)
+
     def _ensure_manageable(self) -> None:
         status = self.status()
         if not status.supported:
@@ -347,16 +390,110 @@ class UE4SSService:
             except FileNotFoundError:
                 pass
 
-    @staticmethod
-    def _list_lua_mods(directory: Path | None) -> tuple[InstalledMod, ...]:
+    def _list_lua_mods(self, directory: Path | None) -> tuple[InstalledMod, ...]:
         if directory is None or not directory.is_dir():
             return ()
+        flags = self._read_lua_config_flags(directory)
         mods = [
-            InstalledMod(entry.name)
+            InstalledMod(
+                entry.name,
+                enabled=(entry / "enabled.txt").exists()
+                or flags.get(entry.name.casefold(), False),
+                deletable=not self._is_default_lua_mod(entry.name),
+            )
             for entry in directory.iterdir()
             if entry.is_dir() and not entry.is_symlink() and entry.name.casefold() != "shared"
         ]
         return tuple(sorted(mods, key=lambda item: item.name.casefold()))
+
+    @staticmethod
+    def _is_default_lua_mod(name: str) -> bool:
+        return name.casefold() in UE4SS_DEFAULT_MODS
+
+    def _resolve_lua_path(self, name: str) -> Path:
+        layout = self._detect_layout(self._read_marker().get("layout"))
+        if layout is None:
+            raise RuntimeError("UE4SS is not installed")
+        normalized = str(name).replace("\\", "/").strip("/")
+        if not normalized or "/" in normalized or normalized in (".", ".."):
+            raise ValueError(f"Invalid UE4SS Lua mod path: {name}")
+        target = self._mods_dir(layout) / normalized
+        if not target.is_dir() or target.is_symlink() or normalized.casefold() == "shared":
+            raise FileNotFoundError(f"UE4SS Lua mod not found: {normalized}")
+        return target
+
+    @staticmethod
+    def _read_lua_config_flags(directory: Path) -> dict[str, bool]:
+        flags: dict[str, bool] = {}
+        json_path = directory / "mods.json"
+        try:
+            records = json.loads(json_path.read_text(encoding="utf-8"))
+        except (FileNotFoundError, OSError, ValueError, TypeError):
+            records = ()
+        if isinstance(records, list):
+            for record in records:
+                if isinstance(record, dict) and isinstance(record.get("mod_name"), str):
+                    flags[record["mod_name"].casefold()] = bool(record.get("mod_enabled"))
+        txt_path = directory / "mods.txt"
+        try:
+            lines = txt_path.read_text(encoding="utf-8").splitlines()
+        except (FileNotFoundError, OSError, UnicodeError):
+            lines = ()
+        for line in lines:
+            match = re.match(r"^\s*([^:;]+?)\s*:\s*([01])(?:\s*;.*)?$", line)
+            if match:
+                flags[match.group(1).strip().casefold()] = match.group(2) == "1"
+        return flags
+
+    @staticmethod
+    def _replace_lua_txt_flag(path: Path, name: str, enabled: bool) -> bool:
+        try:
+            original = path.read_text(encoding="utf-8")
+        except (FileNotFoundError, OSError, UnicodeError):
+            return False
+        lines = original.splitlines(keepends=True)
+        changed = False
+        for index, line in enumerate(lines):
+            ending = "\r\n" if line.endswith("\r\n") else "\n" if line.endswith("\n") else ""
+            body = line[: -len(ending)] if ending else line
+            match = re.match(r"^(\s*([^:;]+?)\s*:\s*)([01])(\s*;.*)?$", body)
+            if match and match.group(2).strip().casefold() == name.casefold():
+                suffix = match.group(4) or ""
+                lines[index] = f"{match.group(1)}{int(enabled)}{suffix}{ending}"
+                changed = True
+        if changed:
+            path.write_text("".join(lines), encoding="utf-8")
+        return changed
+
+    @staticmethod
+    def _replace_lua_json_flag(path: Path, name: str, enabled: bool) -> bool:
+        try:
+            records = json.loads(path.read_text(encoding="utf-8"))
+        except (FileNotFoundError, OSError, ValueError, TypeError):
+            return False
+        if not isinstance(records, list):
+            return False
+        changed = False
+        for record in records:
+            if isinstance(record, dict) and str(record.get("mod_name", "")).casefold() == name.casefold():
+                record["mod_enabled"] = bool(enabled)
+                changed = True
+        if changed:
+            path.write_text(json.dumps(records, indent=4) + "\n", encoding="utf-8")
+        return changed
+
+    def _set_lua_config_enabled(
+        self, directory: Path, name: str, enabled: bool, is_default: bool
+    ) -> None:
+        txt_path = directory / "mods.txt"
+        json_path = directory / "mods.json"
+        changed_txt = self._replace_lua_txt_flag(txt_path, name, enabled)
+        changed_json = self._replace_lua_json_flag(json_path, name, enabled)
+        if is_default and not changed_txt and not changed_json:
+            with txt_path.open("a", encoding="utf-8") as output:
+                if txt_path.stat().st_size:
+                    output.write("\n")
+                output.write(f"{name} : {int(enabled)}\n")
 
     @staticmethod
     def _list_pak_mods(directory: Path | None) -> tuple[InstalledMod, ...]:

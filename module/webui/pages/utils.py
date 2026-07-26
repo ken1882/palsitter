@@ -45,6 +45,10 @@ def _updater(*args, **kwargs):
     from module.webui.pages.updater import _updater as implementation
     return implementation(*args, **kwargs)
 
+def _settings(*args, **kwargs):
+    from module.webui.pages.settings import _settings as implementation
+    return implementation(*args, **kwargs)
+
 UTIL_LOGS: list[str] = []
 
 UTIL_LOGS_LOCK = threading.Lock()
@@ -298,6 +302,7 @@ def _render_utils() -> None:
     with use_scope("menu"):
         _menu_button(t("nav.home"), _home)
         _menu_button(t("nav.updater"), _updater)
+        _menu_button(t("nav.settings"), _settings)
         _menu_button(t("nav.utils"), _utils, True)
     clear("content")
     with use_scope("content"):

@@ -38,11 +38,11 @@ jobs:
       - name: Assemble bundled Git runtime
         shell: pwsh
         run: .\desktop\scripts\build-git.ps1
+      - name: Compile Python sources
+        run: python -m compileall -q .
       - name: Stage tracked source for the editable release
         shell: pwsh
         run: .\desktop\scripts\prepare-source.ps1
-      - name: Compile Python sources
-        run: python -m compileall -q .
       - name: Build unpacked Electron application
         working-directory: desktop
         run: npm.cmd run build:win
@@ -53,6 +53,10 @@ jobs:
           if (-not (Test-Path .\desktop\dist\win-unpacked\resources\app\main.js)) { throw 'Editable Electron source missing' }
           if (-not (Test-Path .\desktop\dist\win-unpacked\resources\backend\gui.py)) { throw 'Editable Python source missing' }
           if (-not (Test-Path .\desktop\dist\win-unpacked\resources\python\python.exe)) { throw 'Standalone Python missing' }
+          if (Test-Path .\desktop\dist\win-unpacked\resources\backend\tests) { throw 'Test source was packaged' }
+          if (Test-Path .\desktop\dist\win-unpacked\resources\backend\docs) { throw 'Documentation source was packaged' }
+          if (Test-Path .\desktop\dist\win-unpacked\resources\backend\desktop) { throw 'Desktop build source was packaged' }
+          if (Test-Path .\desktop\dist\win-unpacked\resources\backend\README.md) { throw 'Readme source was packaged' }
       - name: Create portable archive and checksum
         shell: pwsh
         run: .\desktop\scripts\archive-release.ps1

@@ -231,6 +231,12 @@
     if (log) log.scrollTop = log.scrollHeight;
   };
 
+  api.clearLog = function () {
+    rows = [];
+    rowNodes.clear();
+    renderLog();
+  };
+
   api.updateMetrics = function ({ values, updateAvailable, updateTooltip }) {
     for (const [key, value] of Object.entries(values || {})) {
       const target = document.querySelector(`[data-metric="${key}"] .metric-value`);

@@ -1281,6 +1281,49 @@ def test_unexpected_exit_sets_warning():
     assert "exit code: 1" in events[0].message
 
 
+def test_transient_process_exit_is_not_audited_or_restarted():
+    class FlappingProcess(FakeProc):
+        def __init__(self):
+            super().__init__(returncode=1)
+            self._poll_results = iter((1, None))
+
+        def poll(self):
+            return next(self._poll_results, None)
+
+    events = []
+    logs = []
+    process = FlappingProcess()
+    manager = PalServerManager(
+        Profile(name="test"),
+        logger=logs.append,
+        event_callback=events.append,
+    )
+    manager.process = process
+
+    manager.monitor_once()
+
+    assert manager.process is process
+    assert logs == []
+    assert events == []
+
+
+def test_running_game_process_is_not_audited_when_wrapper_exits():
+    events = []
+    logs = []
+    manager = PalServerManager(
+        Profile(name="test"),
+        logger=logs.append,
+        event_callback=events.append,
+        running_probe=lambda profile: True,
+    )
+    manager.process = FakeProc(returncode=1)
+
+    manager.monitor_once()
+
+    assert logs == []
+    assert events == []
+
+
 def test_agent_and_server_exit_are_audited_on_agent_stop():
     class Agent:
         def __init__(self):

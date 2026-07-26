@@ -239,10 +239,24 @@ def _start_remove(name: str) -> None:
     thread.start()
 
 
-def _icon_button(label: str, glyph: str, onclick, *, disabled: bool = False, danger: bool = False):
+def _icon_button(
+    label: str,
+    glyph: str,
+    onclick,
+    *,
+    disabled: bool = False,
+    danger: bool = False,
+    title: str | None = None,
+):
     button = put_asset_widget(
         "palworld.backup_icon_button",
-        {"label": label, "glyph": glyph, "disabled": disabled, "danger": danger},
+        {
+            "label": label,
+            "title": title or label,
+            "glyph": glyph,
+            "disabled": disabled,
+            "danger": danger,
+        },
     )
     if not disabled:
         button.onclick(onclick)
@@ -275,11 +289,38 @@ def _render_mod_table(name: str, kind: str) -> None:
             put_text(t("mods.no_lua") if is_lua else t("mods.no_pak"))
             return
         if is_lua:
-            rows = [
-                [put_asset_widget("palworld.backup_file_details", {"name": mod.name, "metadata": ""})]
-                for mod in mods
-            ]
-            put_table(rows, header=[t("mods.mod_name")])
+            rows = []
+            for mod in mods:
+                checkbox = put_asset_widget(
+                    "palworld.pak_checkbox",
+                    {"label": t("mods.lua_enabled_checkbox", name=mod.name), "checked": mod.enabled},
+                ).onclick(
+                    lambda mod_name=mod.name, enabled=not mod.enabled: _toggle_lua(
+                        name, mod_name, enabled
+                    )
+                )
+                rows.append(
+                    [
+                        put_asset_widget(
+                            "palworld.backup_file_details",
+                            {"name": mod.name, "metadata": ""},
+                        ),
+                        checkbox,
+                        _icon_button(
+                            t("mods.delete_lua", name=mod.name),
+                            "×",
+                            lambda mod_name=mod.name: _confirm_delete_lua(name, mod_name),
+                            disabled=not mod.deletable,
+                            danger=True,
+                            title=(
+                                t("mods.delete_lua_disabled")
+                                if not mod.deletable
+                                else None
+                            ),
+                        ),
+                    ]
+                )
+            put_table(rows, header=[t("mods.mod_name"), t("mods.enabled"), t("mods.delete")])
             return
         rows = []
         for mod in mods:
@@ -298,7 +339,7 @@ def _render_mod_table(name: str, kind: str) -> None:
                     checkbox,
                     _icon_button(
                         t("mods.delete_pak", name=mod.name),
-                        "🗑",
+                        "×",
                         lambda mod_name=mod.name: _confirm_delete_pak(name, mod_name),
                         danger=True,
                     ),
@@ -331,6 +372,16 @@ def _toggle_pak(name: str, mod_name: str, enabled: bool) -> None:
         _render_mod_table(name, "pak")
 
 
+def _toggle_lua(name: str, mod_name: str, enabled: bool) -> None:
+    try:
+        _service(name).set_lua_enabled(mod_name, enabled)
+        toast(t("mods.lua_enabled" if enabled else "mods.lua_disabled", name=mod_name))
+        _render_mod_table(name, "lua")
+    except Exception as exc:
+        toast(t("mods.lua_toggle_failed", error=exc), color="error")
+        _render_mod_table(name, "lua")
+
+
 def _confirm_delete_pak(name: str, mod_name: str) -> None:
     with popup(t("mods.delete_pak_title"), closable=True):
         put_warning(t("mods.delete_pak_confirm", name=mod_name))
@@ -355,6 +406,32 @@ def _delete_pak(name: str, mod_name: str) -> None:
         _render_mod_table(name, "pak")
     except Exception as exc:
         toast(t("mods.delete_failed", error=exc), color="error")
+
+
+def _confirm_delete_lua(name: str, mod_name: str) -> None:
+    with popup(t("mods.delete_lua_title"), closable=True):
+        put_warning(t("mods.delete_lua_confirm", name=mod_name))
+        put_row(
+            [
+                put_button(t("common.cancel"), onclick=close_popup, color="secondary"),
+                put_button(
+                    t("mods.delete"),
+                    onclick=lambda: _delete_lua(name, mod_name),
+                    color="danger",
+                ),
+            ],
+            size="auto auto",
+        )
+
+
+def _delete_lua(name: str, mod_name: str) -> None:
+    close_popup()
+    try:
+        _service(name).delete_lua(mod_name)
+        toast(t("mods.delete_complete", name=mod_name), color="success")
+        _render_mod_table(name, "lua")
+    except Exception as exc:
+        toast(t("mods.lua_delete_failed", error=exc), color="error")
 
 
 __all__ = ["render"]

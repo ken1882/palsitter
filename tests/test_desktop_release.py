@@ -21,10 +21,10 @@ def test_desktop_package_keeps_palsitter_source_unpacked():
     assert history["from"] == "git-metadata"
     assert {item["to"] for item in resources} >= {
         "backend/.git",
-        "backend/config/.gitkeep",
         "python",
         "git",
     }
+    assert package["build"]["win"]["electronLanguages"] == ["en-US", "ja", "zh-CN", "zh-TW"]
 
 
 def test_desktop_source_and_release_icon_exist():
@@ -53,9 +53,9 @@ def test_exit_uses_the_shared_shutdown_workflow():
     source = (DESKTOP / "main.js").read_text(encoding="utf-8")
 
     assert "main.js" in files
-    assert "http://${WEB_HOST}:${controlPort}/desktop/shutdown" in source
-    assert "http://${WEB_HOST}:${controlPort}/desktop/gui-only" in source
-    assert "http://${WEB_HOST}:${controlPort}/desktop/force-shutdown" in source
+    assert "http://${CONTROL_HOST}:${controlPort}/desktop/shutdown" in source
+    assert "http://${CONTROL_HOST}:${controlPort}/desktop/gui-only" in source
+    assert "http://${CONTROL_HOST}:${controlPort}/desktop/force-shutdown" in source
     assert "buttons: ['Cancel', 'GUI only', 'Stop all']" in source
     assert "taskkill.exe" in source
     assert "forceExitAfterShutdownFailure" in source
@@ -68,7 +68,7 @@ def test_startup_handles_port_conflicts_with_kill_and_alternate_port_prompts():
     assert "--kill-port" in source
     assert "startupText('conflictTitle')" in source
     assert "startupText('alternateTitle')" in source
-    assert "return reservePort(0);" in source
+    assert "return reservePort(0, host);" in source
     assert "class StartupCancelledError" in source
 
 
@@ -102,7 +102,17 @@ def test_electron_reloads_after_the_shared_restart_exit():
     assert "backend.on('exit', () =>" in source
     assert "backend.on('close', (code)" in source
     assert "if (code === 75 && !exiting && !backendRestarting)" in source
-    assert "await mainWindow.loadURL(`http://${WEB_HOST}:${webPort}/`)" in source
+    assert "await mainWindow.loadURL(`http://${webConnectHost}:${webPort}/`)" in source
+
+
+def test_electron_uses_saved_bind_address_and_desktop_auth_token():
+    source = (DESKTOP / "main.js").read_text(encoding="utf-8")
+
+    assert "function configuredWebHost(dataRoot)" in source
+    assert "settings.json" in source
+    assert "webListenHost = configuredWebHost(dataRoot)" in source
+    assert "'--host', webListenHost" in source
+    assert "X-Palsitter-Desktop-Token" in source
 
 
 def test_electron_shutdown_waits_for_backend_process_exit():
@@ -131,6 +141,15 @@ def test_runtime_builder_exposes_backend_to_embedded_python():
 def test_release_scripts_stage_source_and_bundle_git():
     assert (DESKTOP / "scripts" / "prepare-source.ps1").is_file()
     assert (DESKTOP / "scripts" / "build-git.ps1").is_file()
+
+    source_script = (DESKTOP / "scripts" / "prepare-source.ps1").read_text(encoding="utf-8")
+    git_script = (DESKTOP / "scripts" / "build-git.ps1").read_text(encoding="utf-8")
+
+    assert "sparse-checkout set --no-cone --stdin" in source_script
+    for path in ('"/.gitignore"', '"/gui.py"', '"/module/"', '"/assets/"'):
+        assert path in source_script
+    assert "MinGit-2.55.0.3-64-bit.zip" in git_script
+    assert "f48e2d2dc74a24454adc6d8fd0ac25bf9c2386f19cfb06202b9465aaad4f9f05" in git_script
 
 
 def test_packaged_git_metadata_removes_credentials_and_rejects_credentialed_remotes():
@@ -178,6 +197,7 @@ def test_generated_git_metadata_has_no_credential_config(tmp_path):
             "-C",
             str(metadata),
             "config",
+            "--local",
             "--get-regexp",
             r"(^credential\.helper$|^http\..*\.extraheader$)",
         ],

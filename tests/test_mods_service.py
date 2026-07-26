@@ -213,6 +213,67 @@ def test_status_lists_mods_and_manual_install_has_unknown_version(tmp_path, monk
     ]
 
 
+def test_lua_state_prefers_enabled_marker_and_toggle_updates_configs(tmp_path, monkeypatch):
+    profile = _installed_profile(tmp_path, monkeypatch)
+    win64 = fixed_palserver_dir("default") / "Pal" / "Binaries" / "Win64"
+    mods = win64 / "ue4ss" / "Mods"
+    mods.mkdir(parents=True)
+    (win64 / "ue4ss" / "UE4SS.dll").write_bytes(b"dll")
+    (mods / "UserMod").mkdir()
+    (mods / "ConfigMod").mkdir()
+    (mods / "MarkerMod").mkdir()
+    (mods / "MarkerMod" / "enabled.txt").write_text("", encoding="utf-8")
+    (mods / "mods.txt").write_text(
+        "UserMod : 0\nConfigMod : 1\nMarkerMod : 0\n",
+        encoding="utf-8",
+    )
+    (mods / "mods.json").write_text(
+        json.dumps(
+            [
+                {"mod_name": "UserMod", "mod_enabled": False},
+                {"mod_name": "ConfigMod", "mod_enabled": True},
+                {"mod_name": "MarkerMod", "mod_enabled": False},
+            ]
+        ),
+        encoding="utf-8",
+    )
+    service = UE4SSService(profile, platform_supported=True)
+
+    assert [(mod.name, mod.enabled) for mod in service.status().lua_mods] == [
+        ("ConfigMod", True),
+        ("MarkerMod", True),
+        ("UserMod", False),
+    ]
+
+    service.set_lua_enabled("UserMod", True)
+    assert (mods / "UserMod" / "enabled.txt").exists()
+    assert "UserMod : 1" in (mods / "mods.txt").read_text(encoding="utf-8")
+    assert json.loads((mods / "mods.json").read_text(encoding="utf-8"))[0]["mod_enabled"] is True
+
+    service.set_lua_enabled("UserMod", False)
+    assert not (mods / "UserMod" / "enabled.txt").exists()
+    assert "UserMod : 0" in (mods / "mods.txt").read_text(encoding="utf-8")
+    assert json.loads((mods / "mods.json").read_text(encoding="utf-8"))[0]["mod_enabled"] is False
+
+
+def test_lua_delete_protects_default_ue4ss_mods(tmp_path, monkeypatch):
+    profile = _installed_profile(tmp_path, monkeypatch)
+    win64 = fixed_palserver_dir("default") / "Pal" / "Binaries" / "Win64"
+    mods = win64 / "ue4ss" / "Mods"
+    (mods / "Keybinds").mkdir(parents=True)
+    (mods / "UserMod").mkdir()
+    (win64 / "ue4ss" / "UE4SS.dll").write_bytes(b"dll")
+    service = UE4SSService(profile, platform_supported=True)
+
+    listed = {mod.name: mod for mod in service.status().lua_mods}
+    assert listed["UserMod"].deletable is True
+    assert listed["Keybinds"].deletable is False
+    with pytest.raises(PermissionError):
+        service.delete_lua("Keybinds")
+    service.delete_lua("UserMod")
+    assert not (mods / "UserMod").exists()
+
+
 def test_status_translates_missing_server_reason_key(tmp_path, monkeypatch):
     monkeypatch.setenv("PALSITTER_CONFIG_DIR", str(tmp_path / "config"))
     status = UE4SSService(PalworldProfile(name="default"), platform_supported=True).status()

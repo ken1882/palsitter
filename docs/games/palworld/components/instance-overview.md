@@ -108,6 +108,8 @@ adding lifecycle controls to those pages.
   because UE4SS management is unsupported on native Linux.
 - Auto Scroll keeps the newest line visible while On; when Off, appends preserve the
   user's manual scroll position.
+- Clear removes the current log lines from the visible Overview panel only. It does not
+  modify the persisted overview log file; newly appended lines remain visible.
 - A Check update button immediately left of Filter starts a forced SteamCMD update check;
   the check runs while a managed server is active, writes its result to the Overview log,
   and is unavailable for external or uninstalled servers. A Filter button immediately
@@ -125,6 +127,7 @@ adding lifecycle controls to those pages.
 - The console runs on Enter as well as its Run button. Focusing the field opens a
   filterable autocomplete containing every supported command: REST-backed announce,
   player moderation, info, players, metrics, save, and shutdown operations, plus
+  the local `clear` command and
   Palsitter's backup and lifecycle commands. Player-context-only in-game commands,
   credentials, actor snapshots, and force-stop shortcuts are not exposed. Up/Down and
   Tab/Shift+Tab move the active suggestion; Enter fills an active suggestion without

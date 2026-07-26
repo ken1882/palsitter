@@ -68,7 +68,6 @@
     "palworld.player_activity": "gui/html/games/palworld/player_activity.html",
     "palworld.player_unban_button": "gui/html/games/palworld/player_unban_button.html",
     "palworld.restart_history_intro": "gui/html/games/palworld/restart_history_intro.html",
-    "palworld.restart_event_details": "gui/html/games/palworld/restart_event_details.html",
     "palworld.backup_title": "gui/html/games/palworld/backup_title.html",
     "palworld.backup_file_details": "gui/html/games/palworld/backup_file_details.html",
     "palworld.managed_world_details": "gui/html/games/palworld/managed_world_details.html",

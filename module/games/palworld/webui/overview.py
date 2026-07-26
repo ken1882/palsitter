@@ -116,6 +116,7 @@ CONSOLE_COMMANDS = (
     ("announce <message>", "console.hint.announce"),
     ("ban <user_id> [message]", "console.hint.ban"),
     ("backup", "console.hint.backup"),
+    ("clear", "console.hint.clear"),
     ("info", "console.hint.info"),
     ("kick <user_id> [message]", "console.hint.kick"),
     ("metrics", "console.hint.metrics"),
@@ -435,9 +436,10 @@ def _render_log_area(name: str) -> None:
                             [
                                 put_scope("overview_log_check_update_btn"),
                                 put_scope("overview_log_filter_btn"),
+                                put_scope("overview_log_clear_btn"),
                                 put_scope("overview_log_scroll_btn"),
                             ],
-                            size="auto auto auto",
+                            size="auto auto auto auto",
                         ),
                     ],
                     size="1fr auto",
@@ -482,6 +484,7 @@ def _render_log_area(name: str) -> None:
     _reset_overview_log_filter()
     _render_overview_check_update_button(name)
     _render_overview_log_filter_button()
+    _render_overview_log_clear_button()
     _update_overview_scroll_button()
 
 
@@ -498,6 +501,15 @@ def _reset_overview_log_filter() -> None:
 @use_scope("overview_log_filter_btn", clear=True)
 def _render_overview_log_filter_button() -> None:
     put_button(t("log.filter"), onclick=_open_overview_log_filter, color="secondary")
+
+
+@use_scope("overview_log_clear_btn", clear=True)
+def _render_overview_log_clear_button() -> None:
+    put_button(
+        t("log.clear"),
+        onclick=lambda: client_call("palworld.overview.clearLog"),
+        color="secondary",
+    )
 
 
 @use_scope("overview_log_check_update_btn", clear=True)
@@ -721,6 +733,11 @@ def _run_console(name: str) -> None:
     if not command:
         return
     client_call("palworld.overview.clearConsole")
+    verb, _, arg = command.partition(" ")
+    verb = verb.lower()
+    if verb == "clear" and not arg:
+        client_call("palworld.overview.clearLog")
+        return
     manager = _manager(name)
     manager.append_log(f"> {command}")
     try:
@@ -729,8 +746,6 @@ def _run_console(name: str) -> None:
         )
     except OSError as exc:
         manager.append_log(f"Could not persist audit event: {exc}")
-    verb, _, arg = command.partition(" ")
-    verb = verb.lower()
     client = PalRestClient(load_profile(name))
     rest_snapshot = get_pal_rest_cache(name).snapshot()
     try:

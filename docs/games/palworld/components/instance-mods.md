@@ -26,8 +26,13 @@ unsupported game adapters.
 
 ## Installed mod lists
 
-- Lua mod folders from the active UE4SS Mods directory are shown in a read-only table;
-  the bundled `shared` directory is omitted.
+- Lua mod folders from the active UE4SS Mods directory are shown with Enabled and Delete
+  actions; the bundled `shared` directory is omitted. Enable state prefers the presence
+  of `<mod>/enabled.txt`, then falls back to matching `mods.txt`/`mods.json` entries.
+  Toggling synchronizes those config entries and the marker file. Built-in UE4SS mods
+  remain toggleable but their Delete buttons are disabled.
+- Confirmed deletion removes a user Lua mod folder. UE4SS built-in folders cannot be
+  deleted through Palsitter.
 - `.pak` files directly under `Pal/Content/Paks` and its `LogicMods` and `~mods` children
   are shown in a separate table on Windows and native Linux. Game-owned `Pal-*` archives
   are omitted.
