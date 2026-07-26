@@ -10,6 +10,7 @@ from module.games.palworld.config import PalworldProfile
 from module.games.palworld.firewall import (
     FirewallPermissionDenied,
     FirewallService,
+    _fix_port_script,
     _fix_script,
     detect_firewall_backend,
     port_rule_name,
@@ -330,6 +331,14 @@ def test_windows_fix_suppresses_powershell_progress_clixml():
     script = _fix_script("C:\\PalServer.exe", "rule-name", "display", ())
 
     assert "$ProgressPreference = 'SilentlyContinue'" in script
+    assert "Get-NetFirewallRule -Name 'rule-name'" in script
+
+
+def test_windows_port_fix_replaces_existing_owned_rule():
+    script = _fix_port_script(22368, "tcp", "Palsitter-Web-TCP-22368", "display", ())
+
+    assert "Get-NetFirewallRule -Name 'Palsitter-Web-TCP-22368'" in script
+    assert "Remove-NetFirewallRule -ErrorAction Stop" in script
 
 
 def test_windows_fix_removes_netsh_rule_names_as_display_names():

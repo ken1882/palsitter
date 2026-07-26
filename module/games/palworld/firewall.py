@@ -204,6 +204,14 @@ def _quote_powershell(value: str) -> str:
     return "'" + str(value).replace("'", "''") + "'"
 
 
+def _replace_rule_block(rule_name: str) -> str:
+    return (
+        f"$existing = @(Get-NetFirewallRule -Name {_quote_powershell(rule_name)} "
+        "-ErrorAction SilentlyContinue); "
+        "$existing | Remove-NetFirewallRule -ErrorAction Stop; "
+    )
+
+
 def _fix_script(executable: str, rule_name: str, display_name: str, remove_names: Iterable[str]) -> str:
     removals = ",".join(_quote_powershell(value) for value in remove_names)
     if removals:
@@ -218,7 +226,7 @@ def _fix_script(executable: str, rule_name: str, display_name: str, remove_names
         remove_block = ""
     return (
         "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue'; "
-        f"{remove_block} "
+        f"{_replace_rule_block(rule_name)}{remove_block} "
         "New-NetFirewallRule "
         f"-Name {_quote_powershell(rule_name)} "
         f"-DisplayName {_quote_powershell(display_name)} "
@@ -247,7 +255,7 @@ def _fix_port_script(
         remove_block = ""
     return (
         "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue'; "
-        f"{remove_block} "
+        f"{_replace_rule_block(rule_name)}{remove_block} "
         "New-NetFirewallRule "
         f"-Name {_quote_powershell(rule_name)} "
         f"-DisplayName {_quote_powershell(display_name)} "
