@@ -430,6 +430,27 @@ def _rules_from_netsh_output(stdout: str) -> list[Mapping[str, Any]]:
     return rules
 
 
+def _windows_rule_query_script() -> str:
+    return (
+        "$ErrorActionPreference = 'Stop'; "
+        "$ProgressPreference = 'SilentlyContinue'; "
+        "Get-NetFirewallRule | ForEach-Object { "
+        "$rule = $_; "
+        "$port = $rule | Get-NetFirewallPortFilter; "
+        "$application = $rule | Get-NetFirewallApplicationFilter; "
+        "[pscustomobject]@{ "
+        "Name = $rule.Name; "
+        "Enabled = $rule.Enabled; "
+        "Direction = $rule.Direction; "
+        "Action = $rule.Action; "
+        "Program = @($application.Program); "
+        "Protocol = @($port.Protocol); "
+        "LocalPort = @($port.LocalPort) "
+        "} "
+        "} | ConvertTo-Json -Compress -Depth 4"
+    )
+
+
 def _rule_is_enabled_allow(rule: Mapping[str, Any]) -> bool:
     return _fold(rule.get("Direction")) in {"in", "inbound"} and _fold(rule.get("Enabled")) in {
         "true",
@@ -835,7 +856,7 @@ class FirewallService:
                 if result.returncode:
                     detail = (result.stderr or result.stdout or "").strip()
                     raise FirewallError(detail or "Windows Firewall query failed")
-                rules = _rules_from_output(result.stdout)
+                rules = self._windows_rules(result.stdout)
                 return self._status_from_windows_rules(profile, executable, port, executable_paths, rules)
             return self._check_linux(profile, executable, port, root_password)
         except FirewallPermissionDenied:
@@ -906,6 +927,24 @@ class FirewallService:
             tuple(sorted(set(owned_blocks))),
             tuple(sorted(set(external_blocks))),
         )
+
+    def _windows_rules(self, netsh_stdout: str) -> list[Mapping[str, Any]]:
+        rules = _rules_from_output(netsh_stdout)
+        if any(
+            {"Enabled", "Direction", "Action"}.issubset(rule)
+            for rule in rules
+        ):
+            return rules
+        result = self.run_command(
+            _powershell_args(_windows_rule_query_script(), self.powershell),
+            capture_output=True,
+            text=True,
+            timeout=_COMMAND_TIMEOUT,
+        )
+        if result.returncode:
+            detail = (result.stderr or result.stdout or "").strip()
+            raise FirewallError(detail or "Windows Firewall PowerShell query failed")
+        return _rules_from_output(result.stdout)
 
     def _run_linux_command(
         self,
@@ -1035,7 +1074,7 @@ class FirewallService:
                     raise FirewallError(detail or "Windows Firewall query failed")
                 allowed = blocked = False
                 external: list[str] = []
-                for rule in _rules_from_output(result.stdout):
+                for rule in self._windows_rules(result.stdout):
                     if not _matches_protocol(rule, protocol) or not _matches_port(rule, port, ()):
                         continue
                     name = str(rule.get("Name") or "(unnamed rule)")
