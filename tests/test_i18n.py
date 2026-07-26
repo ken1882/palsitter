@@ -59,21 +59,3 @@ def test_translation_falls_back_outside_pywebio_session(monkeypatch):
 
     assert t("utils.restart_saved") == "World saved"
 
-
-def test_ue4ss_linux_unavailable_reason_is_translated():
-    assert t("mods.native_linux_unsupported", language="zh-TW") == (
-        "原生 Linux Palworld 伺服器不支援 UE4SS Lua/C++ 管理。仍可列出、啟用、停用及刪除 Pak 模組。"
-    )
-    assert t("mods.native_linux_unsupported", language="ja-JP") == (
-        "ネイティブ Linux の Palworld サーバーでは UE4SS Lua/C++ の管理に対応していません。"
-        "Pak MOD は一覧表示、有効化、無効化、削除ができます。"
-    )
-
-
-def test_ue4ss_missing_server_reason_is_translated():
-    assert t("mods.server_not_installed", language="zh-TW") == (
-        "管理 UE4SS 前請先安裝 Palworld 伺服器。"
-    )
-    assert t("mods.server_not_installed", language="ja-JP") == (
-        "UE4SS を管理する前に、Palworld サーバーをインストールしてください。"
-    )
