@@ -35,6 +35,7 @@ from module.games.palworld.config import (
     load_profile,
     windows_console_executable_path,
 )
+from module.games.palworld.server.output import PalServerLogWriter
 from module.instances import (
     DailyLogWriter,
     clear_agent_state,
@@ -790,8 +791,8 @@ class ServerAgent:
                 self.output_offset = Path(self.output_path).stat().st_size
             except OSError:
                 self.output_offset = 0
-            self.output_handle = DailyLogWriter(
-                lambda: profile_server_output_path(self.name)
+            self.output_handle = PalServerLogWriter(
+                DailyLogWriter(lambda: profile_server_output_path(self.name))
             )
             workdir = Path(
                 executable_workdir(self.profile.executable) or self.profile.workdir
@@ -836,8 +837,8 @@ class ServerAgent:
             if self.process is None or self.stop_reader.is_set():
                 return
             if self.output_handle is None:
-                self.output_handle = DailyLogWriter(
-                    lambda: profile_server_output_path(self.name)
+                self.output_handle = PalServerLogWriter(
+                    DailyLogWriter(lambda: profile_server_output_path(self.name))
                 )
         self._read_output()
         if not self._alive():

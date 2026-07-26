@@ -13,6 +13,9 @@ Palworld-specific and is not exposed by unsupported game placeholders.
 - The page uses the standard square toggles, validation, floating Reset/Save bar, and
   unsaved-navigation guard. Save and Reset update the existing controls in place;
   Self-heal is disabled while Restart on crash is Off.
+- A PalServer exit with status `0` (`ERROR_SUCCESS` on Windows) is treated as a clean
+  termination. It is logged and audited but does not count toward crash restart limits or
+  self-heal, and it does not trigger an automatic relaunch.
 - Restart History displays the newest 20 persisted
   automatic-restart decisions in reverse chronological order with timestamp, trigger,
   detected cause, outcome, and expandable details. Manual restarts and routine schedule

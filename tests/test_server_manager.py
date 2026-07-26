@@ -12,6 +12,8 @@ import pytest
 from module.config import Profile, game_user_settings_path
 from module.worldsettings.service import resolve_ini_path
 from module.games.registry import UpdateInfo
+from module.games.palworld.server.output import PalServerLogWriter
+from module.instances import DailyLogWriter
 from module.server.manager import PalServerManager
 from module.steamcmd import steamcmd_platform_args
 
@@ -787,6 +789,16 @@ def test_server_output_preserves_normal_non_ascii_text():
     assert PalServerManager._server_output_lines("伺服器已啟動\r\n") == ["伺服器已啟動"]
 
 
+def test_palserver_log_writer_normalizes_line_endings_and_drops_empty_lines(tmp_path):
+    path = tmp_path / "palserver.log"
+    writer = PalServerLogWriter(DailyLogWriter(lambda: path))
+    writer.write(b"first\r\n\n\r\n\r\r\nsecond")
+    writer.write(b"\r\n\n")
+    writer.close()
+
+    assert path.read_bytes() == b"first\nsecond\n"
+
+
 def test_server_output_sanitizes_adminpassword_in_log_and_audit():
     logs = []
     events = []
@@ -1279,6 +1291,33 @@ def test_unexpected_exit_sets_warning():
     assert event.termination.raw_exit_code == 1
     assert [event.type for event in events if hasattr(event, "type")] == ["server_exit"]
     assert "exit code: 1" in events[0].message
+
+
+def test_zero_exit_code_bypasses_crash_recovery_and_self_heal():
+    logs = []
+    events = []
+    backups = FakeBackupService(backup_before_result=Path("backup.zip"))
+
+    manager = PalServerManager(
+        Profile(name="test", self_heal_trigger_crash_times=1),
+        logger=logs.append,
+        event_callback=events.append,
+        backup_service=backups,
+        popen_factory=lambda *args, **kwargs: pytest.fail("clean exit must not relaunch"),
+    )
+    manager.process = FakeProc(returncode=0)
+
+    manager.monitor_once()
+
+    assert manager.process is None
+    assert manager.state == "inactive"
+    assert list(manager.crash_times) == []
+    assert list(manager.self_heal_crash_times) == []
+    assert backups.create_backup_calls == 0
+    assert backups.restore_calls == []
+    assert not manager.recent_events
+    assert logs == ["Process exited successfully; skipping crash recovery"]
+    assert [event.type for event in events if hasattr(event, "type")] == ["server_exit"]
 
 
 def test_transient_process_exit_is_not_audited_or_restarted():

@@ -83,9 +83,10 @@ adding lifecycle controls to those pages.
 - On Windows, a standard SteamCMD installation is launched through Palworld's console
   server binary with Unreal stdout logging, `-stdout`, `-FullStdOutLogOutput`, and
   `-FORCELOGFLUSH` enabled. The detached agent reads ConPTY output continuously, preserves
-  raw chunks including ANSI/carriage returns/partial lines, flushes the file immediately
-  and with Windows `FlushFileBuffers`, and redirects both PalServer output streams to a
-  persistent per-instance raw log. This allows the supervisor to detach and a fresh
+  raw chunks including ANSI/carriage returns/partial lines, normalizes line endings and
+  omits empty output records, flushes the file immediately and with Windows
+  `FlushFileBuffers`, and redirects both PalServer output streams to a persistent
+  per-instance log. This allows the supervisor to detach and a fresh
   supervisor to adopt the same process after GUI replacement. Native
   server lines are prefixed with `PalServer:` and appended to the instance Overview log.
   The Windows smoke diagnostic can query the agent's `job_status` response to enumerate
@@ -93,7 +94,7 @@ adding lifecycle controls to those pages.
   When UE4SS is installed in either supported layout, its `UE4SS.log` is tailed into the
   same Overview log with an `UE4SS:` prefix. Managed launches skip stale PalServer bytes;
   managed adoption resumes from its persisted cursor and replays at most the latest 300
-  missed lines. Raw PalServer output is stored in `logs/palserver-yyyymmdd.log`, and the
+  missed lines. PalServer output is stored in `logs/palserver-yyyymmdd.log`, and the
   supervisor log is stored in `logs/overview-yyyymmdd.log`; both writers switch to the
   next day's file while a server remains running. Dated log files are retained for 30
   calendar days. Missing logs are awaited silently, and UE4SS output does not contribute

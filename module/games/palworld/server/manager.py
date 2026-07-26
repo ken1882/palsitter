@@ -30,6 +30,7 @@ from module.games.palworld.config import (
 from module.pty_process import PtyProcessLike, spawn_pty_process
 from module.games.palworld.server.rest import PalRestClient
 from module.games.palworld.server.agent import AgentClient
+from module.games.palworld.server.output import PalServerLogWriter
 from module.games.palworld.server.status import instance_is_running, matching_instance_processes
 from module.games.palworld.server.history import (
     LifecycleEvent,
@@ -471,13 +472,13 @@ class PalServerManager:
         if output is None:
             return
         log_directory = self._server_output_path.parent if self._server_output_path else None
-        writer = DailyLogWriter(
+        writer = PalServerLogWriter(DailyLogWriter(
             lambda: (
                 log_directory / f"palserver-{dt.datetime.now():%Y%m%d}.log"
                 if log_directory is not None
                 else profile_server_output_path(self.profile.name)
             )
-        )
+        ))
         self._server_output_writer = writer
         try:
             for chunk in output:
@@ -1310,6 +1311,15 @@ class PalServerManager:
         sync_game_user_settings(self.profile)
         ensure_world_settings(self.profile)
 
+    def _release_process_resources(self) -> None:
+        self._stop_server_output()
+        self._stop_ue4ss_output()
+        self._stop_capture_output()
+        if self.process is not None:
+            clear_runtime(self.profile.name, pid=self.process.pid)
+        self.agent_client = None
+        self._server_output_path = None
+
     def stop(self, graceful: bool = True) -> None:
         self.state_callback("stopping")
         external_attached = self.external_attached
@@ -1374,13 +1384,7 @@ class PalServerManager:
             )
         self.warning = False
         self.external_attached = False
-        self._stop_server_output()
-        self._stop_ue4ss_output()
-        self._stop_capture_output()
-        if self.process is not None:
-            clear_runtime(self.profile.name, pid=self.process.pid)
-        self.agent_client = None
-        self._server_output_path = None
+        self._release_process_resources()
         self.state_callback("inactive")
 
     def restart(self, reason: str = "manual", *, update: bool = False) -> None:
@@ -1859,6 +1863,15 @@ class PalServerManager:
                 f"(exit code: {termination.raw_exit_code})",
                 when=exit_time,
             )
+            if termination.kind == "unknown":
+                self.log("Process exited successfully; skipping crash recovery")
+                self.warning = False
+                self.self_heal_crash_times.clear()
+                self._release_process_resources()
+                self.process = None
+                self.ps_process = None
+                self.state_callback("inactive")
+                return
             if not self.profile.restart_on_crash:
                 self.log("Process not running")
                 self.warning = True

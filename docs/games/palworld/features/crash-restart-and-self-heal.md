@@ -6,8 +6,13 @@ Detach using an explicit requested-operation state set before process terminatio
 
 ## Crash restart and self-heal
 
-- `Restart on crash` defaults On. An unexpected owned PalServer exit is eligible for an
-  automatic relaunch; intentional operations and externally attached servers are not.
+- `Restart on crash` defaults On. An unexpected owned PalServer exit with a nonzero exit
+  status or terminating signal is eligible for an automatic relaunch; intentional
+  operations, clean zero-status exits, and externally attached servers are not.
+- A zero exit status (`ERROR_SUCCESS` on Windows) is treated as a clean termination even
+  when no requested operation is recorded. It is logged and audited, then the instance
+  becomes Inactive without consuming crash-restart capacity, entering self-heal tracking,
+  restoring a backup, or relaunching.
 - `Crash restart limit per hour` defaults to 5 and counts unexpected exits in a rolling
   one-hour window. The cap is checked before any restore or relaunch. Reaching it leaves
   the instance in Warning with no owned process; only an explicit manual Start clears the
