@@ -50,7 +50,7 @@ def _run_profile(
     adopt_managed: bool = False,
 ) -> None:
     def log(message: str) -> None:
-        log_queue.put(f"[{config_name}] {message}")
+        log_queue.put(message)
 
     def set_state(state: str) -> None:
         if state_queue is not None:
@@ -139,7 +139,19 @@ class ProcessManager:
             _, separator, data = data.partition(b"\n")
             if not separator:
                 return []
-        return data.decode("utf-8", errors="replace").splitlines()[-self.max_logs :]
+        return [
+            self._remove_profile_prefix(line)
+            for line in data.decode("utf-8", errors="replace").splitlines()[-self.max_logs :]
+        ]
+
+    def _remove_profile_prefix(self, line: str) -> str:
+        prefix = f"[{self.config_name}] "
+        if line.startswith(prefix):
+            return line[len(prefix) :]
+        if len(line) >= 9 and line[:8].count(":") == 2 and line[8] == " ":
+            if line[9:].startswith(prefix):
+                return line[:9] + line[9 + len(prefix) :]
+        return line
 
     @classmethod
     def get(cls, config_name: str) -> "ProcessManager":
@@ -928,7 +940,7 @@ class ProcessManager:
 
     def append_log(self, message: str) -> None:
         stamp = time.strftime("%H:%M:%S")
-        line = f"{stamp} {message}"
+        line = f"{stamp} {self._remove_profile_prefix(str(message))}"
         with self._lock:
             self.logs.append(line)
             if len(self.logs) > self.max_logs:

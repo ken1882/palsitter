@@ -25,6 +25,9 @@
         isCurrent(generation) {
             return Number(generation || 0) === pageGeneration;
         },
+        reload({delayMs}) {
+            window.setTimeout(() => window.location.reload(), Math.max(0, Number(delayMs) || 0));
+        },
     };
 
     root.dom = {

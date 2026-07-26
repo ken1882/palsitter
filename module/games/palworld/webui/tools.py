@@ -42,6 +42,7 @@ from module.games.palworld.saves import (
 from module.games.palworld.server.agent import agent_is_running
 from module.webui.assets import client_call, put_asset_widget
 from module.webui.i18n import t
+from module.webui.section_layout import SectionSpec, put_section_layout
 from module.webui.session import page_context, run_if_current
 
 
@@ -817,7 +818,7 @@ def render(name: str) -> None:
     profile = load_profile(name)
     service = _service()
     executable = str(resolve_executable(profile))
-    children = [
+    firewall_children = [
         put_asset_widget("shared.panel_title", {"title": t("tools.heading")}),
         put_text(t("tools.description")),
         put_row(
@@ -834,18 +835,31 @@ def render(name: str) -> None:
         ),
     ]
     if service.supported:
-        children.append(
+        firewall_children.append(
             put_scope(
                 "tools_actions",
                 [put_button(t("tools.check"), onclick=lambda: _check(name))],
             )
         )
     with use_scope("content", clear=True):
-        put_scope(
+        put_section_layout(
             "tools_panel",
-            children + [put_scope("tools_instance"), put_scope("tools_migration")],
+            [
+                SectionSpec("firewall", t("tools.heading"), "tools_firewall"),
+                SectionSpec("instance", t("tools.instance_heading"), "tools_instance"),
+                SectionSpec(
+                    "migration",
+                    t("tools.migration_heading"),
+                    "tools_migration",
+                ),
+            ],
+            groups_scope="tools_sections",
+            header=[
+                put_asset_widget("shared.panel_title", {"title": t("tools.title")}),
+            ],
         )
-    client_call("dom.addClasses", scope="tools_panel", classes=["panel"])
+        with use_scope("tools_firewall"):
+            put_scope("tools_firewall_content", firewall_children)
     _render_instance_management(name)
     _render_migration(name)
 

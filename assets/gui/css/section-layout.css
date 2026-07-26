@@ -1,0 +1,133 @@
+#pywebio-scope-content.section-layout-content {
+  overflow: hidden;
+}
+
+.section-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(11rem, 15rem);
+  gap: .625rem;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.section-layout-groups {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-right: .15rem;
+}
+
+.section-layout-header {
+  margin-bottom: .625rem;
+}
+
+.section-layout-header:empty {
+  display: none;
+}
+
+.section-layout-header .panel-title {
+  margin-top: .15rem;
+}
+
+.section-layout-header .world-filter-toolbar,
+.section-layout-header .settings-filter-toolbar {
+  top: 0;
+  background: #36393f;
+}
+
+.section-layout-section {
+  min-width: 0;
+  margin-bottom: .625rem;
+}
+
+.section-layout-section.settings-view {
+  max-width: none;
+}
+
+.section-layout-section.home-preferences {
+  max-width: none;
+  margin: 0 0 .625rem;
+}
+
+#pywebio-scope-logs.section-layout-section {
+  height: auto;
+  overflow: visible;
+}
+
+.section-layout-section > .players-section-title {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.section-layout-section[hidden] {
+  display: none;
+}
+
+.section-layout-navigator {
+  align-self: start;
+  max-height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  background: #2f3136;
+  border: 1px solid #21262d;
+  padding: .35rem 0;
+}
+
+.section-layout-navigation-button {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: .55rem .75rem;
+  color: #f8f9fa;
+  background: transparent;
+  border: 0;
+  border-left: 3px solid transparent;
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.section-layout-navigation-button:hover,
+.section-layout-navigation-button:focus-visible {
+  color: #fff;
+  background: #36393f;
+  border-left-color: #7a77bb;
+  outline: none;
+}
+
+.section-layout-navigation-button[hidden] {
+  display: none;
+}
+
+body.light-palsitter .section-layout-navigator {
+  background: #fff;
+  border-color: #dee2e6;
+}
+
+body.light-palsitter .section-layout-header .world-filter-toolbar,
+body.light-palsitter .section-layout-header .settings-filter-toolbar {
+  background: #f5f6f8;
+}
+
+body.light-palsitter .section-layout-navigation-button {
+  color: #2c2c2c;
+}
+
+body.light-palsitter .section-layout-navigation-button:hover,
+body.light-palsitter .section-layout-navigation-button:focus-visible {
+  color: #111;
+  background: #f1f3f5;
+}
+
+@media (max-width: 1100px) {
+  .section-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .section-layout-navigator {
+    display: none;
+  }
+}

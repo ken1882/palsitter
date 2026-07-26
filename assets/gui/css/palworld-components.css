@@ -376,7 +376,7 @@
   z-index: 12;
   top: -.625rem;
   display: grid;
-  grid-template-columns: minmax(12rem, 20rem) minmax(0, 1fr) auto;
+  grid-template-columns: minmax(12rem, 20rem) auto;
   gap: .55rem;
   align-items: center;
   margin: .5rem 0 .75rem;
@@ -498,6 +498,10 @@
   align-items: center;
   gap: .5rem;
   width: 100%;
+}
+
+.settings-actions button {
+  margin-bottom: 0;
 }
 
 .scheduler-log {

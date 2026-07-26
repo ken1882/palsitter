@@ -37,10 +37,12 @@ from module.webui.forms import (
     _clear_field_errors,
     _register_dirty_form,
     _settings_label,
+    set_dirty_form_busy,
     update_form_values,
 )
 from module.webui.pagination_table import TableColumn, put_pagination_table
 from module.webui.i18n import t
+from module.webui.section_layout import SectionSpec, put_section_layout
 from module.webui.session import page_context, register_page_stop_event, run_if_current
 from module.webui.assets import client_call, put_asset_widget
 
@@ -81,20 +83,43 @@ def render(name: str) -> None:
     }
     clear("content")
     with use_scope("content"):
-        put_scope(
+        put_section_layout(
             "auto_restart_panel",
             [
+                SectionSpec(
+                    "crash",
+                    t("auto_restart.category_crash"),
+                    "auto_restart_crash",
+                    ("settings-view",),
+                ),
+                SectionSpec(
+                    "memory",
+                    t("auto_restart.category_memory"),
+                    "auto_restart_memory",
+                    ("settings-view",),
+                ),
+                SectionSpec(
+                    "planned",
+                    t("auto_restart.category_planned"),
+                    "auto_restart_planned",
+                    ("settings-view",),
+                ),
+                SectionSpec(
+                    "history",
+                    t("restart_history.title"),
+                    "restart_history",
+                    ("restart-history",),
+                ),
+            ],
+            groups_scope="auto_restart_form",
+            header=[
                 put_asset_widget("shared.panel_title", {"title": t("auto_restart.title")}),
                 put_asset_widget("shared.quiet_paragraph", {"text": t("auto_restart.description")}),
-                put_scope("auto_restart_form"),
-                put_scope("auto_restart_actions"),
             ],
+            footer=[put_scope("auto_restart_actions")],
         )
-        put_scope("restart_history")
-        client_call("dom.addClasses", scope="auto_restart_panel", classes=["panel"])
-        client_call("dom.addClasses", scope="auto_restart_form", classes=["settings-view"])
         client_call("dom.addClasses", scope="auto_restart_actions", classes=["settings-actions"])
-        with use_scope("auto_restart_form"):
+        with use_scope("auto_restart_crash"):
             _category(t("auto_restart.category_crash"))
             _settings_toggle(
                 _settings_label("restart_on_crash"),
@@ -127,6 +152,7 @@ def render(name: str) -> None:
                 type="number",
                 escape_label=False,
             )
+        with use_scope("auto_restart_memory"):
             _category(t("auto_restart.category_memory"))
             _settings_field(
                 _settings_label("memory_restart_mb"),
@@ -142,6 +168,7 @@ def render(name: str) -> None:
                 type="number",
                 escape_label=False,
             )
+        with use_scope("auto_restart_planned"):
             _category(t("auto_restart.category_planned"))
             _settings_select(
                 _settings_label("planned_restart_mode"),
@@ -228,6 +255,7 @@ def _save_auto_restart(name: str, *, rerender: bool = False) -> bool:
         data[key] = getattr(pin, _settings_pin(key))
     if not _validate_settings_form(data, AUTO_RESTART_FIELDS):
         toast(t("validation.fix_errors"), color="error")
+        set_dirty_form_busy(False)
         return False
     data["restart_on_crash"] = bool(local.settings_toggles["restart_on_crash"])
     data["self_heal_enabled"] = bool(local.settings_toggles["self_heal_enabled"])
@@ -239,6 +267,7 @@ def _save_auto_restart(name: str, *, rerender: bool = False) -> bool:
         updated.to_game_config()
     except (TypeError, ValueError):
         toast(t("validation.fix_errors"), color="error")
+        set_dirty_form_busy(False)
         return False
     save_profile(updated)
     clear_dirty_form()

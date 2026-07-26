@@ -11,6 +11,7 @@ from module.games.palworld.map import map_name_for_coordinates, world_to_game_co
 from module.games.palworld.players_cache import PalworldBanList, PlayerCache
 from module.games.palworld.server import PalRestClient, get_pal_rest_cache
 from module.webui.i18n import t
+from module.webui.section_layout import SectionSpec, put_section_layout
 from module.webui.session import page_context, register_page_cleanup, run_if_current
 from module.webui.assets import client_call, client_query, put_asset_icon, put_asset_widget
 
@@ -300,24 +301,32 @@ def render(name: str) -> None:
     local.players_banned_signature = None
     context = page_context()
     with use_scope("content"):
-        put_scope(
+        put_section_layout(
             "players_detail_panel",
             [
+                SectionSpec("online", t("players.online_title"), "players_online_section"),
+                SectionSpec("offline", t("players.offline_title"), "players_offline_section"),
+                SectionSpec("banned", t("players.banned_title"), "players_banned_section"),
+            ],
+            groups_scope="players_detail_sections",
+            header=[
                 put_asset_widget("shared.panel_title", {"title": t("players.page_title")}),
                 put_scope("players_detail_error"),
                 put_scope(
                     "players_detail_auto_refresh",
                     [put_button(t("players.refresh"), onclick=lambda: _refresh_players_page(name, context))],
                 ),
-                put_asset_widget("palworld.players_section_title", {"title": t("players.online_title")}),
-                put_scope("players_detail_list", [put_text(t("players.loading"))]),
-                put_asset_widget("palworld.players_section_title", {"title": t("players.offline_title")}),
-                put_scope("players_offline_list", [put_text(t("players.loading"))]),
-                put_asset_widget("palworld.players_section_title", {"title": t("players.banned_title")}),
-                put_scope("players_banned_list", [put_text(t("players.loading"))]),
             ],
         )
-        client_call("dom.addClasses", scope="players_detail_panel", classes=["panel", "players-detail"])
+        with use_scope("players_online_section"):
+            put_asset_widget("palworld.players_section_title", {"title": t("players.online_title")})
+            put_scope("players_detail_list", [put_text(t("players.loading"))])
+        with use_scope("players_offline_section"):
+            put_asset_widget("palworld.players_section_title", {"title": t("players.offline_title")})
+            put_scope("players_offline_list", [put_text(t("players.loading"))])
+        with use_scope("players_banned_section"):
+            put_asset_widget("palworld.players_section_title", {"title": t("players.banned_title")})
+            put_scope("players_banned_list", [put_text(t("players.loading"))])
     client_call("palworld.players.mountDetail", interval=1000, generation=context.generation)
     register_page_cleanup(lambda: client_call("palworld.players.destroyDetail"))
 

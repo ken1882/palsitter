@@ -466,6 +466,52 @@ def test_home_has_home_updater_settings_utils_and_no_add_server(tmp_path, monkey
 
 
 @pytest.mark.playwright
+def test_home_settings_and_utils_use_shared_section_layout(tmp_path, monkeypatch):
+    pages = [
+        (
+            "Home",
+            "home_page",
+            "home_sections",
+            ["home_preferences", "home_instances_section"],
+            ["Preferences", "Server instances"],
+        ),
+        (
+            "Settings",
+            "webui_settings_panel",
+            "webui_settings_form",
+            ["webui_settings_network", "webui_settings_auth"],
+            ["Network", "HTTP authentication"],
+        ),
+        (
+            "Utils",
+            "overview",
+            "utils_sections",
+            ["util-buttons", "logs"],
+            ["Utilities", "Log"],
+        ),
+    ]
+
+    with _gui_page(tmp_path, monkeypatch) as (page, _):
+        menu = page.locator("#pywebio-scope-menu")
+        for label, panel_scope, groups_scope, section_scopes, nav_labels in pages:
+            menu.get_by_text(label, exact=True).click()
+            panel = page.locator(f"#pywebio-scope-{panel_scope}")
+            panel.wait_for(timeout=5000)
+            assert panel.locator(".section-layout-navigator").is_visible()
+            assert panel.locator(
+                ".section-layout-navigation-button"
+            ).all_inner_texts() == nav_labels
+            for section_scope in section_scopes:
+                section = page.locator(f"#pywebio-scope-{section_scope}")
+                assert section.evaluate(
+                    "(node, parentId) => "
+                    "node.parentElement.id === parentId && "
+                    "node.classList.contains('panel')",
+                    f"pywebio-scope-{groups_scope}",
+                )
+
+
+@pytest.mark.playwright
 def test_home_settings_requires_auth_for_exposed_bind_and_required_credentials(
     tmp_path, monkeypatch
 ):
@@ -2648,16 +2694,39 @@ def test_overview_replays_persisted_server_logs_after_gui_start(tmp_path, monkey
     log_path = profile_log_path("default")
     log_path.parent.mkdir(parents=True)
     log_path.write_text(
-        "12:00:00 [default] PalServer: Running Palworld dedicated server on :8211\n",
+        "12:00:00 PalServer: Running Palworld dedicated server on :8211\n"
+        "12:00:01 PalServer: [2026-07-24 12:00:01] [CHAT] <Compeador> test\n",
         encoding="utf-8",
     )
 
     with _gui_page(tmp_path, monkeypatch) as (page, _):
         page.locator("#pywebio-scope-aside").get_by_text("default").click()
 
-        page.locator("#overview-log-box").get_by_text(
+        log_box = page.locator("#overview-log-box")
+        log_box.get_by_text(
             "Running Palworld dedicated server on :8211",
         ).wait_for(timeout=5000)
+        chat_line = log_box.locator(
+            '.overview-log-line[data-log-type="chat"]',
+            has_text="<Compeador> test",
+        )
+        chat_line.wait_for(timeout=5000)
+        assert "[default]" not in chat_line.inner_text()
+        page.locator("#pywebio-scope-log_bar").get_by_role(
+            "button", name="Filter", exact=True
+        ).click()
+        modal = page.locator(".modal.show")
+        modal.get_by_text("Filter log types", exact=True).wait_for(timeout=5000)
+        assert modal.locator(".overview-log-filter-option").all_inner_texts() == [
+            "Palsitter",
+            "PalServer",
+            "Chat",
+            "SteamCMD",
+            "UE4SS",
+        ]
+        modal.get_by_label("Chat", exact=True).uncheck()
+        assert chat_line.count() == 0
+        modal.get_by_text("Close", exact=True).click()
         page.locator("#pywebio-scope-log_bar").get_by_role(
             "button", name="Clear", exact=True
         ).click()
@@ -2748,10 +2817,11 @@ def test_overview_log_type_filter_hides_stable_rows_and_applies_to_appends(
         modal = page.locator(".modal.show")
         modal.get_by_text("Filter log types", exact=True).wait_for(timeout=5000)
         checkboxes = modal.locator('input.overview-log-filter-checkbox[type="checkbox"]')
-        assert checkboxes.count() == 4
+        assert checkboxes.count() == 5
         assert modal.locator(".overview-log-filter-option").all_inner_texts() == [
             "Palsitter",
             "PalServer",
+            "Chat",
             "SteamCMD",
             "UE4SS",
         ]
@@ -2800,8 +2870,8 @@ def test_overview_log_type_filter_hides_stable_rows_and_applies_to_appends(
         reset_checkboxes = reset_modal.locator(
             'input.overview-log-filter-checkbox[type="checkbox"]'
         )
-        assert reset_checkboxes.count() == 4
-        assert all(reset_checkboxes.nth(index).is_checked() for index in range(4))
+        assert reset_checkboxes.count() == 5
+        assert all(reset_checkboxes.nth(index).is_checked() for index in range(5))
 
 
 @pytest.mark.playwright
@@ -2852,6 +2922,223 @@ def test_overview_log_auto_scroll_off_preserves_manual_scroll(tmp_path, monkeypa
         )
         assert after["top"] == before
         assert after["top"] < after["max"]
+
+
+@pytest.mark.playwright
+def test_palworld_pages_use_independent_section_scopes_and_navigation(
+    tmp_path, monkeypatch
+):
+    world_sections = [
+        "Randomization",
+        "Rates & Speed",
+        "Damage Modifiers",
+        "Stamina, Hunger & Regen",
+        "Structures",
+        "Items & Drops",
+        "PvP & Combat",
+        "Base Camps",
+        "Guilds & Players",
+        "Breeding & Work",
+        "World Features",
+        "Server Admin & Network",
+        "Logging",
+    ]
+    pages = [
+        (
+            "Players",
+            "players_detail_panel",
+            "players_detail_sections",
+            ["players_online_section", "players_offline_section", "players_banned_section"],
+            ["Online players", "Offline players", "Banned players"],
+        ),
+        (
+            "Server Settings",
+            "settings_panel",
+            "settings_form",
+            ["settings_installation", "settings_launch", "settings_instance"],
+            ["Installation", "Launch options", "Instance identity and ports"],
+        ),
+        (
+            "Auto Restart",
+            "auto_restart_panel",
+            "auto_restart_form",
+            [
+                "auto_restart_crash",
+                "auto_restart_memory",
+                "auto_restart_planned",
+                "restart_history",
+            ],
+            [
+                "Crash recovery",
+                "Process-memory restart",
+                "Planned restart",
+                "Restart History",
+            ],
+        ),
+        (
+            "World Settings",
+            "world_settings_panel",
+            "world_settings_form",
+            [
+                "world_section_randomization",
+                "world_section_rates",
+                "world_section_damage",
+                "world_section_consumption",
+                "world_section_structures_drops",
+                "world_section_inventory_drops",
+                "world_section_pvp_combat",
+                "world_section_base_camp",
+                "world_section_guild_player",
+                "world_section_breeding_work",
+                "world_section_world_features",
+                "world_section_server_admin_network",
+                "world_section_logging",
+            ],
+            world_sections,
+        ),
+        (
+            "Saves & Backups",
+            "backup_settings_panel",
+            "backup_settings_form",
+            [
+                "managed_worlds",
+                "backup_settings_section",
+                "builtin_backup_files",
+                "backup_files",
+            ],
+            [
+                "Managed worlds",
+                "Backup settings",
+                "Palworld built-in backups",
+                "Managed backup files",
+            ],
+        ),
+        (
+            "Tools",
+            "tools_panel",
+            "tools_sections",
+            ["tools_firewall", "tools_instance", "tools_migration"],
+            ["Firewall", "Instance", "Palworld player ID migration"],
+        ),
+    ]
+
+    with _gui_page(tmp_path, monkeypatch) as (page, _):
+        page.set_viewport_size({"width": 1400, "height": 420})
+        page.locator("#pywebio-scope-aside").get_by_text("default", exact=True).click()
+        menu = page.locator("#pywebio-scope-menu")
+
+        for menu_label, panel_scope, groups_scope, section_scopes, labels in pages:
+            menu.get_by_text(menu_label, exact=True).click()
+            panel = page.locator(f"#pywebio-scope-{panel_scope}")
+            panel.wait_for(timeout=5000)
+            navigator = panel.locator(".section-layout-navigator")
+            assert navigator.is_visible()
+            assert navigator.locator(
+                ".section-layout-navigation-button"
+            ).all_inner_texts() == labels
+            for section_scope in section_scopes:
+                section = page.locator(f"#pywebio-scope-{section_scope}")
+                assert section.evaluate(
+                    "(node, parentId) => "
+                    "node.parentElement.id === parentId && node.classList.contains('panel')",
+                    f"pywebio-scope-{groups_scope}",
+                )
+
+        menu.get_by_text("Players", exact=True).click()
+        groups = page.locator("#pywebio-scope-players_detail_sections")
+        banned = page.locator("#pywebio-scope-players_banned_section")
+        outer_before = page.locator("#pywebio-scope-content").evaluate(
+            "(node) => node.scrollTop"
+        )
+        page.locator(
+            'button[data-section-target="players_banned_section"]'
+        ).click()
+        page.wait_for_function(
+            "() => document.getElementById('pywebio-scope-players_detail_sections').scrollTop > 0"
+        )
+        groups_box = groups.bounding_box()
+        banned_box = banned.bounding_box()
+        assert groups_box is not None and banned_box is not None
+        assert banned_box["y"] >= groups_box["y"] - 1
+        assert banned_box["y"] < groups_box["y"] + groups_box["height"]
+        assert groups.evaluate(
+            "(node) => Math.abs("
+            "node.scrollTop - (node.scrollHeight - node.clientHeight)"
+            ") < 2"
+        )
+        assert page.locator("#pywebio-scope-content").evaluate(
+            "(node) => node.scrollTop"
+        ) == outer_before
+
+        menu.get_by_text("World Settings", exact=True).click()
+        world_groups = page.locator("#pywebio-scope-world_settings_form")
+        world_groups.wait_for(timeout=5000)
+        trailing_space = world_groups.evaluate(
+            """node => {
+                const last = document.getElementById(
+                    "pywebio-scope-world_section_logging"
+                );
+                return node.scrollHeight - (last.offsetTop + last.offsetHeight);
+            }"""
+        )
+        assert 0 <= trailing_space < 50
+
+        page.set_viewport_size({"width": 390, "height": 844})
+        assert not page.locator(".section-layout-navigator").is_visible()
+        assert page.evaluate(
+            "() => document.documentElement.scrollWidth <= document.documentElement.clientWidth"
+        )
+
+
+@pytest.mark.playwright
+def test_world_boolean_change_count_and_form_action_busy_state(tmp_path, monkeypatch):
+    with _gui_page(tmp_path, monkeypatch) as (page, _):
+        page.locator("#pywebio-scope-aside").get_by_text(
+            "default", exact=True
+        ).click()
+        page.locator("#pywebio-scope-menu").get_by_text(
+            "World Settings", exact=True
+        ).click()
+        page.locator("#pywebio-scope-world_settings_form").wait_for(timeout=5000)
+
+        toggle = page.locator("#pywebio-scope-world_toggle_bIsPvP button")
+        toggle.click()
+        page.get_by_text("Changed: 1", exact=True).wait_for(timeout=3000)
+        actions = page.locator("#pywebio-scope-world_settings_actions")
+        reset_locked_immediately = actions.evaluate(
+            """node => {
+                node.querySelector("button.btn-secondary").click();
+                return Array.from(node.querySelectorAll("button"))
+                    .every(button => button.disabled);
+            }"""
+        )
+        assert reset_locked_immediately
+        actions.wait_for(state="hidden", timeout=5000)
+
+        toggle.click()
+        page.get_by_text("Changed: 1", exact=True).wait_for(timeout=3000)
+        toggle.click()
+        page.get_by_text("Changed: 0", exact=True).wait_for(timeout=3000)
+
+        numeric = page.locator('input[name="world_BaseCampWorkerMaxNum"]')
+        numeric.fill("1.5")
+        page.get_by_text("Changed: 1", exact=True).wait_for(timeout=3000)
+        save_locked_immediately = actions.evaluate(
+            """node => {
+                node.querySelector("button.btn-success").click();
+                return Array.from(node.querySelectorAll("button"))
+                    .every(button => button.disabled);
+            }"""
+        )
+        assert save_locked_immediately
+        page.get_by_text("Enter a whole number.", exact=True).wait_for(timeout=5000)
+        page.wait_for_function(
+            """() => Array.from(
+                document.querySelectorAll(
+                    "#pywebio-scope-world_settings_actions button"
+                )
+            ).every(button => !button.disabled)"""
+        )
 
 
 @pytest.mark.playwright
@@ -3066,6 +3353,12 @@ def test_auto_restart_self_heal_toggle_independent_and_reenables(tmp_path, monke
         assert not reenabled_off.is_disabled()
         trigger_frame.fill("45")
         trigger_crashes.fill("3")
+        actions = page.locator("#pywebio-scope-auto_restart_actions")
+        reset_box = actions.get_by_role("button", name="Reset", exact=True).bounding_box()
+        save_box = actions.get_by_role("button", name="Save", exact=True).bounding_box()
+        assert reset_box is not None and save_box is not None
+        assert abs(reset_box["y"] - save_box["y"]) < 1
+        assert abs(reset_box["y"] + reset_box["height"] - save_box["y"] - save_box["height"]) < 1
 
         page.locator("#pywebio-scope-auto_restart_actions").get_by_role(
             "button", name="Save", exact=True
@@ -4246,12 +4539,22 @@ def test_world_filters_structured_launch_and_auto_restart_settings(tmp_path, mon
         description = page.locator('input[name="world_ServerDescription"]')
         assert description.is_visible()
         assert not page.locator('input[name="world_DayTimeSpeedRate"]').is_visible()
+        assert page.locator("#pywebio-scope-world_section_server_admin_network").is_visible()
+        assert not page.locator("#pywebio-scope-world_section_rates").is_visible()
+        assert page.locator(
+            'button[data-section-target="world_section_server_admin_network"]'
+        ).is_visible()
+        assert not page.locator(
+            'button[data-section-target="world_section_rates"]'
+        ).is_visible()
         description.fill("Filtered but preserved")
         page.get_by_text("Changed: 1", exact=True).wait_for(timeout=3000)
         page.locator("#world-changed-only").click()
         assert description.input_value() == "Filtered but preserved"
         search.fill("")
-        page.locator('button[data-world-category="server_admin_network"]').click()
+        page.locator(
+            'button[data-section-target="world_section_server_admin_network"]'
+        ).click()
         assert description.is_visible()
         assert not page.locator('input[name="world_DayTimeSpeedRate"]').is_visible()
 
@@ -4264,6 +4567,11 @@ def test_world_filters_structured_launch_and_auto_restart_settings(tmp_path, mon
         worker = page.locator('input[name="settings_launch_worker_threads_server"]')
         page.locator("#server-settings-search").fill("launch_worker_threads_server")
         assert worker.is_visible()
+        assert page.locator("#pywebio-scope-settings_launch").is_visible()
+        assert not page.locator("#pywebio-scope-settings_installation").is_visible()
+        assert not page.locator(
+            'button[data-section-target="settings_installation"]'
+        ).is_visible()
         assert page.locator('input[name="settings_memory_restart_mb"]').count() == 0
         page.locator("#server-settings-search").fill("")
         assert worker.input_value() == "8"
@@ -4646,7 +4954,9 @@ def test_mods_page_hides_ue4ss_components_on_linux(tmp_path, monkeypatch):
         page.locator("#pywebio-scope-menu").get_by_text("Mods", exact=True).click()
         panel = page.locator("#pywebio-scope-mods_panel")
 
-        panel.get_by_text("UE4SS mod loader", exact=True).wait_for(timeout=5000)
+        page.locator("#pywebio-scope-ue4ss_summary").get_by_text(
+            "UE4SS mod loader", exact=True
+        ).wait_for(timeout=5000)
         panel.get_by_text(
             "Unavailable: UE4SS Lua/C++ management is not supported for native Linux "
             "Palworld servers.",
@@ -4654,7 +4964,12 @@ def test_mods_page_hides_ue4ss_components_on_linux(tmp_path, monkeypatch):
         ).wait_for(timeout=5000)
         assert panel.locator('select[name="ue4ss_release"]').count() == 0
         assert panel.get_by_text("Lua mods (UE4SS)", exact=True).count() == 0
-        panel.get_by_text("Pak mods", exact=True).wait_for(timeout=5000)
+        assert panel.locator(
+            ".section-layout-navigation-button"
+        ).all_inner_texts() == ["UE4SS mod loader", "Pak mods"]
+        page.locator("#pywebio-scope-pak_mods").get_by_text(
+            "Pak mods", exact=True
+        ).wait_for(timeout=5000)
         panel.get_by_text("LinuxPak.pak", exact=True).wait_for(timeout=5000)
 
 
@@ -4694,6 +5009,13 @@ def test_mods_page_installs_lists_opens_folders_and_removes_ue4ss(tmp_path, monk
             panel = page.locator("#pywebio-scope-mods_panel")
             release_select = panel.locator('select[name="ue4ss_release"]')
             release_select.wait_for(timeout=5000)
+            assert panel.locator(
+                ".section-layout-navigation-button"
+            ).all_inner_texts() == [
+                "UE4SS mod loader",
+                "Lua mods (UE4SS)",
+                "Pak mods",
+            ]
 
             assert release_select.locator("option").count() == 1
             assert release_select.locator("option:checked").inner_text().startswith(

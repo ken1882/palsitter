@@ -1,6 +1,8 @@
 # Palworld Component: Tools
 
 The Tools page is reached from the Palworld instance menu immediately after Audit.
+Firewall, Instance, and Palworld player ID migration are sibling cards in that
+navigator order.
 The first tool checks firewall coverage for the configured PalServer executable and game
 UDP port. Windows uses Windows Firewall executable and UDP rules. Native Linux probes
 installed command backends for an active firewall in this order: firewalld, UFW, then

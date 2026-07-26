@@ -5,6 +5,8 @@ Its internal route id remains `backups` so existing links and navigation state c
 work.
 
 - The panel title is `Saves & Backups`; it does not repeat the selected instance name.
+- Managed worlds, Backup settings, Palworld built-in backups, and Managed backup files
+  are sibling cards in that navigator order.
 
 ## Managed worlds
 

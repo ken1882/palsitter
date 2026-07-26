@@ -355,7 +355,7 @@ def test_steam_update_uses_fixed_palworld_server_app_id():
         "steamcmd",
         *steamcmd_platform_args(),
         "+force_install_dir",
-        str(Path.cwd()),
+        str((Path.cwd() / "tmp").resolve()),
         "+login",
         "anonymous",
         "+app_update",
@@ -372,7 +372,7 @@ def test_linux_steam_update_selects_linux_platform(monkeypatch):
         "+@sSteamCmdForcePlatformType",
         "linux",
         "+force_install_dir",
-        str(Path.cwd()),
+        str((Path.cwd() / "tmp").resolve()),
     ]
 
 

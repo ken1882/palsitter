@@ -29,6 +29,7 @@ from module.games.palworld.mods import (
     default_release_tag,
 )
 from module.webui.i18n import t
+from module.webui.section_layout import SectionSpec, put_section_layout
 from module.webui.session import page_context, run_if_current
 from module.webui.assets import client_call, client_query, put_asset_widget
 
@@ -50,24 +51,35 @@ def _service(name: str) -> UE4SSService:
 
 
 def render(name: str) -> None:
+    service = _service(name)
+    sections = [
+        SectionSpec("ue4ss", t("mods.ue4ss"), "ue4ss_section"),
+    ]
+    if service.platform_supported:
+        sections.append(SectionSpec("lua", t("mods.lua_title"), "lua_mods"))
+    sections.append(SectionSpec("pak", t("mods.pak_title"), "pak_mods"))
     clear("content")
     local.ue4ss_releases = ()
     local.ue4ss_busy = False
     with use_scope("content"):
-        put_scope(
+        put_section_layout(
             "mods_panel",
-            [
+            sections,
+            groups_scope="mods_sections",
+            header=[
                 put_asset_widget("shared.panel_title", {"title": t("mods.title")}),
                 put_warning(t("mods.compatibility_warning")),
+            ],
+        )
+        with use_scope("ue4ss_section"):
+            put_scope(
+                "ue4ss_loader",
+                [
                 put_scope("ue4ss_summary"),
                 put_scope("ue4ss_release_controls"),
                 put_scope("ue4ss_operation"),
-                put_scope("lua_mods"),
-                put_scope("pak_mods"),
-            ],
-        )
-        client_call("dom.addClasses", scope="mods_panel", classes=["panel"])
-    service = _service(name)
+                ],
+            )
     _render_status(name, service.platform_supported)
     if service.platform_supported:
         releases = service.list_releases()

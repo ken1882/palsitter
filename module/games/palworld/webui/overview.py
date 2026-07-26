@@ -129,7 +129,7 @@ CONSOLE_COMMANDS = (
     ("unban <user_id>", "console.hint.unban"),
 )
 
-LOG_TYPES = ("palsitter", "palserver", "steamcmd", "ue4ss")
+LOG_TYPES = ("palsitter", "palserver", "chat", "steamcmd", "ue4ss")
 LOW_DISK_SPACE_BYTES = 10 * 1024 * 1024 * 1024 # 10GB
 _LOG_SOURCE_PATTERN = re.compile(
     r"^(?:\d{2}:\d{2}:\d{2} )?(?:\[[^\]\r\n]+\] )?(PalServer|SteamCMD|UE4SS):"
@@ -139,11 +139,16 @@ _LOG_SOURCE_TYPES = {
     "SteamCMD": "steamcmd",
     "UE4SS": "ue4ss",
 }
+_CHAT_MARKER = re.compile(r"\[CHAT\](?:\s|$)")
 
 
 def _log_type(line: str) -> str:
     match = _LOG_SOURCE_PATTERN.match(line)
-    return _LOG_SOURCE_TYPES.get(match.group(1), "palsitter") if match else "palsitter"
+    if not match:
+        return "palsitter"
+    if match.group(1) == "PalServer" and _CHAT_MARKER.search(line[match.end() :]):
+        return "chat"
+    return _LOG_SOURCE_TYPES.get(match.group(1), "palsitter")
 
 def render(name: str) -> None:
     local.overview_keep_bottom = True
@@ -543,6 +548,7 @@ def _open_overview_log_filter() -> None:
                     for log_type, label in (
                         ("palsitter", "Palsitter"),
                         ("palserver", "PalServer"),
+                        ("chat", "Chat"),
                         ("steamcmd", "SteamCMD"),
                         ("ue4ss", "UE4SS"),
                     )

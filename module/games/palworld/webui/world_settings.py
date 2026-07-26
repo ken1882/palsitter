@@ -5,6 +5,7 @@ from pywebio.session import local
 from module.games.palworld.backup import BackupService
 from module.games.palworld.config import load_profile, save_profile
 from module.webui.i18n import t
+from module.webui.section_layout import SectionSpec, put_section_layout
 from module.webui.session import page_context, register_page_cleanup
 from module.webui.assets import client_call, put_asset_icon, put_asset_widget
 from module.games.palworld.worldsettings import WORLD_OPTION_CATEGORIES, WORLD_OPTION_FIELDS, diagnose_ini, load_world_settings, recover_malformed_ini, resolve_ini_path, save_world_settings
@@ -36,6 +37,10 @@ def _mark_dirty_form(*args, **kwargs):
 
 def _register_dirty_form(*args, **kwargs):
     from module.webui.forms import _register_dirty_form as implementation
+    return implementation(*args, **kwargs)
+
+def _set_dirty_form_busy(*args, **kwargs):
+    from module.webui.forms import set_dirty_form_busy as implementation
     return implementation(*args, **kwargs)
 
 def _render_instance_menu(*args, **kwargs):
@@ -81,24 +86,31 @@ def render(name: str) -> None:
         if field_.ftype == "bool"
     }
     local.world_initial_values = dict(loaded.values)
+    sections = [
+        SectionSpec(
+            category_id,
+            t(category_key),
+            f"world_section_{category_id}",
+            ("settings-view",),
+        )
+        for category_id, category_key in WORLD_OPTION_CATEGORIES
+    ]
     clear("content")
     with use_scope("content"):
-        put_scope(
+        put_section_layout(
             "world_settings_panel",
-            [
+            sections,
+            groups_scope="world_settings_form",
+            header=[
                 put_asset_widget("shared.panel_title", {"title": t("world.title")}),
                 put_scope("world_settings_toolbar"),
-                put_scope("world_settings_form"),
-                put_scope("world_settings_actions"),
             ],
+            footer=[put_scope("world_settings_actions")],
         )
-        client_call("dom.addClasses", scope="world_settings_panel", classes=["panel"])
-        client_call("dom.addClasses", scope="world_settings_form", classes=["settings-view"])
         client_call("dom.addClasses", scope="world_settings_actions", classes=["settings-actions"])
         with use_scope("world_settings_toolbar"):
             _render_world_settings_toolbar()
-        with use_scope("world_settings_form"):
-            _render_world_settings_form(loaded.values)
+        _render_world_settings_form(loaded.values)
         client_call(
             "palworld.worldSettings.configureNumeric",
             floatNames=[_world_pin(field_.key) for field_ in WORLD_OPTION_FIELDS if field_.ftype == "float"],
@@ -109,6 +121,12 @@ def render(name: str) -> None:
             "palworld.worldSettings.mount",
             changedPrefix=t("world.changed_count", count=""),
             generation=context.generation if context else None,
+            layoutScope="world_settings_panel",
+            sectionScopes=[section.scope for section in sections],
+            toggleValues={
+                _safe_dom_id(key): bool(value)
+                for key, value in local.world_toggles.items()
+            },
         )
         register_page_cleanup(lambda: client_call("palworld.worldSettings.destroy"))
         with use_scope("world_settings_actions"):
@@ -139,6 +157,7 @@ def _reset_world_settings(name: str) -> None:
         loaded = load_world_settings(profile)
     except Exception as exc:
         toast(t("world.save_failed", error=exc), color="error")
+        _set_dirty_form_busy(False)
         return
     if profile.world_settings != previous_world_settings:
         save_profile(profile)
@@ -166,7 +185,13 @@ def _reset_world_settings(name: str) -> None:
         if field_.ftype == "bool":
             _render_world_toggle(field_.key)
     _clear_dirty_form_state()
-    client_call("palworld.worldSettings.markSaved")
+    client_call(
+        "palworld.worldSettings.markSaved",
+        toggleValues={
+            _safe_dom_id(key): bool(value)
+            for key, value in local.world_toggles.items()
+        },
+    )
 
 def _render_world_recovery(name: str, error: str) -> None:
     clear("content")
@@ -225,16 +250,10 @@ def _world_pin(key: str) -> str:
     return f"world_{key}"
 
 def _render_world_settings_toolbar() -> None:
-    categories = [{"id": "all", "label": t("world.category_all"), "active": True}]
-    categories.extend(
-        {"id": category_id, "label": t(category_key), "active": False}
-        for category_id, category_key in WORLD_OPTION_CATEGORIES
-    )
     put_asset_widget(
         "palworld.world_settings_toolbar",
         {
             "placeholder": t("world.search_placeholder"),
-            "categories": categories,
             "changed_only": t("world.changed_only"),
         },
     )
@@ -255,7 +274,11 @@ def _toggle_world_field(key: str) -> None:
     _mark_dirty_form()
     local.world_toggles[key] = not local.world_toggles.get(key, False)
     _render_world_toggle(key)
-    client_call("palworld.worldSettings.syncByKey", key=_safe_dom_id(key))
+    client_call(
+        "palworld.worldSettings.syncByKey",
+        key=_safe_dom_id(key),
+        value=bool(local.world_toggles[key]),
+    )
 
 def _world_password_input(key: str, value):
     pin_name = _world_pin(key)
@@ -339,21 +362,22 @@ def _render_world_settings_form(values) -> None:
         fields = [field_ for field_ in WORLD_OPTION_FIELDS if field_.category == category_id]
         if not fields:
             continue
-        put_asset_widget(
-            "palworld.world_category",
-            {"category": category_id, "label": t(category_key)},
-        )
-        for field_ in fields:
-            scope = f"world_field_{_safe_dom_id(field_.key)}"
-            put_scope(scope)
-            with use_scope(scope):
-                _render_world_field(field_, values.get(field_.key, field_.default))
-            client_call(
-                "palworld.worldSettings.decorateField",
-                scope=scope,
-                category=category_id,
-                search=f"{t(field_.i18n_key)} {field_.key}",
+        with use_scope(f"world_section_{category_id}"):
+            put_asset_widget(
+                "palworld.world_category",
+                {"category": category_id, "label": t(category_key)},
             )
+            for field_ in fields:
+                scope = f"world_field_{_safe_dom_id(field_.key)}"
+                put_scope(scope)
+                with use_scope(scope):
+                    _render_world_field(field_, values.get(field_.key, field_.default))
+                client_call(
+                    "palworld.worldSettings.decorateField",
+                    scope=scope,
+                    category=category_id,
+                    search=f"{t(field_.i18n_key)} {field_.key}",
+                )
 
 def _collect_world_values() -> dict:
     values = {}
@@ -392,6 +416,7 @@ def _save_world_settings(name: str, *, rerender: bool = False) -> bool:
     values = _collect_world_values()
     if not _validate_world_settings_form(values):
         toast(t("validation.fix_errors"), color="error")
+        _set_dirty_form_busy(False)
         return False
     try:
         save_world_settings(
@@ -403,9 +428,16 @@ def _save_world_settings(name: str, *, rerender: bool = False) -> bool:
         save_profile(profile)
         _clear_dirty_form_state()
         toast(t("world.saved"))
-        client_call("palworld.worldSettings.markSaved")
+        client_call(
+            "palworld.worldSettings.markSaved",
+            toggleValues={
+                _safe_dom_id(key): bool(value)
+                for key, value in local.world_toggles.items()
+            },
+        )
     except Exception as exc:
         toast(t("world.save_failed", error=exc), color="error")
+        _set_dirty_form_busy(False)
         return False
     if rerender:
         _world_settings(name)

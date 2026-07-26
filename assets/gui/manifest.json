@@ -1,6 +1,7 @@
 {
   "css": [
     "gui/css/base.css",
+    "gui/css/section-layout.css",
     "gui/css/palworld-map.css",
     "gui/css/palworld-components.css",
     "gui/css/pagination-theme.css",
@@ -9,6 +10,7 @@
   ],
   "js": [
     "gui/js/core.js",
+    "gui/js/section_layout.js",
     "gui/js/forms.js",
     "gui/js/file_browser.js",
     "gui/js/home.js",
@@ -23,6 +25,7 @@
   ],
   "templates": {
     "shared.panel_title": "gui/html/shared/panel_title.html",
+    "shared.section_navigator": "gui/html/shared/section_navigator.html",
     "shared.field_error": "gui/html/shared/field_error.html",
     "shared.field_label": "gui/html/shared/field_label.html",
     "shared.field_label_help": "gui/html/shared/field_label_help.html",

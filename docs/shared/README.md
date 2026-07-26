@@ -16,6 +16,7 @@ These rules belong to the multi-game application rather than one game integratio
 - [Settings](./components/settings.md)
 - [Updater](./components/updater.md)
 - [Utils](./components/utils.md)
+- [Section Layout](./components/section-layout.md)
 
 ## Features
 

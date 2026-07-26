@@ -129,6 +129,8 @@ def test_self_heal_enabled_defaults_true():
 
 def test_backup_defaults_use_minutes_and_twenty_files():
     profile = Profile(name="x")
+    assert profile.workdir == "./tmp"
+    assert profile.backup_source == "./tmp/Pal/Saved/SaveGames/0"
     assert profile.backup_interval_minutes == 60
     assert profile.backup_retention_count == 20
     assert profile.skip_backup_when_no_players is True

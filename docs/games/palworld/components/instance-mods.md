@@ -3,6 +3,9 @@
 Reached from the Palworld instance menu after World Settings. This page is not exposed by
 unsupported game adapters.
 
+- The page uses sibling `UE4SS mod loader`, `Lua mods (UE4SS)`, and `Pak mods` cards with
+  a right-side navigator. Native Linux omits the unsupported Lua card and navigator item.
+
 ## UE4SS
 
 - The panel reports UE4SS installation state and the version recorded by Palsitter.

@@ -4,15 +4,16 @@ Reached from the Palworld instance menu immediately after Server Settings. This 
 Palworld-specific and is not exposed by unsupported game placeholders.
 
 - The panel title is `Auto Restart`; it does not repeat the selected instance name.
-- The embedded settings panel contains Crash recovery, Process-memory restart, and
-  Planned restart groups. These fields do not also appear in Server Settings.
+- Crash recovery, Process-memory restart, Planned restart, and Restart History are
+  sibling section cards in that navigator order. These fields do not also appear in
+  Server Settings.
 - Crash recovery includes `Self-heal trigger frame (minutes)` (default 30) and
   `Self-heal trigger crash times` (default 2). Both accept positive whole numbers and
   control the rolling incident window and threshold used by the supervisor.
 - The page uses the standard square toggles, validation, floating Reset/Save bar, and
   unsaved-navigation guard. Save and Reset update the existing controls in place;
   Self-heal is disabled while Restart on crash is Off.
-- Restart History is a separate panel below the form. It displays the newest 20 persisted
+- Restart History displays the newest 20 persisted
   automatic-restart decisions in reverse chronological order with timestamp, trigger,
   detected cause, outcome, and expandable details. Manual restarts and routine schedule
   creation are excluded.

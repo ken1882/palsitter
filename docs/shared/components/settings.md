@@ -2,6 +2,13 @@
 
 The Home secondary menu contains `Home`, `Updater`, `Settings`, and `Utils`.
 
+- Settings uses the shared section layout in this order: `Network` and
+  `HTTP authentication`. The page title, validation messages, and one shared
+  Save/Reset bar remain outside those sibling cards.
+- Save and Reset lock immediately in the browser after either action is clicked. A
+  validation failure or confirmation prompt unlocks them; successful Save and Reset
+  clear the dirty state.
+
 ## Network access
 
 - Settings persists the web UI bind address in `config/webui/settings.json`.

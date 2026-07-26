@@ -137,6 +137,24 @@ def test_ensure_world_settings_does_not_reuse_other_platform_ini(
     assert other.read_text(encoding="utf-8") == "old Windows settings"
 
 
+def test_default_profile_keeps_world_settings_under_tmp(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("module.games.palworld.config.WINDOWS", True)
+
+    path = ensure_world_settings(Profile(name="test"))
+
+    assert path.resolve() == (
+        tmp_path
+        / "tmp"
+        / "Pal"
+        / "Saved"
+        / "Config"
+        / "WindowsServer"
+        / "PalWorldSettings.ini"
+    )
+    assert not (tmp_path / "Pal").exists()
+
+
 def test_load_world_settings_syncs_rest_credentials_and_ports(tmp_path):
     profile = _make_profile(tmp_path)
     save_world_settings(

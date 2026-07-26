@@ -23,54 +23,49 @@
   };
 
   const server = palworld.serverSettings = palworld.serverSettings || {};
-  server.mount = function ({generation} = {}) {
+  server.mount = function ({generation, sectionScopes, layoutScope} = {}) {
     if (generation != null && !palsitter.page.isCurrent(generation)) return;
     const form = document.getElementById("pywebio-scope-settings_form");
     const toolbar = document.getElementById("pywebio-scope-settings_filter_toolbar");
     if (!form || !toolbar) return;
     const signal = replaceController(server);
-    let category = "";
-    let priorSearch = "";
-    for (const child of form.children) {
-      if (child.classList.contains("settings-category-heading")) {
-        category = child.dataset.settingsHeading || "";
-        priorSearch = "";
-        continue;
+    const sections = (sectionScopes || [])
+      .map(scope => document.getElementById(`pywebio-scope-${scope}`))
+      .filter(Boolean);
+    for (const section of sections) {
+      let priorSearch = "";
+      for (const child of section.children) {
+        if (child.classList.contains("settings-category-heading")) {
+          priorSearch = "";
+          continue;
+        }
+        const label = child.querySelector(".settings-field-label");
+        const named = child.querySelector('[name^="settings_"]');
+        const toggle = child.querySelector('[id*="settings_toggle_"]');
+        const raw = named ? named.name.replace(/^settings_/, "")
+          : toggle ? toggle.id.replace(/^pywebio-scope-settings_toggle_/, "")
+            : child.querySelector(".settings-inline-note") ? "launch arguments official documentation" : "";
+        if (label || raw) priorSearch = `${label ? label.textContent : ""} ${raw}`.trim();
+        child.classList.add("server-settings-filter-item");
+        child.dataset.settingsSearch = priorSearch.toLocaleLowerCase();
       }
-      const label = child.querySelector(".settings-field-label");
-      const named = child.querySelector('[name^="settings_"]');
-      const toggle = child.querySelector('[id*="settings_toggle_"]');
-      const raw = named ? named.name.replace(/^settings_/, "")
-        : toggle ? toggle.id.replace(/^pywebio-scope-settings_toggle_/, "")
-          : child.querySelector(".settings-inline-note") ? "launch arguments official documentation" : "";
-      if (label || raw) priorSearch = `${label ? label.textContent : ""} ${raw}`.trim();
-      child.classList.add("server-settings-filter-item");
-      child.dataset.settingsCategory = category;
-      child.dataset.settingsSearch = priorSearch.toLocaleLowerCase();
     }
-    const state = { category: "all", query: "" };
+    const state = { query: "" };
     const apply = () => {
       for (const item of form.querySelectorAll(".server-settings-filter-item")) {
-        const categoryMatch = state.category === "all" || item.dataset.settingsCategory === state.category;
         const searchMatch = !state.query || (item.dataset.settingsSearch || "").includes(state.query);
-        item.hidden = !(categoryMatch && searchMatch);
+        item.hidden = !searchMatch;
       }
-      for (const heading of form.querySelectorAll("[data-settings-heading]")) {
-        const headingCategory = heading.dataset.settingsHeading;
-        const categoryMatch = state.category === "all" || headingCategory === state.category;
-        const hasVisible = Array.from(form.querySelectorAll(".server-settings-filter-item"))
-          .some(item => !item.hidden && item.dataset.settingsCategory === headingCategory);
-        heading.hidden = !(categoryMatch && hasVisible);
+      for (const section of sections) {
+        const hasVisible = Array.from(section.querySelectorAll(".server-settings-filter-item"))
+          .some(item => !item.hidden);
+        section.hidden = !hasVisible;
+        section.querySelectorAll("[data-settings-heading]").forEach(heading => {
+          heading.hidden = !hasVisible;
+        });
       }
+      palsitter.sectionLayout.sync({layoutScope});
     };
-    toolbar.querySelectorAll("[data-settings-category]").forEach(button => {
-      button.addEventListener("click", () => {
-        state.category = button.dataset.settingsCategory;
-        toolbar.querySelectorAll("[data-settings-category]").forEach(candidate =>
-          candidate.classList.toggle("active", candidate === button));
-        apply();
-      }, { signal });
-    });
     toolbar.querySelector("#server-settings-search")?.addEventListener("input", event => {
       state.query = String(event.target.value || "").trim().toLocaleLowerCase();
       apply();
@@ -108,13 +103,22 @@
       if (input) input.step = "1";
     }
   };
-  world.mount = function ({ changedPrefix, generation }) {
+  world.mount = function ({
+    changedPrefix,
+    generation,
+    layoutScope,
+    sectionScopes,
+    toggleValues,
+  }) {
     if (generation != null && !palsitter.page.isCurrent(generation)) return;
     const form = document.getElementById("pywebio-scope-world_settings_form");
     const toolbar = document.getElementById("pywebio-scope-world_settings_toolbar");
     if (!form || !toolbar) return;
     const signal = replaceController(world);
-    const state = { category: "all", query: "", changedOnly: false };
+    const state = { query: "", changedOnly: false };
+    const sections = (sectionScopes || [])
+      .map(scope => document.getElementById(`pywebio-scope-${scope}`))
+      .filter(Boolean);
     const scopes = () => Array.from(form.querySelectorAll(".world-field-scope"));
     const currentValue = scope => {
       const controls = Array.from(scope.querySelectorAll("input, select, textarea"));
@@ -127,8 +131,7 @@
       const query = state.query.trim().toLocaleLowerCase();
       const visibleCategories = new Set();
       scopes().forEach(scope => {
-        const visible = (state.category === "all" || scope.dataset.worldCategory === state.category)
-          && (!query || (scope.dataset.worldSearch || "").includes(query))
+        const visible = (!query || (scope.dataset.worldSearch || "").includes(query))
           && (!state.changedOnly || scope.dataset.changed === "true");
         scope.classList.toggle("world-field-hidden", !visible);
         scope.dataset.visible = String(visible);
@@ -136,25 +139,56 @@
       });
       form.querySelectorAll("[data-world-heading]").forEach(heading => {
         const category = heading.dataset.worldHeading;
-        heading.hidden = !((state.category === "all" || category === state.category) && visibleCategories.has(category));
+        heading.hidden = !visibleCategories.has(category);
       });
+      for (const section of sections) {
+        section.hidden = !Array.from(section.querySelectorAll(".world-field-scope"))
+          .some(scope => !scope.classList.contains("world-field-hidden"));
+      }
+      palsitter.sectionLayout.sync({layoutScope});
     };
     const updateCount = () => {
       const target = document.getElementById("world-changed-count");
       if (target) target.textContent = `${changedPrefix}${scopes().filter(scope => scope.dataset.changed === "true").length}`;
     };
-    const sync = scope => {
+    const sync = (scope, toggleValue) => {
       if (!scope) return;
+      if (toggleValue !== undefined) {
+        scope.dataset.currentToggleValue = String(Boolean(toggleValue));
+      }
+      if (scope.dataset.initialToggleValue !== undefined) {
+        scope.dataset.changed = String(
+          scope.dataset.currentToggleValue !== scope.dataset.initialToggleValue
+        );
+        updateCount();
+        apply();
+        return;
+      }
       const value = currentValue(scope);
       if (scope.dataset.initialValue === undefined) scope.dataset.initialValue = value;
       scope.dataset.changed = String(value !== scope.dataset.initialValue);
       updateCount();
       apply();
     };
-    world.syncByKey = ({ key }) => later(world, () =>
-      sync(document.getElementById(`pywebio-scope-world_field_${key}`)));
-    world.markSaved = () => later(world, () => {
+    for (const [key, value] of Object.entries(toggleValues || {})) {
+      const scope = document.getElementById(`pywebio-scope-world_field_${key}`);
+      if (!scope) continue;
+      scope.dataset.initialToggleValue = String(Boolean(value));
+      scope.dataset.currentToggleValue = String(Boolean(value));
+    }
+    world.syncByKey = ({ key, value }) =>
+      sync(document.getElementById(`pywebio-scope-world_field_${key}`), value);
+    world.markSaved = ({ toggleValues: savedToggleValues } = {}) => later(world, () => {
       scopes().forEach(scope => {
+        const key = scope.id.replace("pywebio-scope-world_field_", "");
+        if (scope.dataset.initialToggleValue !== undefined) {
+          if (Object.prototype.hasOwnProperty.call(savedToggleValues || {}, key)) {
+            scope.dataset.currentToggleValue = String(Boolean(savedToggleValues[key]));
+          }
+          scope.dataset.initialToggleValue = scope.dataset.currentToggleValue;
+          scope.dataset.changed = "false";
+          return;
+        }
         const value = currentValue(scope);
         scope.dataset.initialValue = value;
         scope.dataset.changed = "false";
@@ -162,18 +196,11 @@
       updateCount();
       apply();
     });
-    scopes().forEach(sync);
+    scopes().forEach(scope => sync(scope));
     form.addEventListener("input", event => sync(event.target.closest(".world-field-scope")), { signal });
     form.addEventListener("change", event => sync(event.target.closest(".world-field-scope")), { signal });
     const search = document.getElementById("world-settings-search");
     search?.addEventListener("input", () => { state.query = search.value; apply(); }, { signal });
-    toolbar.querySelectorAll("[data-world-category]").forEach(button => {
-      button.addEventListener("click", () => {
-        state.category = button.dataset.worldCategory;
-        toolbar.querySelectorAll("[data-world-category]").forEach(item => item.classList.toggle("active", item === button));
-        apply();
-      }, { signal });
-    });
     const changed = document.getElementById("world-changed-only");
     changed?.addEventListener("click", () => {
       state.changedOnly = !state.changedOnly;

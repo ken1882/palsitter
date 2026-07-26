@@ -11,6 +11,7 @@ from module.games.palworld.config import PalworldProfile, load_profile, save_pro
 from module.games.palworld.server import PalRestClient
 from module.games.palworld.saves import ManagedWorldService
 from module.webui.i18n import t
+from module.webui.section_layout import SectionSpec, put_section_layout
 from module.webui.session import page_context, run_if_current
 from module.webui.assets import client_call, client_query, put_asset_widget
 
@@ -44,6 +45,10 @@ def _open_folder(*args, **kwargs):
 
 def _register_dirty_form(*args, **kwargs):
     from module.webui.forms import _register_dirty_form as implementation
+    return implementation(*args, **kwargs)
+
+def _set_dirty_form_busy(*args, **kwargs):
+    from module.webui.forms import set_dirty_form_busy as implementation
     return implementation(*args, **kwargs)
 
 def _render_instance_menu(*args, **kwargs):
@@ -85,21 +90,36 @@ def render(name: str) -> None:
     local.backup_skip_no_players = profile.skip_backup_when_no_players
     clear("content")
     with use_scope("content"):
-        put_scope(
+        put_section_layout(
             "backup_settings_panel",
             [
-                put_asset_widget("shared.panel_title", {"title": t("backups.title")}),
-                put_scope("managed_worlds"),
-                put_scope("backup_settings_form"),
-                put_scope("backup_settings_actions"),
-                put_scope("builtin_backup_files"),
-                put_scope("backup_files"),
+                SectionSpec("worlds", t("backups.worlds_title"), "managed_worlds"),
+                SectionSpec(
+                    "settings",
+                    t("backups.settings_title"),
+                    "backup_settings_section",
+                    ("settings-view",),
+                ),
+                SectionSpec(
+                    "builtin",
+                    t("backups.builtin_section"),
+                    "builtin_backup_files",
+                ),
+                SectionSpec(
+                    "managed",
+                    t("backups.files_section"),
+                    "backup_files",
+                ),
             ],
+            groups_scope="backup_settings_form",
+            header=[
+                put_asset_widget("shared.panel_title", {"title": t("backups.title")}),
+            ],
+            footer=[put_scope("backup_settings_actions")],
         )
-        client_call("dom.addClasses", scope="backup_settings_panel", classes=["panel"])
-        client_call("dom.addClasses", scope="backup_settings_form", classes=["settings-view"])
         client_call("dom.addClasses", scope="backup_settings_actions", classes=["settings-actions"])
-        with use_scope("backup_settings_form"):
+        with use_scope("backup_settings_section"):
+            put_asset_widget("shared.panel_title", {"title": t("backups.settings_title")})
             _settings_field_with_browse(
                 _settings_label("backup_dir"), "backup_dir", profile.backup_dir, escape_label=False
             )
@@ -281,6 +301,7 @@ def _save_backup_settings(name: str, *, rerender: bool = False) -> bool:
     from module.webui.shutdown import is_shutting_down
 
     if is_shutting_down():
+        _set_dirty_form_busy(False)
         return False
     profile = load_profile(name)
     data = profile.to_dict()
@@ -290,6 +311,7 @@ def _save_backup_settings(name: str, *, rerender: bool = False) -> bool:
         data, {"backup_dir", "backup_interval_minutes", "backup_retention_count"}
     ):
         toast(t("validation.fix_errors"), color="error")
+        _set_dirty_form_busy(False)
         return False
     data["skip_backup_when_no_players"] = bool(local.backup_skip_no_players)
     updated = Profile.from_dict(data)

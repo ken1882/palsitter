@@ -192,7 +192,7 @@ class PalworldProfile:
     name: str
     config_version: int = PALWORLD_CONFIG_VERSION
     server_name: str = "Palworld Server"
-    workdir: str = "."
+    workdir: str = "./tmp"
     executable: str = "PalServer.exe"
     # Kept as an in-memory compatibility view for callers that have not moved to
     # the structured launch fields. Version 2 profiles do not persist this key.

@@ -110,16 +110,17 @@ adding lifecycle controls to those pages.
   the check runs while a managed server is active, writes its result to the Overview log,
   and is unavailable for external or uninstalled servers. A Filter button immediately
   left of Auto Scroll opens a popup with checked native HTML
-  checkboxes for `Palsitter`, `PalServer`, `SteamCMD`, and `UE4SS`; there is no aggregate
+  checkboxes for `Palsitter`, `PalServer`, `Chat`, `SteamCMD`, and `UE4SS`; there is no aggregate
   `All` option, but the popup provides a localized Select all/Select none toggle for those
-  four checkboxes. `PalServer:`, `SteamCMD:`, and `UE4SS:` lines, including supervisor lines
-  carrying an instance-name prefix, use their matching type and every other line uses
-  `Palsitter`. Checkbox changes apply immediately for the current
+  five checkboxes. `PalServer:` lines containing `[CHAT]` use the `Chat` type;
+  other `PalServer:`, `SteamCMD:`, and `UE4SS:` lines use their matching type and every
+  other line uses `Palsitter`. Overview lines no longer include the selected instance-name
+  prefix; legacy persisted prefixes are removed when loaded. Checkbox changes apply immediately for the current
   Overview visit. The browser retains the full latest-300-line model, but the log view
   renders only matching rows so filtered entries do not leave blank vertical space.
   Filtered rows are detached from the view and cached by stable row identity; when
   re-enabled, the same nodes are reused. New rows inherit the active filter before
-  insertion, and reopening Overview resets all four types to visible.
+  insertion, and reopening Overview resets all five types to visible.
 - The console runs on Enter as well as its Run button. Focusing the field opens a
   filterable autocomplete containing every supported command: REST-backed announce,
   player moderation, info, players, metrics, save, and shutdown operations, plus

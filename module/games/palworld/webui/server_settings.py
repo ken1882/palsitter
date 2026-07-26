@@ -9,6 +9,7 @@ from pywebio.session import local
 from module.games.palworld.config import PalworldProfile, fixed_steamcmd_path, load_profile, save_profile
 from module.steamcmd import ensure_steamcmd, steamcmd_download_url
 from module.webui.i18n import t
+from module.webui.section_layout import SectionSpec, put_section_layout
 from module.webui.session import page_context, register_page_cleanup
 from module.webui.assets import client_call, put_asset_widget
 
@@ -18,6 +19,10 @@ def _clear_dirty_form_state(*args, **kwargs):
 
 def _register_dirty_form(*args, **kwargs):
     from module.webui.forms import _register_dirty_form as implementation
+    return implementation(*args, **kwargs)
+
+def _set_dirty_form_busy(*args, **kwargs):
+    from module.webui.forms import set_dirty_form_busy as implementation
     return implementation(*args, **kwargs)
 
 def _render_instance_menu(*args, **kwargs):
@@ -134,21 +139,39 @@ def render(name: str) -> None:
     local.settings_argument_list_refresh = lambda: _render_extra_args_list()
     clear("content")
     with use_scope("content"):
-        put_scope(
+        put_section_layout(
             "settings_panel",
             [
+                SectionSpec(
+                    "installation",
+                    t("settings.category_installation"),
+                    "settings_installation",
+                    ("settings-view",),
+                ),
+                SectionSpec(
+                    "launch",
+                    t("settings.category_launch"),
+                    "settings_launch",
+                    ("settings-view",),
+                ),
+                SectionSpec(
+                    "instance",
+                    t("settings.category_instance"),
+                    "settings_instance",
+                    ("settings-view",),
+                ),
+            ],
+            groups_scope="settings_form",
+            header=[
                 put_asset_widget("shared.panel_title", {"title": t("settings.title")}),
                 put_scope("settings_filter_toolbar"),
-                put_scope("settings_form"),
-                put_scope("settings_actions"),
             ],
+            footer=[put_scope("settings_actions")],
         )
-        client_call("dom.addClasses", scope="settings_panel", classes=["panel"])
-        client_call("dom.addClasses", scope="settings_form", classes=["settings-view"])
         client_call("dom.addClasses", scope="settings_actions", classes=["settings-actions"])
         with use_scope("settings_filter_toolbar"):
             _render_server_settings_toolbar()
-        with use_scope("settings_form"):
+        with use_scope("settings_installation"):
             _settings_category(t("settings.category_installation"), "installation")
             _settings_steamcmd_action(name)
             _settings_toggle(_settings_label("update_on_start"), "update_on_start", escape_label=False)
@@ -161,6 +184,7 @@ def render(name: str) -> None:
                 escape_label=False,
             )
             _settings_toggle(_settings_label("steam_validate"), "steam_validate", escape_label=False)
+        with use_scope("settings_launch"):
             _settings_category(t("settings.category_launch"), "launch")
             put_asset_widget(
                 "shared.external_link",
@@ -208,6 +232,7 @@ def render(name: str) -> None:
                 escape_label=False,
             )
             _render_extra_args_list()
+        with use_scope("settings_instance"):
             _settings_category(t("settings.category_instance"), "instance")
             _settings_field(
                 _settings_label("dedicated_server_name"),
@@ -220,6 +245,8 @@ def render(name: str) -> None:
         client_call(
             "palworld.serverSettings.mount",
             generation=context.generation if context else None,
+            sectionScopes=["settings_installation", "settings_launch", "settings_instance"],
+            layoutScope="settings_panel",
         )
         register_page_cleanup(lambda: client_call("palworld.serverSettings.destroy"))
         with use_scope("settings_actions"):
@@ -308,21 +335,9 @@ def _settings_category(label: str, category: str) -> None:
     put_asset_widget("palworld.settings_category", {"category": category, "label": label})
 
 def _render_server_settings_toolbar() -> None:
-    categories = [
-        ("all", t("world.category_all")),
-        ("installation", t("settings.category_installation")),
-        ("launch", t("settings.category_launch")),
-        ("instance", t("settings.category_instance")),
-    ]
     put_asset_widget(
         "palworld.server_settings_toolbar",
-        {
-            "placeholder": t("settings.search_placeholder"),
-            "categories": [
-                {"id": category, "label": label, "active": category == "all"}
-                for category, label in categories
-            ],
-        },
+        {"placeholder": t("settings.search_placeholder")},
     )
 
 def _steamcmd_action_scope(name: str) -> str:
@@ -402,6 +417,7 @@ def _save_settings(name: str, *, rerender: bool = False) -> bool:
         },
     ):
         toast(t("validation.fix_errors"), color="error")
+        _set_dirty_form_busy(False)
         return False
     for key in SETTINGS_TOGGLE_KEYS:
         data[key] = bool(local.settings_toggles.get(key, data[key]))
@@ -416,6 +432,7 @@ def _save_settings(name: str, *, rerender: bool = False) -> bool:
     except (TypeError, ValueError) as exc:
         _show_field_error(_settings_pin("extra_args"), str(exc))
         toast(t("validation.fix_errors"), color="error")
+        _set_dirty_form_busy(False)
         return False
     save_profile(updated)
     _clear_dirty_form_state()

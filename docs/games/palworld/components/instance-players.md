@@ -3,6 +3,8 @@
 Reached from the Palworld instance menu directly after [Overview](./instance-overview.md).
 It is a dedicated REST-backed administration page; the Overview keeps a compact roster.
 
+- The page uses the shared section layout in this order: `Online players`, `Offline
+  players`, `Banned players`.
 - Each online-player row shows name, level, whole-millisecond ping (rendered with
   `int(ping)`), PalDB in-game coordinates, and building count when the REST response
   supplies them. Palpagos and The World Tree use their map-specific coordinate transforms;

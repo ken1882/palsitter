@@ -31,9 +31,11 @@ from module.webui.forms import (
     _settings_field_row,
     clear_dirty_form,
     register_dirty_form,
+    set_dirty_form_busy,
     update_form_values,
 )
 from module.webui.i18n import t
+from module.webui.section_layout import SectionSpec, put_section_layout
 from module.webui.session import page_context, register_page_stop_event, run_if_current
 from module.webui.settings import (
     WebUISettings,
@@ -333,6 +335,7 @@ def _save_settings(*, save_anyway: bool = False) -> bool:
     clear("webui_settings_error")
     values = _form_values()
     if values is None:
+        set_dirty_form_busy(False)
         return False
     address, enabled, username, password = values
     if not enabled and not is_localhost(address) and not save_anyway:
@@ -353,6 +356,7 @@ def _save_settings(*, save_anyway: bool = False) -> bool:
                     size="auto .5rem auto",
                 ),
             )
+        set_dirty_form_busy(False)
         return False
     salt, password_hash = hash_password(password) if enabled else ("", "")
     save_web_settings(
@@ -400,19 +404,31 @@ def _render_settings() -> None:
     local.web_auth_enabled = settings.auth_enabled
     clear("content")
     with use_scope("content"):
-        put_scope(
+        put_section_layout(
             "webui_settings_panel",
             [
+                SectionSpec(
+                    "network",
+                    t("webui_settings.network_title"),
+                    "webui_settings_network",
+                    ("settings-view",),
+                ),
+                SectionSpec(
+                    "authentication",
+                    t("webui_settings.auth_title"),
+                    "webui_settings_auth",
+                    ("settings-view",),
+                ),
+            ],
+            groups_scope="webui_settings_form",
+            header=[
                 put_asset_widget("shared.panel_title", {"title": t("webui_settings.title")}),
                 put_scope("webui_settings_error"),
-                put_scope("webui_settings_form"),
-                put_scope("webui_settings_actions"),
             ],
+            footer=[put_scope("webui_settings_actions")],
         )
-        client_call("dom.addClasses", scope="webui_settings_panel", classes=["panel"])
-        client_call("dom.addClasses", scope="webui_settings_form", classes=["settings-view"])
         client_call("dom.addClasses", scope="webui_settings_actions", classes=["settings-actions"])
-        with use_scope("webui_settings_form"):
+        with use_scope("webui_settings_network"):
             put_asset_widget("shared.panel_title", {"title": t("webui_settings.network_title")})
             put_text(t("webui_settings.bind_help"))
             put_select(
@@ -423,6 +439,7 @@ def _render_settings() -> None:
             )
             put_scope("webui_firewall_status", [put_text(t("webui_settings.firewall_not_checked"))])
             put_button(t("webui_settings.firewall_check"), onclick=_check_firewall, color="secondary")
+        with use_scope("webui_settings_auth"):
             put_asset_widget("shared.panel_title", {"title": t("webui_settings.auth_title")})
             put_text(t("webui_settings.auth_help"))
             _settings_field_row(

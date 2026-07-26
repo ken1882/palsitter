@@ -70,6 +70,11 @@ def clear_dirty_form() -> None:
     client_call("forms.clearDirty")
 
 
+def set_dirty_form_busy(busy: bool) -> None:
+    """Lock or unlock the mounted form's Save and Reset actions."""
+    client_call("forms.setBusy", busy=busy)
+
+
 def update_form_values(values: Mapping[str, object]) -> None:
     """Update already-mounted form controls without rebuilding their page scope."""
     for pin_name, value in values.items():
@@ -321,5 +326,6 @@ __all__ = [
     "register_dirty_form",
     "render_argument_list",
     "reset_argument_list",
+    "set_dirty_form_busy",
     "update_form_values",
 ]

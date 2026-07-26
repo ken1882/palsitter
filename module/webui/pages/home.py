@@ -7,6 +7,7 @@ from pywebio.session import info, local, register_thread
 from module.games import get_game
 from module.instances import list_instances, load_instance
 from module.webui.i18n import language_options, t
+from module.webui.section_layout import SectionSpec, put_section_layout
 from module.webui.session import page_context, register_page_stop_event, run_if_current
 from module.webui.assets import client_call, client_query, put_asset_widget
 
@@ -60,47 +61,47 @@ def _render_home() -> None:
     _render_home_menu()
     clear("content")
     with use_scope("content"):
-        put_scope(
+        put_section_layout(
             "home_page",
             [
-                put_scope(
+                SectionSpec(
+                    "preferences",
+                    t("home.preferences"),
                     "home_preferences",
-                    [
-                        put_asset_widget("shared.panel_title", {"title": t("home.preferences")}),
-                        put_text(t("home.select_language")),
-                        put_buttons(language_options(), onclick=_change_language),
-                        put_text(t("home.change_theme")),
-                        put_buttons(
-                            [
-                                {"label": t("home.light"), "value": "light", "color": "light"},
-                                {"label": t("home.dark"), "value": "dark", "color": "dark"},
-                            ],
-                            onclick=_change_theme,
-                        ),
-                        put_markdown(
-                            f"""
+                    ("home-preferences",),
+                ),
+                SectionSpec(
+                    "instances",
+                    t("home.instances"),
+                    "home_instances_section",
+                ),
+            ],
+            groups_scope="home_sections",
+        )
+        with use_scope("home_preferences"):
+            put_asset_widget("shared.panel_title", {"title": t("home.preferences")})
+            put_text(t("home.select_language"))
+            put_buttons(language_options(), onclick=_change_language)
+            put_text(t("home.change_theme"))
+            put_buttons(
+                [
+                    {"label": t("home.light"), "value": "light", "color": "light"},
+                    {"label": t("home.dark"), "value": "dark", "color": "dark"},
+                ],
+                onclick=_change_theme,
+            )
+            put_markdown(
+                f"""
 {t("home.description")}
 
 {t("home.repository")}: `https://github.com/ken1882/palsitter.git`
 {t("home.pageurl", palsitter_port=palsitter_port)}
-                            """,
-                        ),
-                    ],
-                ),
-                put_asset_widget(
-                    "shared.section_title",
-                    {"classes": "home-section-title", "title": t("home.instances")},
-                ),
-                put_scope("home_instances"),
-            ],
-        )
-        client_call("dom.addClasses", scope="home_page", classes=["home-dashboard"])
+                """,
+            )
+        with use_scope("home_instances_section"):
+            put_asset_widget("shared.panel_title", {"title": t("home.instances")})
+            put_scope("home_instances")
         client_call("dom.addClasses", scope="home_instances", classes=["home-grid"])
-        client_call(
-            "dom.addClasses",
-            scope="home_preferences",
-            classes=["panel", "home-preferences"],
-        )
     _render_home_instances()
     _start_home_updates()
 
@@ -123,7 +124,7 @@ def _render_home_instances() -> None:
             client_call(
                 "dom.addClasses",
                 scope="home_empty",
-                classes=["panel", "home-empty"],
+                classes=["home-empty"],
             )
         return
     with use_scope("home_instances"):

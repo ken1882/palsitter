@@ -14,6 +14,8 @@ from module.games.palworld.webui.overview import _log_type
         ("12:34:56 PalServer: server output", "palserver"),
         ("12:34:56 SteamCMD: download output", "steamcmd"),
         ("12:34:56 UE4SS: mod output", "ue4ss"),
+        ("12:34:56 PalServer: [2026-07-24 12:34:56] [CHAT] <Compeador> test", "chat"),
+        ("12:34:56 [default] PalServer: [2026-07-24 12:34:56] [CHAT] <Compeador> test", "chat"),
         ("12:34:56 [default] PalServer: supervised output", "palserver"),
         ("12:34:56 [default] SteamCMD: supervised output", "steamcmd"),
         ("12:34:56 [default] UE4SS: supervised output", "ue4ss"),

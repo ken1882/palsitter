@@ -1,7 +1,8 @@
 # Shared Component: Utils
 
-- The Utils view is a two-column layout with utility actions on the left and a live
-  developer Log on the right.
+- The Utils view uses the shared section layout in this order: `Utilities` and `Log`.
+  Both are sibling cards in the independently scrolling section column, with a
+  desktop right-side navigator.
 - The action column displays `Raise exception`, `Force restart`, `Shutdown Palsitter`,
   `Run all instances`, `Stop all instances`, and `Kill all instances` in that order.
 - `Raise exception` captures a diagnostic stack trace in the developer Log without

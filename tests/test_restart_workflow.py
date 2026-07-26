@@ -4,6 +4,8 @@ import threading
 import time
 from types import SimpleNamespace
 
+import pytest
+
 from module.webui import restart
 
 
@@ -61,6 +63,11 @@ def _state(names):
         },
         "summary": {},
     }
+
+
+@pytest.fixture(autouse=True)
+def _isolated_restart_runtime(tmp_path, monkeypatch):
+    monkeypatch.setattr(restart, "runtime_dir", lambda: tmp_path / "runtime")
 
 
 def test_save_failure_never_stops_or_kills_managed_servers(tmp_path, monkeypatch):
@@ -204,3 +211,28 @@ def test_managed_idle_restore_is_successful_without_active_supervisor(tmp_path, 
 
     assert name == "alpha"
     assert error is None
+
+
+def test_successful_workflow_schedules_reload_before_exit(monkeypatch):
+    calls = []
+
+    monkeypatch.setattr(restart, "list_instances", lambda: [])
+    monkeypatch.setattr(
+        restart,
+        "client_call",
+        lambda api_name, **payload: calls.append((api_name, payload)),
+    )
+    monkeypatch.setattr(restart.time, "sleep", lambda seconds: None)
+    monkeypatch.setattr(
+        restart.os,
+        "_exit",
+        lambda code: (_ for _ in ()).throw(SystemExit(code)),
+    )
+
+    restart.begin_operation()
+    with pytest.raises(SystemExit) as exited:
+        restart.run_workflow()
+
+    assert exited.value.code == restart.RESTART_EXIT_CODE
+    assert calls == [("page.reload", {"delayMs": 1000})]
+    assert restart.load_state()["phase"] == "restarting_gui"

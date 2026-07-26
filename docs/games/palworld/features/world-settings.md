@@ -31,6 +31,10 @@ each field.
 - **`PalWorldSettings.ini`** - lives at
   `<workdir>/Pal/Saved/Config/WindowsServer/PalWorldSettings.ini` on Windows and
   `<workdir>/Pal/Saved/Config/LinuxServer/PalWorldSettings.ini` on native Linux.
+  Managed instances set `<workdir>` to their fixed
+  `profile/<name>/steamcmd/steamapps/common/PalServer` directory. The repository-local
+  compatibility profile defaults `<workdir>` to `./tmp`, so development and test
+  artifacts live under `./tmp/Pal`; code must not recreate a root-level `./Pal`.
   Existing files are preserved when only the other platform's path exists. Palsitter
   parses and rewrites only the single
   `OptionSettings=(...)` line, preserving every other line and the file's existing

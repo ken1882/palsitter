@@ -45,11 +45,11 @@ GUI's layout, color palette, controls, and interaction behavior.
   render or a genuine structural replacement where stable keyed updates do not apply.
   Playwright coverage for an interactive live component must assert both the new value and
   preservation of the relevant node identity or user state.
-- A form with too many fields to scan as one list (e.g. [World
-  Settings](../games/palworld/components/instance-world-settings.md)'s ~100 fields) stays
-  in one flat, scrollable `.panel` with plain category headings and may add sticky
-  category/search filters. Filtering hides existing fields in place so unsaved values are
-  retained; it does not use collapsible or accordion sections.
+- A long multi-section form (e.g. [World
+  Settings](../games/palworld/components/instance-world-settings.md)'s ~100 fields) uses
+  the shared [Section Layout](./components/section-layout.md). Filtering hides existing
+  fields and empty section cards in place so unsaved values are retained; it does not use
+  collapsible or accordion sections.
 - Overview columns stack below 1100 px, an instance's secondary menu becomes a
   horizontally scrollable row below 900 px, and cards/action groups/roster rows stack
   below 600 px without horizontal page overflow.

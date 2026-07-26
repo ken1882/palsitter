@@ -4,6 +4,9 @@ Reached from the instance navigation menu on [Instance Overview](./instance-over
 embeds the profile form directly in the content area (no modal).
 
 - The panel title is `Settings`; it does not repeat the selected instance name.
+- Installation, Launch options, and Instance identity and ports are sibling section
+  cards with a right-side navigator. Search hides unmatched rows, empty cards, and their
+  navigator entries; category filter chips are not duplicated above the cards.
 
 - The form includes `Query port`; newly created or cloned instances are assigned
   non-colliding ports automatically (see [Port Allocation](../features/port-allocation.md)).

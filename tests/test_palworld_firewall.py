@@ -250,6 +250,26 @@ def test_windows_port_check_falls_back_for_localized_netsh_output():
     assert calls == ["netsh.exe", "powershell.exe"]
 
 
+def test_windows_port_check_falls_back_when_netsh_times_out():
+    calls = []
+    powershell_rules = json.dumps(
+        [_rule(name="Palsitter-Web-TCP-22368", protocol="TCP", local_port="22368")]
+    )
+
+    def run(args, **kwargs):
+        calls.append(args[0])
+        if args[0] == "netsh.exe":
+            raise subprocess.TimeoutExpired(args, 15)
+        return subprocess.CompletedProcess(args, 0, stdout=powershell_rules, stderr="")
+
+    status = FirewallService(backend="windows", supported=True, run_command=run).check_port(
+        22368, protocol="tcp"
+    )
+
+    assert status.allowed
+    assert calls == ["netsh.exe", "powershell.exe"]
+
+
 def test_check_sanitizes_command_timeout_error(tmp_path):
     profile = _profile(tmp_path)
 

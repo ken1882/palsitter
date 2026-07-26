@@ -9,7 +9,12 @@ import pytest
 
 from module.config import Profile, fixed_executable_path, profile_log_path, save_profile
 from module.games import OperationProgress, UpdateInfo
-from module.instances import DailyLogWriter, profile_server_output_path, prune_dated_log_files
+from module.instances import (
+    DailyLogWriter,
+    profile_log_path as instance_profile_log_path,
+    profile_server_output_path,
+    prune_dated_log_files,
+)
 from module.webui.process_manager import ProcessManager, _PROCESS_CONTEXT, _run_profile
 
 
@@ -69,6 +74,25 @@ def test_process_manager_replays_persisted_overview_logs(tmp_path, monkeypatch):
     assert len(manager.logs) == 300
     assert manager.logs[0] == "12:00:05 previous log 5"
     assert manager.logs[-1] == "12:00:304 previous log 304"
+
+
+def test_process_manager_removes_legacy_profile_prefixes(tmp_path, monkeypatch):
+    monkeypatch.setenv("PALSITTER_CONFIG_DIR", str(tmp_path))
+    monkeypatch.setenv("PALSITTER_PROFILE_DIR", str(tmp_path / "profile"))
+    log_path = instance_profile_log_path("test")
+    log_path.parent.mkdir(parents=True)
+    log_path.write_text(
+        "12:00:00 [test] PalServer: old output\n",
+        encoding="utf-8",
+    )
+    manager = ProcessManager("test")
+    monkeypatch.setattr("module.webui.process_manager.time.strftime", lambda *args: "12:00:00")
+    manager.append_log("[test] PalServer: new output")
+
+    assert manager.logs == [
+        "12:00:00 PalServer: old output",
+        "12:00:00 PalServer: new output",
+    ]
 
 
 def test_resource_usage_returns_none_when_not_alive(tmp_path, monkeypatch):
@@ -933,7 +957,8 @@ def test_run_profile_logs_traceback_before_reraising(tmp_path, monkeypatch):
         raise AssertionError("_run_profile should reraise supervisor exceptions")
 
     joined = "\n".join(messages)
-    assert "[test] Supervisor crashed:" in joined
+    assert "Supervisor crashed:" in joined
+    assert "[test] Supervisor crashed:" not in joined
     assert "RuntimeError: boom" in joined
     assert "Traceback (most recent call last):" in joined
 

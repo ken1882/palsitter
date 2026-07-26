@@ -7,15 +7,15 @@ and saved is described in [World Settings](../features/world-settings.md); this 
 about layout only.
 
 - The panel title is `World Settings`; it does not repeat the selected instance name.
-- A sticky filter row below the title contains `All`, one option per schema
-  category, a search input, and `Changed only`. Search matches localized labels and raw
-  setting keys case-insensitively; search and Changed only apply within the selected
-  category.
+- Each schema category is a sibling section card and right-side navigator target. A sticky
+  filter row below the title contains search and `Changed only`; category chips are
+  replaced by the navigator. Search matches localized labels and raw setting keys
+  case-insensitively.
 - Filtering hides the existing field wrappers in the DOM instead of rebuilding inputs,
   preserving unsaved values, password visibility, validation errors, and dirty state.
   An empty result shows a localized message without hiding the filters.
-- The roughly 100 settings remain grouped under plain category headings inside one flat,
-  scrollable `.panel`; headings with no visible fields are hidden. There are no
+- The roughly 100 settings remain mounted under their category cards; cards and navigator
+  entries with no visible fields are hidden. There are no
   collapsible/accordion sections and no sliders or hard ranges without an authoritative
   range source.
 - Every boolean field is the same square on/off toggle used on Server Settings; enum
@@ -38,9 +38,11 @@ about layout only.
   notes on specific fields).
 - Editing the form reveals the same viewport-bottom floating unsaved-changes bar as
   Server Settings, with a changed-field count, `Reset`, and `Save`; it is hidden while
-  clean. `Reset` updates the mounted controls from disk, re-running the same auto-detect
-  as opening the page without repainting the form. There is no `Back` button and no
-  `Delete instance` button on this page.
+  clean. Boolean toggle changes are included in the count. Save and Reset disable
+  immediately when clicked to reject duplicate actions, then unlock after validation
+  failure. `Reset` updates the mounted controls from disk, re-running the same
+  auto-detect as opening the page without repainting the form. There is no `Back`
+  button and no `Delete instance` button on this page.
 - `Save` validates field types before writing. Invalid numeric fields receive a red
   border and inline error message, and the world settings are not saved until highlighted
   errors are fixed.
@@ -54,6 +56,7 @@ about layout only.
 The instance navigation places [`Saves & Backups`](./instance-saves-backups.md) directly
 beneath World Settings.
 
-**Tests:** `tests/test_gui_playwright.py` clicks category, search, Changed only, password,
-Reset/Save, navigation guards, and INI recovery through the real page. Tests verify
-filtering never loses edits and recovery is unavailable while active.
+**Tests:** `tests/test_gui_playwright.py` clicks category, search, Changed only, boolean
+toggles, password, Reset/Save, navigation guards, and INI recovery through the real
+page. Tests verify filtering never loses edits, action buttons lock immediately, and
+recovery is unavailable while active.

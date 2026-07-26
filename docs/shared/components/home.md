@@ -4,9 +4,12 @@
 the `Home` item is active in the [Left Sidebar](./left-sidebar.md); see
 [Updater](./updater.md), [Settings](./settings.md), and [Utils](./utils.md) for those tabs.
 
-- The landing Home tab shows a responsive card grid containing every stored instance,
-  followed by the language selector (see [Language / i18n](../features/i18n.md)), theme
-  selector, project description, repository link, and the browser URL for the running UI.
+- The landing Home tab uses the shared section layout in this order: `Preferences` and
+  `Server instances`. Preferences contains the language selector (see
+  [Language / i18n](../features/i18n.md)), theme selector, project description,
+  repository link, and browser URL. Server instances contains the responsive card grid.
+- On desktop the right-side navigator scrolls the internal section column; at 1100 px or
+  narrower it is hidden.
 - A fresh installation shows an empty-state explanation and an `Add instance` action
   that opens the normal [Add Instance](./add-instance.md) flow.
 - Cards render a loading placeholder immediately, then refresh through the selected game
@@ -24,7 +27,7 @@ the `Home` item is active in the [Left Sidebar](./left-sidebar.md); see
 - Below 600 px, cards and their actions stack vertically without horizontal page
   overflow.
 
-**Tests:** `tests/test_gui_playwright.py` covers empty startup, asynchronous/stale card
-updates, navigation from supported and unsupported cards, operation progress/Retry, and
-the 390 px layout. Adapter tests prove Satisfactory summaries do not call Palworld
-runtime, REST, SteamCMD, port, or backup services.
+**Tests:** `tests/test_gui_playwright.py` covers section order, empty startup,
+asynchronous/stale card updates, navigation from supported and unsupported cards,
+operation progress/Retry, and the 390 px layout. Adapter tests prove Satisfactory
+summaries do not call Palworld runtime, REST, SteamCMD, port, or backup services.
