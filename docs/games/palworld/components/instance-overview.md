@@ -77,10 +77,6 @@ adding lifecycle controls to those pages.
 
 - Opening Overview displays the Log panel and a localized loading placeholder immediately;
   logs never wait for REST, metrics, status, or update checks.
-- The log widget is client-mounted after the initial render. Its loading placeholder may
-  be cleared before the first asynchronous update, so tests must wait for a settled log
-  output/empty state or a deterministic log action rather than require the placeholder to
-  remain in the DOM immediately after navigation.
 - The placeholder is replaced by current output or a localized empty state. Output
   refreshes at least once per second, retains only the latest 300 lines, appends without
   rebuilding retained text, and preserves an active text selection.
@@ -166,12 +162,10 @@ adding lifecycle controls to those pages.
 - Below 1100 px the two Overview columns stack; below 600 px maintenance controls and
   roster rows stack without horizontal page overflow.
 
-**Tests:** `tests/test_gui_playwright.py` proves the persistent action scope and obsolete
-scheduler operations are absent, verifies the Start/Save/Backup action row and disabled
-Save state, Start update/validation, Stopping status, shutdown payload, status recovery,
-readiness gating, the low-disk Start confirmation, KILL only after owned graceful Stop,
-external attach/Detach, the live PalServer and UE4SS Overview logs, and responsive layout.
-Lifecycle tests fake SteamCMD,
-PalServer, process state, REST, and network probes.
-Menu assertions follow the current ordered menu, including `Tools`, and asynchronous log
-assertions use a settled state rather than the transient initial placeholder.
+## Verification focus
+
+Playwright covers the primary lifecycle flow, disabled Save state, low-disk confirmation,
+owned KILL transition, external attach/Detach, logs, console interaction, and responsive
+layout. Lifecycle tests fake SteamCMD, PalServer, process state, REST, and network probes.
+Asynchronous checks wait for settled output rather than depending on a transient loading
+node.

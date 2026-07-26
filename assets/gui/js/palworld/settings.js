@@ -153,6 +153,15 @@
     };
     world.syncByKey = ({ key }) => later(world, () =>
       sync(document.getElementById(`pywebio-scope-world_field_${key}`)));
+    world.markSaved = () => later(world, () => {
+      scopes().forEach(scope => {
+        const value = currentValue(scope);
+        scope.dataset.initialValue = value;
+        scope.dataset.changed = "false";
+      });
+      updateCount();
+      apply();
+    });
     scopes().forEach(sync);
     form.addEventListener("input", event => sync(event.target.closest(".world-field-scope")), { signal });
     form.addEventListener("change", event => sync(event.target.closest(".world-field-scope")), { signal });

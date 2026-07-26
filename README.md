@@ -35,37 +35,8 @@ Download the latest portable archive from [Releases](https://github.com/ken1882/
 extract it to a writable directory, and launch `Palsitter.exe`. The portable release
 stores configuration, profiles, and logs in its local `data/` directory.
 
-To build the portable Windows Electron release manually, use Windows PowerShell with
-Node.js 24, Python 3.12 with `pip`, Git for Windows, and 7-Zip installed. From the
-repository root, run:
-
-```powershell
-Set-Location desktop
-npm.cmd ci
-Set-Location ..
-
-# uncomment folowing line if you haven't configured it
-# Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force
-.\desktop\scripts\build-runtime.ps1
-.\desktop\scripts\build-git.ps1
-.\desktop\scripts\prepare-source.ps1
-python -m compileall -q .
-
-Set-Location desktop
-npm.cmd run build:win
-Set-Location ..
-.\desktop\scripts\archive-release.ps1
-```
-
-If 7-Zip is not installed, install it with Chocolatey before creating the archive:
-
-```powershell
-choco install 7zip -y --no-progress
-```
-
-The unpacked application is created at `desktop/dist/win-unpacked/`; the portable
-archive and SHA-256 checksum are written to `desktop/dist/Palsitter-win-x64.7z` and
-`desktop/dist/Palsitter-win-x64.7z.sha256`.
+Contributor build steps are documented in
+[Windows Electron Release](docs/shared/features/windows-electron-release.md#building-locally).
 
 ### Native Linux
 
@@ -100,9 +71,10 @@ Pass additional arguments to `gui.py` after `run` when needed:
 ./script/linux/palsitter.sh run --host 0.0.0.0 --port 22368
 ```
 
-The Home → Settings tab can bind the web UI to a selected network interface. Do not
-select a non-loopback address without enabling Basic Auth and appropriate firewall
-rules. CLI and environment host overrides take precedence over the saved setting.
+The Home → Settings tab can bind the web UI to a selected network interface. If the
+panel is reachable remotely, keep the machine behind a trusted intranet or VPN, enable
+Basic Auth, and configure appropriate firewall rules. CLI and environment host
+overrides take precedence over the saved setting.
 
 ### Docker
 
@@ -194,6 +166,7 @@ docker compose up -d
 - [Satisfactory documentation](docs/games/satisfactory/README.md) — the explicit
   placeholder contract and its supported limitations.
 - [Full documentation index](docs/README.md)
+- Operator guides: TBD in the [GitHub Wiki](https://github.com/ken1882/palsitter/wiki).
 
 ## Development
 

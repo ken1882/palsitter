@@ -15,10 +15,14 @@ PalServer's launch command, enabling the REST `/game-data` world actor snapshot 
 This switch is stored in the Palsitter profile and is not written into
 `PalWorldSettings.ini` or `WorldOption.sav`.
 
-The full field list, grouped by category, lives in `module/worldsettings/schema.py` as a
-single data-driven table (key, category, type, default, i18n key) - that table is the
-only place field metadata is defined; launch-only fields are marked non-persisted, and
-the INI codec and the [World Settings
+New Palworld instances load their initial profile and world settings from
+`./profile/template/palworld.json`; allocated ports, generated credentials, and the
+dedicated world ID are replaced for each instance.
+
+The full field list, grouped by category, lives in
+`module/games/palworld/worldsettings/schema.py` as a single data-driven table (key,
+category, type, default, i18n key). That table is the only place field metadata is
+defined; launch-only fields are marked non-persisted, and the INI codec and the [World Settings
 page](../components/instance-world-settings.md) both iterate it rather than hand-coding
 each field.
 
@@ -39,7 +43,8 @@ When importing a world containing `WorldOption.sav`, Palsitter decodes its optio
 into the new profile's `PalWorldSettings.ini`, replaces `PublicPort`, `RESTAPIPort`, and
 the REST admin password with the newly allocated profile values, and removes the active
 SAV override. A malformed or undecodable SAV aborts the import without changing the
-source. If no SAV is present, a companion server INI is imported as a fallback.
+source. If no SAV or companion server INI is present, the new profile's template settings
+remain in effect as the fallback.
 
 Every successful save also stores the normalized settings dictionary in the Palsitter
 profile as a synchronized fallback copy. If neither target file exists, the World
@@ -67,7 +72,7 @@ preservation, field types, import migration, recovery, and help-tooltip content)
 ## Help tooltips
 
 Every field on the [World Settings page](../components/instance-world-settings.md) has a
-`(?)` icon whose tooltip text (`world.field_help.<key>` in both locale files) explains
+`[i]` icon whose tooltip text (`world.field_help.<key>` in every locale catalog) explains
 what the setting does and, for enum fields, what each choice means. This text was
 written from real fetched documentation (official Palworld docs, `palworld.wiki.gg`,
 and several hosting-provider guides), not guessed from the field's literal name -

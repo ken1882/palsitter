@@ -21,7 +21,7 @@ from pywebio.pin import pin, put_input, put_select
 from pywebio.session import register_thread
 
 from module.games.palworld.backup import BackupService
-from module.games.palworld.config import load_profile
+from module.games.palworld.config import load_profile, rename_profile
 from module.games.palworld.firewall import (
     FirewallError,
     FirewallPermissionDenied,
@@ -39,6 +39,7 @@ from module.games.palworld.saves import (
     load_player_name_cache,
     migrate_player_ids,
 )
+from module.games.palworld.server.agent import agent_is_running
 from module.webui.assets import client_call, put_asset_widget
 from module.webui.i18n import t
 from module.webui.session import page_context, run_if_current
@@ -50,6 +51,18 @@ def _manager(name: str):
     return implementation(name)
 
 
+def _delete_instance(name: str) -> None:
+    from module.webui.instance import confirm_delete_instance
+
+    confirm_delete_instance(name)
+
+
+def _open_instance(name: str, page_id: str = "overview") -> None:
+    from module.webui.instance import open_instance
+
+    open_instance(name, page_id)
+
+
 def _service(name: str | None = None) -> FirewallService:
     logger = (lambda message: _log(name, message)) if name is not None else None
     return FirewallService(logger=logger)
@@ -57,6 +70,78 @@ def _service(name: str | None = None) -> FirewallService:
 
 def _log(name: str, message: str) -> None:
     _manager(name).append_log(f"Firewall: {message}")
+
+
+def _instance_runtime_active(name: str) -> bool:
+    manager = _manager(name)
+    return manager.active or manager.display_state == "running" or agent_is_running(name)
+
+
+def _render_instance_management(name: str) -> None:
+    running = _instance_runtime_active(name)
+    with use_scope("tools_instance", clear=True):
+        put_asset_widget("shared.panel_title", {"title": t("tools.instance_heading")})
+        put_text(t("tools.instance_description"))
+        put_scope("tools_instance_status")
+        put_row(
+            [
+                put_button(
+                    t("tools.rename"),
+                    onclick=lambda: _confirm_rename(name),
+                    color="primary",
+                    disabled=running,
+                ),
+                put_button(
+                    t("settings.delete"),
+                    onclick=lambda: _delete_instance(name),
+                    color="danger",
+                ),
+            ],
+            size="auto auto",
+        )
+
+
+def _confirm_rename(name: str) -> None:
+    if _instance_runtime_active(name):
+        with use_scope("tools_instance_status", clear=True):
+            put_warning(t("tools.rename_running"))
+        return
+    with popup(t("tools.rename_title"), closable=True):
+        put_text(t("tools.rename_confirm", name=name))
+        put_input("tools_rename_name", label=t("tools.rename_name"), value=name)
+        put_scope("tools_rename_error")
+        put_row(
+            [
+                put_button(t("common.cancel"), onclick=close_popup, color="secondary"),
+                put_button(
+                    t("tools.rename"),
+                    onclick=lambda: _rename(name),
+                    color="primary",
+                ),
+            ],
+            size="1fr auto",
+        )
+
+
+def _rename(name: str) -> None:
+    replacement = str(getattr(pin, "tools_rename_name", "") or "").strip()
+    if replacement == name:
+        with use_scope("tools_rename_error", clear=True):
+            put_warning(t("tools.rename_same"))
+        return
+    if _instance_runtime_active(name):
+        with use_scope("tools_rename_error", clear=True):
+            put_warning(t("tools.rename_running"))
+        return
+    try:
+        profile = rename_profile(name, replacement)
+    except (FileExistsError, OSError, ValueError) as exc:
+        with use_scope("tools_rename_error", clear=True):
+            put_warning(t("tools.rename_failed", error=exc))
+        return
+    close_popup()
+    toast(t("tools.renamed", old=name, new=profile.name))
+    _open_instance(profile.name, "tools")
 
 
 def _render_status(status: FirewallStatus) -> None:
@@ -756,8 +841,12 @@ def render(name: str) -> None:
             )
         )
     with use_scope("content", clear=True):
-        put_scope("tools_panel", children + [put_scope("tools_migration")])
+        put_scope(
+            "tools_panel",
+            children + [put_scope("tools_instance"), put_scope("tools_migration")],
+        )
     client_call("dom.addClasses", scope="tools_panel", classes=["panel"])
+    _render_instance_management(name)
     _render_migration(name)
 
 

@@ -16,12 +16,23 @@ from pywebio.output import (
     toast,
     use_scope,
 )
-from pywebio.pin import pin, put_checkbox, put_input, put_select
-from pywebio.session import info, register_thread
+from pywebio.pin import pin, put_input, put_select
+from pywebio.session import info, local, register_thread
 
-from module.games.palworld.firewall import FirewallPermissionDenied, FirewallService
+from module.games.palworld.firewall import (
+    FirewallError,
+    FirewallPermissionDenied,
+    FirewallService,
+    PortFirewallStatus,
+)
 from module.webui.assets import client_call, put_asset_widget
-from module.webui.forms import _clear_dirty_form, register_dirty_form
+from module.webui.forms import (
+    _mark_dirty_form,
+    _settings_field_row,
+    clear_dirty_form,
+    register_dirty_form,
+    update_form_values,
+)
 from module.webui.i18n import t
 from module.webui.session import page_context, register_page_stop_event, run_if_current
 from module.webui.settings import (
@@ -88,41 +99,209 @@ def _web_port() -> int:
     return int(str(info.server_host).rsplit(":", 1)[-1])
 
 
-def _check_firewall() -> None:
+def _set_auth_fields_disabled() -> None:
+    disabled = not bool(getattr(local, "web_auth_enabled", False))
+    for name in ("web_auth_username", "web_auth_password"):
+        client_call(
+            "dom.setControlDisabled",
+            selector=f'input[name="{name}"]',
+            disabled=disabled,
+        )
+
+
+def _render_auth_toggle() -> None:
+    enabled = bool(getattr(local, "web_auth_enabled", False))
+    with use_scope("web_auth_toggle", clear=True):
+        put_button(
+            t("common.on") if enabled else t("common.off"),
+            onclick=_toggle_auth,
+            color="success" if enabled else "secondary",
+        )
+
+
+def _toggle_auth() -> None:
+    local.web_auth_enabled = not bool(getattr(local, "web_auth_enabled", False))
+    _mark_dirty_form()
+    _render_auth_toggle()
+    _set_auth_fields_disabled()
+
+
+def _apply_firewall_result(
+    status: PortFirewallStatus,
+    ask_to_fix: bool,
+    context,
+) -> None:
+    if status.error:
+        _render_firewall_status(
+            t("webui_settings.firewall_error", error=status.error), warning=True
+        )
+    elif not status.supported:
+        _render_firewall_status(t("webui_settings.firewall_unsupported"))
+    elif status.blocked:
+        names = ", ".join(status.external_block_rule_names) or t("common.unknown")
+        _render_firewall_status(
+            t("webui_settings.firewall_blocked", rules=names), warning=True
+        )
+    elif status.allowed:
+        _render_firewall_status(
+            t("webui_settings.firewall_allowed", port=status.port)
+        )
+    else:
+        _render_firewall_status(
+            t("webui_settings.firewall_not_allowed", port=status.port), warning=True
+        )
+    if ask_to_fix and status.repairable:
+        _confirm_firewall_fix(status, context)
+
+
+def _request_firewall_root_password(
+    action: str,
+    status: PortFirewallStatus | None,
+    context,
+    command: tuple[str, ...] = (),
+) -> None:
+    with popup(t("webui_settings.firewall_root_password_title"), closable=True):
+        put_text(t("webui_settings.firewall_root_password_description"))
+        if command:
+            put_text(t("webui_settings.firewall_root_password_command", command=" ".join(command)))
+        put_input(
+            "webui_firewall_root_password",
+            type="password",
+            label=t("webui_settings.firewall_root_password_label"),
+        )
+        put_row(
+            [
+                put_button(t("common.cancel"), onclick=close_popup, color="secondary"),
+                put_button(
+                    t("webui_settings.firewall_fix")
+                    if action == "fix"
+                    else t("webui_settings.firewall_check"),
+                    onclick=lambda: _retry_firewall_with_password(
+                        action, status, context
+                    ),
+                    color="warning",
+                ),
+            ],
+            size="1fr auto",
+        )
+
+
+def _retry_firewall_with_password(
+    action: str,
+    status: PortFirewallStatus | None,
+    context,
+) -> None:
+    password = str(getattr(pin, "webui_firewall_root_password", "") or "")
+    close_popup()
+    if not password:
+        _render_firewall_status(
+            t("webui_settings.firewall_root_password_required"), warning=True
+        )
+        return
+    try:
+        service = FirewallService()
+        if action == "fix":
+            assert status is not None
+            service.fix_port(status, root_password=password)
+        else:
+            status = service.check_port(_web_port(), protocol="tcp", root_password=password)
+    except FirewallPermissionDenied:
+        _render_firewall_status(
+            t("webui_settings.firewall_error", error="administrator authentication was rejected"),
+            warning=True,
+        )
+        return
+    except (FirewallError, OSError, ValueError) as exc:
+        _render_firewall_status(
+            t("webui_settings.firewall_error", error=exc), warning=True
+        )
+        return
+    finally:
+        password = ""
+    if action == "fix":
+        toast(t("webui_settings.firewall_fixed"))
+        _check_firewall(ask_to_fix=False, context=context)
+    else:
+        _apply_firewall_result(status, True, context)
+
+
+def _confirm_firewall_fix(status: PortFirewallStatus, context) -> None:
+    with popup(t("webui_settings.firewall_fix_title"), closable=True):
+        put_text(
+            t(
+                "webui_settings.firewall_fix_block_prompt",
+                rules=", ".join(status.external_block_rule_names),
+            )
+            if status.external_block_rule_names
+            else t("webui_settings.firewall_fix_prompt", port=status.port)
+        )
+        put_row(
+            [
+                put_button(t("common.cancel"), onclick=close_popup, color="secondary"),
+                put_button(
+                    t("webui_settings.firewall_fix"),
+                    onclick=lambda: _fix_firewall(status, context),
+                    color="warning",
+                ),
+            ],
+            size="1fr auto",
+        )
+
+
+def _fix_firewall(status: PortFirewallStatus, context) -> None:
+    close_popup()
+    try:
+        FirewallService().fix_port(status)
+    except FirewallPermissionDenied as exc:
+        _request_firewall_root_password("fix", status, context, exc.command)
+        return
+    except (FirewallError, OSError) as exc:
+        _render_firewall_status(
+            t("webui_settings.firewall_fix_failed", error=exc), warning=True
+        )
+        return
+    toast(t("webui_settings.firewall_fixed"))
+    _check_firewall(ask_to_fix=False, context=context)
+
+
+def _check_firewall(*, ask_to_fix: bool = True, context=None, root_password=None) -> None:
+    address = str(pin.webui_bind_address or "").strip()
+    if is_localhost(address):
+        _render_firewall_status(t("webui_settings.firewall_localhost"))
+        return
     _render_firewall_status(t("webui_settings.firewall_checking"))
     stop_event = threading.Event()
     register_page_stop_event(stop_event)
-    context = page_context()
+    context = context or page_context()
 
     def check() -> None:
         try:
-            status = FirewallService().check_port(_web_port(), protocol="tcp")
-            if status.error:
-                message = t("webui_settings.firewall_error", error=status.error)
-                warning = True
-            elif not status.supported:
-                message = t("webui_settings.firewall_unsupported")
-                warning = False
-            elif status.blocked:
-                names = ", ".join(status.external_block_rule_names) or t("common.unknown")
-                message = t("webui_settings.firewall_blocked", rules=names)
-                warning = True
-            elif status.allowed:
-                message = t("webui_settings.firewall_allowed", port=status.port)
-                warning = False
-            else:
-                message = t("webui_settings.firewall_not_allowed", port=status.port)
-                warning = True
-        except FirewallPermissionDenied:
-            message = t("webui_settings.firewall_permission")
-            warning = True
+            status = FirewallService().check_port(
+                _web_port(), protocol="tcp", root_password=root_password
+            )
+        except FirewallPermissionDenied as exc:
+            if stop_event.is_set():
+                return
+            try:
+                run_if_current(
+                    context,
+                    lambda: _request_firewall_root_password(
+                        "check", None, context, exc.command
+                    ),
+                )
+            except SessionException:
+                pass
+            return
         except (OSError, ValueError) as exc:
             message = t("webui_settings.firewall_error", error=exc)
-            warning = True
+            status = PortFirewallStatus(False, _web_port(), "tcp", error=message)
         if stop_event.is_set():
             return
         try:
-            run_if_current(context, lambda: _render_firewall_status(message, warning=warning))
+            run_if_current(
+                context,
+                lambda: _apply_firewall_result(status, ask_to_fix, context),
+            )
         except SessionException:
             return
 
@@ -138,7 +317,7 @@ def _form_values() -> tuple[str, bool, str, str] | None:
     except ipaddress.AddressValueError:
         put_warning(t("webui_settings.invalid_address"), scope="webui_settings_error")
         return None
-    enabled = bool(pin.web_auth_enabled)
+    enabled = bool(getattr(local, "web_auth_enabled", False))
     username = str(pin.web_auth_username or "").strip()
     password = str(pin.web_auth_password or "")
     if enabled and not username:
@@ -186,9 +365,26 @@ def _save_settings(*, save_anyway: bool = False) -> bool:
         )
     )
     close_popup()
-    _clear_dirty_form()
+    clear_dirty_form()
     _force_restart()
     return True
+
+
+def _reset_settings() -> None:
+    settings = load_web_settings()
+    local.web_auth_enabled = settings.auth_enabled
+    update_form_values(
+        {
+            "webui_bind_address": settings.bind_address,
+            "web_auth_username": settings.auth_username,
+            "web_auth_password": "",
+        }
+    )
+    _render_auth_toggle()
+    _set_auth_fields_disabled()
+    clear("webui_settings_error")
+    _render_firewall_status(t("webui_settings.firewall_not_checked"))
+    clear_dirty_form()
 
 
 def _render_settings() -> None:
@@ -201,6 +397,7 @@ def _render_settings() -> None:
         _menu_button(t("nav.settings"), _render_settings, True)
         _menu_button(t("nav.utils"), _utils)
     settings = load_web_settings()
+    local.web_auth_enabled = settings.auth_enabled
     clear("content")
     with use_scope("content"):
         put_scope(
@@ -227,18 +424,26 @@ def _render_settings() -> None:
             put_scope("webui_firewall_status", [put_text(t("webui_settings.firewall_not_checked"))])
             put_button(t("webui_settings.firewall_check"), onclick=_check_firewall, color="secondary")
             put_asset_widget("shared.panel_title", {"title": t("webui_settings.auth_title")})
-            put_checkbox(
-                "web_auth_enabled",
-                label=t("webui_settings.enable_auth"),
-                options=[{"label": t("webui_settings.enable_auth"), "value": "enabled"}],
-                value=["enabled"] if settings.auth_enabled else [],
+            put_text(t("webui_settings.auth_help"))
+            _settings_field_row(
+                t("webui_settings.enable_auth"),
+                put_scope("web_auth_toggle"),
             )
+            _render_auth_toggle()
             put_input("web_auth_username", label=t("webui_settings.username"), value=settings.auth_username)
             put_input("web_auth_password", label=t("webui_settings.password"), type="password", value="")
             put_text(t("webui_settings.password_help"))
+            _set_auth_fields_disabled()
         with use_scope("webui_settings_actions"):
-            put_button(t("common.reset"), onclick=_render_settings, color="secondary")
-            put_button(t("common.save"), onclick=_save_settings, color="primary")
+            put_row(
+                [
+                    put_asset_widget("shared.strong_text", {"text": t("form.unsaved_bar")}),
+                    None,
+                    put_button(t("common.reset"), onclick=_reset_settings, color="secondary"),
+                    put_button(t("common.save"), onclick=_save_settings, color="success"),
+                ],
+                size="auto 1fr auto auto",
+            )
     register_dirty_form("pywebio-scope-webui_settings_panel", _save_settings)
 
 

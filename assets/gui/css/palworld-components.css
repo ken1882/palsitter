@@ -39,6 +39,10 @@
   max-width: 58rem;
 }
 
+#pywebio-scope-webui_settings_form {
+  max-width: none;
+}
+
 .settings-view label,
 .settings-field-label {
   color: #adb5bd;
@@ -717,6 +721,7 @@
 
 .restart-history {
   margin-top: .75rem;
+  min-height: 90%;
   overflow: auto;
 }
 

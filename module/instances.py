@@ -6,6 +6,7 @@ import re
 import shutil
 import threading
 import datetime as dt
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
@@ -71,6 +72,26 @@ def profile_dir(name: str) -> Path:
 
 def profile_path(name: str) -> Path:
     return profile_dir(name) / PROFILE_CONFIG_NAME
+
+
+def profile_template_path(game: str) -> Path:
+    return Path.cwd() / "profile" / "template" / f"{game}.json"
+
+
+def runtime_dir() -> Path:
+    return Path.cwd() / "tmp"
+
+
+def load_profile_template(game: str) -> dict[str, Any]:
+    path = profile_template_path(game)
+    if not path.is_file():
+        raise FileNotFoundError(f"Profile template not found: {path}")
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError(f"Profile template must contain a JSON object: {path}")
+    if isinstance(data.get("game_config"), dict):
+        data = data["game_config"]
+    return dict(data)
 
 
 def _log_date(value: dt.date | dt.datetime | None = None) -> dt.date:
@@ -361,6 +382,56 @@ def delete_instance(name: str, *, wipe_data: bool = False) -> None:
         shutil.rmtree(found[1].parent)
     else:
         found[1].unlink()
+
+
+def rename_instance(
+    name: str,
+    new_name: str,
+    *,
+    game_config: Mapping[str, Any] | None = None,
+) -> InstanceRecord:
+    """Rename an instance directory and update its profile record together."""
+    safe = safe_profile_name(name)
+    replacement = safe_profile_name(new_name)
+    with _INITIALIZE_LOCK:
+        index = _instance_index()
+        found = index.get(safe.casefold())
+        if found is None:
+            raise FileNotFoundError(f"Profile not found: {name}")
+        current_name, source_path = found
+        existing = index.get(replacement.casefold())
+        if existing is not None and existing[0] != current_name:
+            raise FileExistsError(f"Profile already exists: {existing[0]}")
+        record = InstanceRecord.from_dict(json.loads(source_path.read_text(encoding="utf-8")))
+        if replacement == current_name:
+            return record
+
+        source_dir = source_path.parent
+        target_dir = profile_dir(replacement)
+        replacement_record = InstanceRecord(
+            replacement,
+            record.game,
+            dict(game_config if game_config is not None else record.game_config),
+        )
+        case_only = current_name.casefold() == replacement.casefold()
+        temporary_dir = source_dir.with_name(f".{source_dir.name}.rename-{uuid.uuid4().hex}")
+        try:
+            if case_only:
+                os.replace(source_dir, temporary_dir)
+                os.replace(temporary_dir, target_dir)
+            else:
+                os.replace(source_dir, target_dir)
+            _atomic_write_json(target_dir / PROFILE_CONFIG_NAME, replacement_record.to_dict())
+        except Exception:
+            try:
+                if target_dir.exists():
+                    os.replace(target_dir, source_dir)
+                elif temporary_dir.exists():
+                    os.replace(temporary_dir, source_dir)
+            except OSError:
+                pass
+            raise
+    return replacement_record
 
 
 def next_instance_name(game: str) -> str:

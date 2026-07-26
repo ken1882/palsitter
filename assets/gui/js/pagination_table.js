@@ -48,6 +48,7 @@
         const shell = root.querySelector(".pagination-table-shell");
         const footer = root.querySelector(".pagination-table-footer");
         const table = root.querySelector("table");
+        const layoutContainer = root.parentElement;
         const headerCells = [...root.querySelectorAll("thead th")];
         const columnTracks = [...root.querySelectorAll("col.pagination-table-column")];
         let currentPage = 0;
@@ -89,15 +90,19 @@
             if (remainingWidth > 0) lastTrack.style.width = `${remainingWidth}px`;
         };
         const layoutTable = () => {
-            if (!toolbar || !shell || !footer) return;
-            const viewportBottom = window.innerHeight - 8;
+            if (!toolbar || !shell || !footer || !layoutContainer) return;
+            const containerStyle = getComputedStyle(layoutContainer);
+            const containerBottom = layoutContainer.getBoundingClientRect().top
+                + layoutContainer.clientTop
+                + layoutContainer.clientHeight
+                - (parseFloat(containerStyle.paddingBottom) || 0);
             const footerMargin = parseFloat(getComputedStyle(footer).marginTop) || 0;
-            const available = viewportBottom
-                - root.getBoundingClientRect().top
-                - toolbar.getBoundingClientRect().height
+            const available = containerBottom
+                - shell.getBoundingClientRect().top
+                - layoutContainer.scrollTop
                 - footer.getBoundingClientRect().height
                 - footerMargin;
-            shell.style.height = `${Math.max(160, available)}px`;
+            shell.style.height = `${Math.max(0, available)}px`;
         };
         const setupColumnResize = () => {
             const minimumWidth = 96;
@@ -134,8 +139,12 @@
 
         const resizeObserver = typeof ResizeObserver === "undefined" || !table
             ? null
-            : new ResizeObserver(fillLastColumn);
+            : new ResizeObserver(() => {
+                fillLastColumn();
+                layoutTable();
+            });
         resizeObserver?.observe(table);
+        if (resizeObserver && layoutContainer !== table) resizeObserver.observe(layoutContainer);
         setupColumnResize();
 
         const text = value => value == null ? "" : String(value);

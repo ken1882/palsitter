@@ -146,11 +146,14 @@ class GameAdapter:
     capabilities: GameCapabilities = field(default_factory=GameCapabilities)
 
     def default_config(self, name: str) -> dict[str, Any]:
+        from module.instances import load_profile_template
+
+        template = load_profile_template(self.id)
         if self.id == "satisfactory":
-            return {}
+            return template
         from module.games.palworld.config import new_profile
 
-        return new_profile(name).to_game_config()
+        return new_profile(name, template).to_game_config()
 
     def clone_config(
         self,

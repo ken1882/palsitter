@@ -30,7 +30,7 @@ about layout only.
   admin password and their REST API toggle defaults to On. `Enable Game Data API` is a
   launch-only control on Server Settings, not a World Settings field; it adds
   `-enable-gamedata-api` to PalServer and is not written to the world INI.
-- Every field label has a small circular `(?)` help icon immediately after it
+- Every field label has a small circular `[i]` help icon immediately after it
   (`.field-help`). Hovering (or focusing via keyboard) shows a tooltip explaining what
   the setting does and, for enum fields, what each choice means — sourced from official
   and community documentation rather than guessed from the field's name (see [World
@@ -38,8 +38,9 @@ about layout only.
   notes on specific fields).
 - Editing the form reveals the same viewport-bottom floating unsaved-changes bar as
   Server Settings, with a changed-field count, `Reset`, and `Save`; it is hidden while
-  clean. `Reset` reloads the form from disk, re-running the same auto-detect as opening
-  the page. There is no `Back` button and no `Delete instance` button on this page.
+  clean. `Reset` updates the mounted controls from disk, re-running the same auto-detect
+  as opening the page without repainting the form. There is no `Back` button and no
+  `Delete instance` button on this page.
 - `Save` validates field types before writing. Invalid numeric fields receive a red
   border and inline error message, and the world settings are not saved until highlighted
   errors are fixed.

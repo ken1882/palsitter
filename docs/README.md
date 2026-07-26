@@ -13,6 +13,12 @@ Within each scope, **components** describe a page or visible layout and **featur
 describe behavior spanning components or backend services. Components link to the
 features that implement their behavior instead of repeating those rules.
 
+## User guides
+
+Operator-oriented guides are TBD and will live in the
+[GitHub Wiki](https://github.com/ken1882/palsitter/wiki). The files in this directory
+remain implementation specifications for development and testing.
+
 ## Placement Rules
 
 - Put a document in `shared` only when the behavior belongs to the application shell or
@@ -21,8 +27,9 @@ features that implement their behavior instead of repeating those rules.
   behavior under that game's directory.
 - When adding a game, create `docs/games/<game>/README.md` and add component/feature files
   only for capabilities that game actually exposes. Do not copy Palworld specs as defaults.
-- Every testable GUI behavior requires a Playwright test using the real UI path; backend
-  behavior additionally requires focused unit tests with external dependencies faked.
+- Important GUI workflows require Playwright coverage through the real UI path; backend
+  behavior uses focused tests with external dependencies faked where failures would be
+  costly or difficult to diagnose.
 
 ## Index
 

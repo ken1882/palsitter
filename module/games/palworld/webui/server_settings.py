@@ -12,12 +12,8 @@ from module.webui.i18n import t
 from module.webui.session import page_context, register_page_cleanup
 from module.webui.assets import client_call, put_asset_widget
 
-def _clear_dirty_form(*args, **kwargs):
-    from module.webui.forms import _clear_dirty_form as implementation
-    return implementation(*args, **kwargs)
-
-def _delete_instance(*args, **kwargs):
-    from module.webui.instance import _delete_instance as implementation
+def _clear_dirty_form_state(*args, **kwargs):
+    from module.webui.forms import clear_dirty_form as implementation
     return implementation(*args, **kwargs)
 
 def _register_dirty_form(*args, **kwargs):
@@ -68,8 +64,20 @@ def _render_argument_list(*args, **kwargs):
     from module.games.palworld.webui.forms import _render_argument_list as implementation
     return implementation(*args, **kwargs)
 
+def _reset_argument_list(*args, **kwargs):
+    from module.webui.forms import reset_argument_list as implementation
+    return implementation(*args, **kwargs)
+
+def _update_form_values(*args, **kwargs):
+    from module.webui.forms import update_form_values as implementation
+    return implementation(*args, **kwargs)
+
 def _clear_field_error(*args, **kwargs):
     from module.games.palworld.webui.forms import _clear_field_error as implementation
+    return implementation(*args, **kwargs)
+
+def _clear_field_errors(*args, **kwargs):
+    from module.webui.forms import _clear_field_errors as implementation
     return implementation(*args, **kwargs)
 
 def _field_error_scope(*args, **kwargs):
@@ -78,6 +86,14 @@ def _field_error_scope(*args, **kwargs):
 
 def _settings_toggle(*args, **kwargs):
     from module.games.palworld.webui.forms import _settings_toggle as implementation
+    return implementation(*args, **kwargs)
+
+def _render_settings_toggle(*args, **kwargs):
+    from module.games.palworld.webui.forms import _render_settings_toggle as implementation
+    return implementation(*args, **kwargs)
+
+def _render_dependent_field(*args, **kwargs):
+    from module.games.palworld.webui.forms import _render_dependent_field as implementation
     return implementation(*args, **kwargs)
 
 def _show_field_error(*args, **kwargs):
@@ -125,7 +141,6 @@ def render(name: str) -> None:
                 put_scope("settings_filter_toolbar"),
                 put_scope("settings_form"),
                 put_scope("settings_actions"),
-                put_scope("settings_delete"),
             ],
         )
         client_call("dom.addClasses", scope="settings_panel", classes=["panel"])
@@ -212,14 +227,11 @@ def render(name: str) -> None:
                 [
                     put_asset_widget("shared.strong_text", {"text": t("form.unsaved_bar")}),
                     None,
-                    put_button(t("common.reset"), onclick=lambda: _settings(name), color="secondary"),
+                    put_button(t("common.reset"), onclick=lambda: _reset_settings(name), color="secondary"),
                     put_button(t("common.save"), onclick=lambda: _save_settings(name), color="success"),
                 ],
                 size="auto 1fr auto auto",
             )
-        with use_scope("settings_delete"):
-            put_asset_widget("shared.horizontal_rule")
-            put_button(t("settings.delete"), onclick=lambda: _delete_instance(name), color="danger")
     _register_dirty_form(
         "pywebio-scope-settings_panel",
         lambda: _save_settings(name, rerender=False),
@@ -229,6 +241,34 @@ def render(name: str) -> None:
 def _settings(name: str) -> None:
     from module.webui.instance import open_instance
     open_instance(name, "server_settings")
+
+
+def _reset_settings(name: str) -> None:
+    profile = load_profile(name)
+    input_keys = (
+        "dedicated_server_name",
+        "query_port",
+        "launch_worker_threads_server",
+        "auto_update_idle_minutes",
+    )
+    _update_form_values(
+        {_settings_pin(key): getattr(profile, key) for key in input_keys}
+    )
+    local.settings_toggles = {
+        key: getattr(profile, key) for key in SETTINGS_TOGGLE_KEYS
+    }
+    for key in SETTINGS_TOGGLE_KEYS:
+        _render_settings_toggle(key)
+    _render_dependent_field("auto_update_idle_minutes")
+    _reset_argument_list(
+        _settings_pin("extra_args"),
+        profile.extra_args,
+        controlled=_launch_controlled_arguments(),
+    )
+    _clear_field_errors(
+        [_settings_pin(key) for key in (*input_keys, "extra_args")]
+    )
+    _clear_dirty_form_state()
 
 def _settings_pin(key: str) -> str:
     return f"settings_{key}"
@@ -343,7 +383,7 @@ def _download_steamcmd(name: str) -> None:
                 put_warning(t("settings.steamcmd_download_failed", error=exc))
     _render_steamcmd_action(name)
 
-def _save_settings(name: str, *, rerender: bool = True) -> bool:
+def _save_settings(name: str, *, rerender: bool = False) -> bool:
     profile = load_profile(name)
     data = profile.to_dict()
     server_form_fields = {
@@ -378,7 +418,7 @@ def _save_settings(name: str, *, rerender: bool = True) -> bool:
         toast(t("validation.fix_errors"), color="error")
         return False
     save_profile(updated)
-    _clear_dirty_form()
+    _clear_dirty_form_state()
     toast(t("settings.saved"))
     if rerender:
         _settings(name)

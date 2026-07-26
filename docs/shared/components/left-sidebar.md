@@ -1,7 +1,7 @@
 # Shared Component: Left Sidebar
 
 - The sidebar is a vertical rail below the top bar and fills the remaining
-  viewport height, matching Nechouli's aside width.
+  viewport height with the shared fixed rail width.
 - It has a dark background, a right border, and scrolls vertically when its items exceed
   the available height.
 - Every item is a fixed-size, centered button with an SVG icon above a short text label.

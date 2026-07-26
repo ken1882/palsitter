@@ -58,8 +58,9 @@ PALSITTER_PYTHON_MANAGER=uv ./script/linux/palsitter.sh run
 ./script/linux/palsitter.sh run --host 0.0.0.0 --port 22368
 ```
 
-首頁 → 設定可以將 Web UI 繫結到選定的網路介面。未啟用 Basic Auth 與適當防火牆
-規則前，請勿選擇非本機迴路位址。命令列與環境變數的主機設定優先於儲存的設定。
+首頁 → 設定可以將 Web UI 繫結到選定的網路介面。若面板可供遠端連線，請將機器置於
+受信任的內部網路或 VPN 後方，並啟用 Basic Auth 與適當的防火牆規則。命令列與環境
+變數的主機設定優先於儲存的設定。
 
 ### Docker
 

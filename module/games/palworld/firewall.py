@@ -149,6 +149,12 @@ class PortFirewallStatus:
     blocked: bool = False
     external_block_rule_names: tuple[str, ...] = ()
     error: str | None = None
+    owned_block_rule_names: tuple[str, ...] = ()
+    external_block_rule_specs: tuple[tuple[str, str], ...] = ()
+
+    @property
+    def repairable(self) -> bool:
+        return self.supported and not self.error and (not self.allowed or self.blocked)
 
 
 def _rule_suffix(name: str) -> str:
@@ -221,6 +227,35 @@ def _fix_script(executable: str, rule_name: str, display_name: str, remove_names
     )
 
 
+def _fix_port_script(
+    port: int,
+    protocol: str,
+    rule_name: str,
+    display_name: str,
+    remove_names: Iterable[str],
+) -> str:
+    removals = ",".join(_quote_powershell(value) for value in remove_names)
+    if removals:
+        remove_block = (
+            f"foreach ($name in @({removals})) {{ "
+            "$rules = @(Get-NetFirewallRule -Name $name -ErrorAction SilentlyContinue); "
+            "if (-not $rules) { "
+            "$rules = @(Get-NetFirewallRule -DisplayName $name -ErrorAction Stop) } "
+            "$rules | Remove-NetFirewallRule -ErrorAction Stop }"
+        )
+    else:
+        remove_block = ""
+    return (
+        "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue'; "
+        f"{remove_block} "
+        "New-NetFirewallRule "
+        f"-Name {_quote_powershell(rule_name)} "
+        f"-DisplayName {_quote_powershell(display_name)} "
+        "-Direction Inbound -Action Allow -Enabled True -Profile Any "
+        f"-Protocol {_quote_powershell(protocol)} -LocalPort {int(port)} | Out-Null"
+    )
+
+
 def _is_admin() -> bool:
     if os.name != "nt":
         return False
@@ -240,12 +275,21 @@ def _elevated_helper_payload(payload: str) -> int:
             subprocess.CompletedProcess([], 740, stdout="", stderr="Not elevated"),
         )
         return 740
-    script = _fix_script(
-        str(data["executable"]),
-        str(data["rule_name"]),
-        str(data["display_name"]),
-        data.get("remove_names", ()),
-    )
+    if data.get("kind") == "port":
+        script = _fix_port_script(
+            int(data["port"]),
+            str(data["protocol"]),
+            str(data["rule_name"]),
+            str(data["display_name"]),
+            data.get("remove_names", ()),
+        )
+    else:
+        script = _fix_script(
+            str(data["executable"]),
+            str(data["rule_name"]),
+            str(data["display_name"]),
+            data.get("remove_names", ()),
+        )
     try:
         result = subprocess.run(
             _powershell_args(script),
@@ -622,12 +666,13 @@ def _firewalld_zones(run_command: Callable[..., subprocess.CompletedProcess]) ->
 def _linux_fix_commands(payload: Mapping[str, Any]) -> list[list[str]]:
     backend = str(payload.get("backend") or "")
     port = str(int(payload["port"]))
+    protocol = str(payload.get("protocol") or "udp").casefold()
     rule_name = str(payload.get("rule_name") or "")
     remove_names = [str(value) for value in payload.get("remove_names", ())]
     if backend == "iptables":
         commands = []
         for jump, comment in payload.get("remove_block_rules", ()):
-            command = [IPTABLES, "-D", "INPUT", "-p", "udp", "--dport", port]
+            command = [IPTABLES, "-D", "INPUT", "-p", protocol, "--dport", port]
             if comment:
                 command.extend(["-m", "comment", "--comment", str(comment)])
             command.extend(["-j", str(jump).upper()])
@@ -639,7 +684,7 @@ def _linux_fix_commands(payload: Mapping[str, Any]) -> list[list[str]]:
                     "-D",
                     "INPUT",
                     "-p",
-                    "udp",
+                    protocol,
                     "--dport",
                     port,
                     "-m",
@@ -658,7 +703,7 @@ def _linux_fix_commands(payload: Mapping[str, Any]) -> list[list[str]]:
                 "-I",
                 "INPUT",
                 "-p",
-                "udp",
+                protocol,
                 "--dport",
                 port,
                 "-m",
@@ -673,15 +718,15 @@ def _linux_fix_commands(payload: Mapping[str, Any]) -> list[list[str]]:
     if backend == "ufw":
         commands = []
         for action, comment in payload.get("remove_block_rules", ()):
-            command = [UFW, "delete", str(action), f"{port}/udp"]
+            command = [UFW, "delete", str(action), f"{port}/{protocol}"]
             if comment:
                 command.extend(["comment", str(comment)])
             commands.append(command)
         commands.extend(
-            [UFW, "delete", "deny", f"{port}/udp", "comment", name]
+            [UFW, "delete", "deny", f"{port}/{protocol}", "comment", name]
             for name in remove_names
         )
-        commands.append([UFW, "allow", f"{port}/udp", "comment", rule_name])
+        commands.append([UFW, "allow", f"{port}/{protocol}", "comment", rule_name])
         return commands
     if backend == "firewalld":
         commands = [
@@ -695,7 +740,7 @@ def _linux_fix_commands(payload: Mapping[str, Any]) -> list[list[str]]:
         ]
         commands.extend(
             [
-                [FIREWALLD, "--permanent", f"--add-port={port}/udp"],
+                [FIREWALLD, "--permanent", f"--add-port={port}/{protocol}"],
                 [FIREWALLD, "--reload"],
             ]
         )
@@ -957,6 +1002,8 @@ class FirewallService:
             return PortFirewallStatus(False, port, protocol)
         try:
             if self._test_state_path:
+                if self._test_delay > 0:
+                    time.sleep(self._test_delay)
                 state = Path(self._test_state_path).read_text(encoding="utf-8").strip().casefold()
                 return PortFirewallStatus(
                     True,
@@ -994,16 +1041,22 @@ class FirewallService:
                 )
             if self.backend == "iptables":
                 result = self._run_linux_command([IPTABLES, "-S", "INPUT"], root_password)
-                allowed, blocked, _, external, _ = _iptables_rules(result.stdout, port, protocol)
+                allowed, blocked, owned, external, block_specs = _iptables_rules(
+                    result.stdout, port, protocol
+                )
             elif self.backend == "ufw":
                 result = self._run_linux_command([UFW, "status"], root_password)
                 if "status: inactive" in str(result.stdout or "").casefold():
-                    allowed, blocked, external = True, False, ()
+                    allowed, blocked, owned, external, block_specs = True, False, (), (), ()
                 else:
-                    allowed, blocked, _, external, _ = _ufw_rules(result.stdout, port, protocol)
+                    allowed, blocked, owned, external, block_specs = _ufw_rules(
+                        result.stdout, port, protocol
+                    )
             elif self.backend == "firewalld":
                 allowed = blocked = False
+                owned = ()
                 external_list: list[str] = []
+                block_specs: list[tuple[str, str]] = []
                 for zone in _firewalld_zones(
                     lambda args, **kwargs: self._run_linux_command(args, root_password)
                 ):
@@ -1020,10 +1073,20 @@ class FirewallService:
                     allowed |= rich_allowed
                     blocked |= bool(rich_external)
                     external_list.extend(rich_external)
+                    block_specs.extend((zone, rule) for rule in rich_external)
                 external = tuple(sorted(set(external_list)))
             else:
                 raise FirewallError("No supported firewall backend is available")
-            return PortFirewallStatus(True, port, protocol, allowed, blocked, external)
+            return PortFirewallStatus(
+                True,
+                port,
+                protocol,
+                allowed,
+                blocked,
+                external,
+                owned_block_rule_names=tuple(sorted(set(owned))),
+                external_block_rule_specs=tuple(sorted(set(block_specs))),
+            )
         except FirewallPermissionDenied:
             raise
         except (OSError, subprocess.SubprocessError, FirewallError) as exc:
@@ -1041,7 +1104,24 @@ class FirewallService:
             raise FirewallError(f"{self._firewall_name} is unavailable")
         if status.allowed:
             return
-        payload = self._fix_payload(profile, status)
+        self._run_fix_payload(self._fix_payload(profile, status), root_password)
+
+    def fix_port(
+        self,
+        status: PortFirewallStatus,
+        root_password: str | None = None,
+    ) -> None:
+        if not status.supported:
+            raise FirewallError(f"{self._firewall_name} is unavailable")
+        if status.allowed and not status.blocked:
+            return
+        self._run_fix_payload(self._fix_port_payload(status), root_password)
+
+    def _run_fix_payload(
+        self,
+        payload: Mapping[str, Any],
+        root_password: str | None = None,
+    ) -> None:
         try:
             if root_password is None:
                 result = self.elevated_runner(payload)
@@ -1102,6 +1182,35 @@ class FirewallService:
                 display_name=f"Palsitter Palworld {profile.name} - PalServer.exe",
             )
         return payload
+
+    def _fix_port_payload(self, status: PortFirewallStatus) -> dict[str, Any]:
+        protocol = status.protocol.casefold()
+        return {
+            "kind": "port",
+            "backend": self.backend,
+            "port": status.port,
+            "protocol": protocol,
+            "rule_name": f"Palsitter-Web-{protocol.upper()}-{status.port}",
+            "display_name": f"Palsitter Web {protocol.upper()} {status.port}",
+            "remove_names": list(
+                dict.fromkeys(
+                    [
+                        *status.owned_block_rule_names,
+                        *(
+                            ()
+                            if self.backend in _LINUX_BACKENDS
+                            else status.external_block_rule_names
+                        ),
+                    ]
+                )
+            ),
+            "remove_rich_rules": [
+                list(spec) for spec in status.external_block_rule_specs
+            ],
+            "remove_block_rules": [
+                list(spec) for spec in status.external_block_rule_specs
+            ],
+        }
 
     def _run_elevated(
         self,
@@ -1195,7 +1304,7 @@ class FirewallService:
                 command=(
                     "firewall-cmd",
                     "--permanent",
-                    f"--add-port={int(payload['port'])}/udp",
+                    f"--add-port={int(payload['port'])}/{payload.get('protocol', 'udp')}",
                 ),
             )
         Path(str(self._test_state_path)).write_text("open", encoding="utf-8")

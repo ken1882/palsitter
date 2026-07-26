@@ -3,7 +3,6 @@ import threading
 import time
 import traceback
 from pywebio.exceptions import SessionException
-from pywebio.input import textarea
 from pywebio.output import clear, close_popup, popup, put_button, put_row, put_scope, put_text, put_warning, toast, use_scope
 from pywebio.session import local, register_thread
 from module.games import get_game
@@ -232,23 +231,6 @@ def _confirm_shutdown() -> None:
     start_shutdown_workflow()
     render_shutdown_overlay()
 
-def _run_utility_code() -> None:
-    last_exec = client_query("storage.get", key="_last_exec") or ""
-    code = textarea(
-        t("utils.code_edit"),
-        code={"mode": "python", "theme": "darcula"},
-        value=last_exec,
-    )
-    client_call("storage.set", key="_last_exec", value=code or "")
-    namespace = getattr(local, "utils_exec_namespace", None)
-    if namespace is None:
-        namespace = {"_append_util_log": _append_util_log}
-        local.utils_exec_namespace = namespace
-    try:
-        exec(str(code or ""), namespace, namespace)
-    except Exception:
-        _append_util_log(traceback.format_exc().rstrip())
-
 @use_scope("log_scroll_btn", clear=True)
 def _update_utils_scroll_button() -> None:
     enabled = bool(getattr(local, "utils_keep_bottom", True))
@@ -315,9 +297,6 @@ def _render_utils() -> None:
             put_button(t("utils.run_all"), onclick=_run_all_instances)
             put_button(t("utils.stop_all"), onclick=_stop_all_instances)
             put_button(t("utils.kill_all"), onclick=_kill_all_instances)
-            enable_eval = client_query("storage.get", key="DANGER_ENABLE_EVAL") or ""
-            if enable_eval == "DO_NOT_PASTE_ANY_CODE_HERE_UNLESS_YOU_KNOW_WHAT_YOU_ARE_DOING":
-                put_button(t("utils.run_code"), onclick=_run_utility_code)
         with use_scope("logs"):
             put_scope(
                 "log-bar",

@@ -14,19 +14,23 @@ manifest.
   optional. Shared Home, Utils, and Add Instance code dispatch only through advertised
   capabilities and render absent fields/actions as unsupported rather than importing a
   game's services.
+- New instances load their game configuration from `./profile/template/<game>.json`.
+  Game adapters may replace only per-instance values such as allocated ports, generated
+  credentials, and runtime paths.
 - An adapter that supports installation owns `is_installed`, cached `check_update`, and
   `install_or_update` operations and reports progress through `OperationProgress`.
 
 Palworld is the fully supported module. It owns its server manager, REST/status clients,
-backup rules, paths, Steam application id, world-settings codecs, and seven instance
+backup rules, paths, Steam application id, world-settings codecs, and game-owned instance
 pages. Shared PTY dispatch and SteamCMD archive downloading remain game-neutral process
 utilities.
 
 Satisfactory is intentionally a selectable placeholder. Its template is an empty object,
 its menu contains only Overview, and it has no runtime, ports, settings, or backup service.
 Bulk lifecycle actions skip it explicitly. The placeholder can be deleted through the same
-confirmed reference-only deletion flow as supported instances. Its status summary is
-`Unsupported` and must not instantiate or probe a Palworld service.
+confirmed deletion flow as supported instances, including the optional separately
+confirmed data wipe. Its status summary is `Unsupported` and must not instantiate or
+probe a Palworld service.
 
 A fresh installation creates no instance. Legacy flat profiles are interpreted as Palworld
 and atomically converted to the nested schema. Names are unique case-insensitively across

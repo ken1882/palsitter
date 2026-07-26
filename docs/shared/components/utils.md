@@ -35,7 +35,7 @@
   five seconds, counts down once per second, removes the counter at zero, and force-kills
   managed instances only when the operator clicks it. The same choices and workflows are
   used by the Windows Electron tray exit.
-- Restart state is stored atomically under the configured data directory. Refreshing or
+- Restart state is stored atomically under `tmp/webui/restart-state.json`. Refreshing or
   reconnecting reconstructs the active overlay. The initiating browser connection is
   expected to drop while the GUI child is replaced. A completion or failure overlay is
   dismissable and remains after refresh until dismissed.
@@ -52,14 +52,9 @@
   placeholders are skipped and named in the result.
 - The developer Log refreshes every second, retains the latest 500 entries, and has an
   Auto Scroll ON/OFF toggle.
-- `Run Code` is hidden by default and appears only when localStorage key
-  `DANGER_ENABLE_EVAL` exactly equals
-  `DO_NOT_PASTE_ANY_CODE_HERE_UNLESS_YOU_KNOW_WHAT_YOU_ARE_DOING`.
-- Run Code remembers the last submitted code in localStorage key `_last_exec` and
-  reports execution errors in the developer Log.
 - The utility action buttons are rounded (`4px`) blue primary buttons (`#375a7f`); the
   developer Log uses square-bordered dark panels and monospace log styling like the rest
   of the GUI.
 - The developer Log's `Auto Scroll ON`/`OFF` control is a square purple/gray toggle
-  (Nechouli's on/off toggle style), not a rounded button.
+  matching the shared on/off style, not a rounded action button.
 - Utils has no dedicated action icons; its actions are text buttons.

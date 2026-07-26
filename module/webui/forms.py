@@ -1,6 +1,7 @@
 from __future__ import annotations
+from collections.abc import Mapping
 from pywebio.output import clear, close_popup, popup, put_button, put_row, put_scope, put_text, use_scope
-from pywebio.pin import pin, put_input
+from pywebio.pin import pin, pin_update, put_input
 from pywebio.session import local
 from module.webui.assets import client_call, client_query, put_asset_icon, put_asset_widget
 from module.webui.i18n import t
@@ -62,6 +63,17 @@ def _mark_dirty_form() -> None:
 def _clear_dirty_form() -> None:
     local.dirty_form_context = None
     client_call("forms.clear")
+
+
+def clear_dirty_form() -> None:
+    """Clear the dirty marker while keeping the mounted form registered."""
+    client_call("forms.clearDirty")
+
+
+def update_form_values(values: Mapping[str, object]) -> None:
+    """Update already-mounted form controls without rebuilding their page scope."""
+    for pin_name, value in values.items():
+        pin_update(pin_name, value=value)
 
 
 _register_dirty_form = register_dirty_form
@@ -266,6 +278,19 @@ def render_argument_list(
     _render_argument_list(key, capture=False)
 
 
+def reset_argument_list(
+    key: str,
+    values: list[str],
+    *,
+    controlled: list[str] | None = None,
+) -> None:
+    state = _argument_list_state()[key]
+    state["values"] = [str(value) for value in values]
+    if controlled is not None:
+        state["controlled"] = list(controlled)
+    _render_argument_list(key, capture=False)
+
+
 def argument_list_values(key: str) -> list[str]:
     return [value.strip() for value in _capture_argument_list(key) if value.strip()]
 
@@ -289,4 +314,12 @@ def _safe_dom_id(value: str) -> str:
     return "".join(char if char.isalnum() or char in {"-", "_"} else "-" for char in value)
 
 
-__all__ = ["argument_list_values", "put_argument_list", "register_dirty_form", "render_argument_list"]
+__all__ = [
+    "argument_list_values",
+    "clear_dirty_form",
+    "put_argument_list",
+    "register_dirty_form",
+    "render_argument_list",
+    "reset_argument_list",
+    "update_form_values",
+]

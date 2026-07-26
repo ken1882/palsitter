@@ -8,6 +8,18 @@ iptables. If none reports active, it falls back to the first installed backend i
 same order. Linux backends check and repair the configured UDP port; executable-path
 rules are not available through these portable command interfaces.
 
+The page also owns Palworld instance management:
+
+- `Rename profile` moves the managed instance directory and updates the profile name and
+  derived Palworld paths. Existing save games, backups, logs, and configuration remain
+  with the renamed instance.
+- Rename is disabled while PalServer, a lifecycle supervisor, an externally detected
+  server, or the detached Windows agent is running. The confirmation rechecks that state
+  before moving files.
+- `Delete instance` uses the shared exact-name confirmation flow. Without `Wipe data`,
+  it removes only the profile reference; selecting `Wipe data` requires a second
+  confirmation before permanently deleting the managed instance directory.
+
 The page also exposes Palworld player-ID migration for imported local worlds:
 
 - Start the imported world once, let the player create a new character, and stop the
@@ -56,6 +68,8 @@ The page also exposes Palworld player-ID migration for imported local worlds:
   remain, but its status, error, toast, popup, and result rows are discarded and never
   appended to the replacement page.
 
-**Tests:** firewall matching and repair tests use fake command runners. Playwright follows
-the instance menu to Tools and uses a fake firewall state/helper to exercise Check, the
-repair confirmation, successful repair, and the final Open state.
+## Verification focus
+
+Focused tests cover atomic profile/data renaming and derived paths. Playwright follows
+the instance menu to Tools to exercise stopped-instance rename, running-instance disable,
+reference-only/wipe deletion, firewall repair, and player migration.

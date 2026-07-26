@@ -14,6 +14,7 @@
 .metric-dot-game-version { background: #c084fc; }
 .metric-dot-palbox { background: #00ffff; }
 .settings-view > div { grid-column: 1 / -1; width: 100%; }
+.settings-view > :is(p, span) { display: block; grid-column: 1 / -1; width: 95%; }
 .settings-view > div[style*="grid-auto-flow"] { align-items: start; }
 .loading-indicator .spinner-border,
 .loading-indicator .spinner-grow { width: 1.5rem; height: 1.5rem; }

@@ -2,23 +2,41 @@
 
 The Home secondary menu contains `Home`, `Updater`, `Settings`, and `Utils`.
 
+## Network access
+
 - Settings persists the web UI bind address in `config/webui/settings.json`.
 - The address list includes localhost (`127.0.0.1`), all interfaces (`0.0.0.0`),
   and detected local IPv4 interface addresses. Localhost is the default.
-- Basic Auth is disabled by default. When enabled, username and password are required
-  on every save; only a salted password hash is persisted.
 - Selecting a non-localhost address while authentication is disabled requires an
   explicit `Save anyway` confirmation warning.
-- The firewall action performs a read-only TCP check for the Palsitter web port.
+- The firewall action reports that no configuration is needed while localhost is selected.
+  For another bind address, it checks the Palsitter web port over TCP and, when the port
+  is blocked or has no matching allow rule, offers to remove matching block rules and
+  create an allow rule with administrator approval.
 - Saved settings take effect through the shared restart confirmation workflow.
+- Save and Reset update the mounted controls in place without repainting the Settings
+  page.
+
+## HTTP authentication
+
+- Basic Auth is deliberately the simple HTTP authentication option for this
+  self-hosted control panel. It is disabled by default and uses the standard square
+  `On`/`Off` toggle.
+- When enabled, username and password are required on every save; only a salted password
+  hash is persisted. The credential fields are disabled while authentication is Off.
+- Place any remotely reachable Palsitter machine behind a trusted intranet or VPN. Keep
+  the panel bound to localhost when remote access is not required. Basic Auth controls
+  access; it is not a substitute for a trusted network boundary.
+- Static assets remain public; the control-panel page and websocket require auth.
 - Global web authentication events are stored under `config/webui/` and appear in
   instance Audit tabs when the selected game provides an Audit page. They are not
   copied into instance audit files.
-- Static assets remain public; the control-panel page and websocket require auth.
 
 CLI host arguments take precedence over `PALSITTER_HOST`, which takes precedence over
 the saved Settings value. No proxy forwarding header is trusted for source-IP audit
 records.
 
-**Tests:** Settings navigation, validation, exposure warning, firewall status, restart
-flow, and authentication are covered by GUI and focused service tests.
+## Verification focus
+
+GUI and focused service tests cover Settings navigation, required credentials, the
+unauthenticated exposure warning, firewall status, persistence, and restart flow.

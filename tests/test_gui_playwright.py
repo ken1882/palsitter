@@ -476,31 +476,52 @@ def test_home_settings_requires_auth_for_exposed_bind_and_required_credentials(
         address = page.locator('select[name="webui_bind_address"]')
         assert address.get_by_text("localhost — 127.0.0.1", exact=True).count() == 1
         assert address.get_by_text("All interfaces — 0.0.0.0", exact=True).count() == 1
+        actions = page.locator("#pywebio-scope-webui_settings_actions")
+        assert not actions.is_visible()
 
         address.select_option(value='"0.0.0.0"')
-        page.locator("#pywebio-scope-webui_settings_actions").get_by_role(
-            "button", name="Save", exact=True
-        ).click()
+        actions.get_by_text("Careful — you have unsaved changes!", exact=True).wait_for(
+            timeout=5000
+        )
+        assert actions.evaluate("(element) => getComputedStyle(element).position") == "fixed"
+        reset_box = actions.get_by_role("button", name="Reset", exact=True).bounding_box()
+        save_box = actions.get_by_role("button", name="Save", exact=True).bounding_box()
+        assert reset_box is not None and save_box is not None
+        assert abs(reset_box["y"] - save_box["y"]) < 5
+        assert save_box["x"] >= reset_box["x"] + reset_box["width"]
+        actions.get_by_role("button", name="Save", exact=True).click()
         page.get_by_text("Unauthenticated network access", exact=True).wait_for(timeout=5000)
         page.get_by_role("button", name="Cancel", exact=True).click()
         existing = json.loads((config_dir / "webui" / "settings.json").read_text(encoding="utf-8"))
         assert "bind_address" not in existing
 
-        page.get_by_label("Enable Basic Auth", exact=True).check()
+        page.get_by_text(
+            "Use HTTP authentication only on a trusted intranet or through a VPN.",
+            exact=False,
+        ).wait_for(timeout=5000)
+        username = page.locator('input[name="web_auth_username"]')
+        password = page.locator('input[name="web_auth_password"]')
+        assert username.is_disabled()
+        assert password.is_disabled()
+        auth_toggle = page.locator("#pywebio-scope-web_auth_toggle")
+        auth_toggle.get_by_role("button", name="Off", exact=True).click()
+        auth_toggle.get_by_role("button", name="On", exact=True).wait_for(timeout=2000)
+        assert username.is_enabled()
+        assert password.is_enabled()
         page.locator("#pywebio-scope-webui_settings_actions").get_by_role(
             "button", name="Save", exact=True
         ).click()
         page.get_by_text("Username is required when Basic Auth is enabled.", exact=True).wait_for(
             timeout=5000
         )
-        page.locator('input[name="web_auth_username"]').fill("admin")
+        username.fill("admin")
         page.locator("#pywebio-scope-webui_settings_actions").get_by_role(
             "button", name="Save", exact=True
         ).click()
         page.get_by_text("Password is required when Basic Auth is enabled.", exact=True).wait_for(
             timeout=5000
         )
-        page.locator('input[name="web_auth_password"]').fill("secret")
+        password.fill("secret")
         page.locator("#pywebio-scope-webui_settings_actions").get_by_role(
             "button", name="Save", exact=True
         ).click()
@@ -511,6 +532,64 @@ def test_home_settings_requires_auth_for_exposed_bind_and_required_credentials(
         assert saved["web_auth"]["enabled"] is True
         assert saved["web_auth"]["username"] == "admin"
         assert saved["web_auth"]["password_hash"] != "secret"
+
+
+@pytest.mark.playwright
+def test_home_settings_checks_and_repairs_web_firewall(tmp_path, monkeypatch):
+    firewall_state = tmp_path / "firewall-state.txt"
+    firewall_state.write_text("blocked:web-block", encoding="utf-8")
+    with _gui_page(
+        tmp_path,
+        monkeypatch,
+        extra_env={"PALSITTER_TEST_FIREWALL_STATE": str(firewall_state)},
+    ) as (page, _):
+        page.locator("#pywebio-scope-menu").get_by_text("Settings", exact=True).click()
+        settings = page.locator("#pywebio-scope-webui_settings_panel")
+        settings.wait_for(timeout=5000)
+        settings.get_by_role("button", name="Check web firewall", exact=True).click()
+        page.locator("#pywebio-scope-webui_firewall_status").get_by_text(
+            "No firewall configuration is needed while the control panel listens only on localhost.",
+            exact=True,
+        ).wait_for(timeout=5000)
+        assert page.locator(".modal.show").count() == 0
+
+        page.locator('select[name="webui_bind_address"]').select_option(value='"0.0.0.0"')
+        settings.get_by_role("button", name="Check web firewall", exact=True).click()
+
+        modal = page.locator(".modal.show")
+        modal.get_by_text("Fix Web Firewall", exact=True).wait_for(timeout=5000)
+        modal.get_by_text("web-block", exact=False).wait_for(timeout=5000)
+        modal.get_by_role("button", name="Fix", exact=True).click()
+
+        page.locator("#pywebio-scope-webui_firewall_status").get_by_text(
+            "TCP port", exact=False
+        ).wait_for(timeout=5000)
+        assert firewall_state.read_text(encoding="utf-8") == "open"
+
+
+@pytest.mark.playwright
+def test_home_settings_firewall_check_does_not_update_after_navigation(tmp_path, monkeypatch):
+    firewall_state = tmp_path / "firewall-state.txt"
+    firewall_state.write_text("blocked:web-block", encoding="utf-8")
+    with _gui_page(
+        tmp_path,
+        monkeypatch,
+        extra_env={
+            "PALSITTER_TEST_FIREWALL_STATE": str(firewall_state),
+            "PALSITTER_TEST_FIREWALL_DELAY": "1.0",
+        },
+    ) as (page, _):
+        page.locator("#pywebio-scope-menu").get_by_text("Settings", exact=True).click()
+        settings = page.locator("#pywebio-scope-webui_settings_panel")
+        page.locator('select[name="webui_bind_address"]').select_option(value='"0.0.0.0"')
+        settings.get_by_role("button", name="Check web firewall", exact=True).click()
+        page.locator("#pywebio-scope-menu").get_by_text("Home", exact=True).click()
+        page.get_by_role("button", name="Discard changes", exact=True).click()
+        page.get_by_text("Browser url: http://localhost:", exact=False).wait_for(timeout=5000)
+        page.wait_for_timeout(1300)
+
+        assert page.locator("#pywebio-scope-webui_firewall_status").count() == 0
+        assert page.locator(".modal.show").count() == 0
 
 
 @pytest.mark.playwright
@@ -659,7 +738,7 @@ def test_updater_matches_state_tables_styles_and_git_behavior(tmp_path, monkeypa
 
 
 @pytest.mark.playwright
-def test_utils_matches_actions_live_log_css_and_gated_code(tmp_path, monkeypatch):
+def test_utils_matches_actions_live_log_css(tmp_path, monkeypatch):
     with _gui_page(tmp_path, monkeypatch) as (page, _):
         page.locator("#pywebio-scope-menu").get_by_text("Utils").click()
         actions = page.locator("#pywebio-scope-util-buttons").get_by_role("button")
@@ -719,25 +798,6 @@ def test_utils_matches_actions_live_log_css_and_gated_code(tmp_path, monkeypatch
         modal.get_by_role("button", name="Select all", exact=True).click()
         assert checkboxes.first.is_checked()
         modal.locator("button.close").click()
-
-        page.evaluate(
-            "localStorage.setItem("
-            "'DANGER_ENABLE_EVAL', "
-            "'DO_NOT_PASTE_ANY_CODE_HERE_UNLESS_YOU_KNOW_WHAT_YOU_ARE_DOING')"
-        )
-        page.locator("#pywebio-scope-menu").get_by_text("Utils").click()
-        page.get_by_role("button", name="Run Code", exact=True).click()
-        editor = page.locator("#input-container .CodeMirror")
-        editor.wait_for(timeout=5000)
-
-        editor.evaluate(
-            "(element, value) => element.CodeMirror.setValue(value)",
-            '_append_util_log("Code executed")',
-        )
-        page.get_by_role("button", name="Submit", exact=True).click()
-        page.locator("#pywebio-scope-dev-log").get_by_text(
-            "Code executed"
-        ).wait_for(timeout=2500)
 
         page.get_by_role("button", name="Shutdown Palsitter", exact=True).click()
         modal = page.locator(".modal.show")
@@ -889,7 +949,18 @@ def test_side_add_server_is_overlay_modal(tmp_path, monkeypatch):
         assert confirm.evaluate(
             "(element) => getComputedStyle(element).backgroundColor"
         ) == "rgb(55, 90, 127)"
-        assert page.get_by_role("button", name="Cancel", exact=True).count() == 0
+        cancel = modal.get_by_role("button", name="Cancel", exact=True)
+        assert cancel.count() == 1
+        cancel.click()
+        modal.wait_for(state="hidden", timeout=5000)
+        assert page.locator(".rail-button.rail-active").get_by_text(
+            "default", exact=True
+        ).count() == 1
+
+        page.locator("#pywebio-scope-aside").get_by_text("Add", exact=True).click()
+        modal = page.locator(".modal.show")
+        page.get_by_label("Profile name").wait_for(timeout=5000)
+        confirm = modal.get_by_role("button", name="Confirm", exact=True)
 
         page.get_by_label("Profile name").fill("server2")
         confirm.click()
@@ -1813,11 +1884,18 @@ def test_audit_page_supports_monthly_rows_search_tags_time_and_pagination(tmp_pa
         footer = audit.locator(".pagination-table-footer")
         assert table_shell.evaluate("element => getComputedStyle(element).overflowY") == "auto"
         footer_box = footer.bounding_box()
-        viewport_size = page.evaluate(
-            "() => ({width: document.documentElement.clientWidth, height: document.documentElement.clientHeight})"
+        content_bottom = content.evaluate(
+            """element => {
+                const style = getComputedStyle(element);
+                return element.getBoundingClientRect().top
+                    + element.clientTop
+                    + element.clientHeight
+                    - (parseFloat(style.paddingBottom) || 0);
+            }"""
         )
         assert footer_box is not None
-        assert abs(footer_box["y"] + footer_box["height"] - viewport_size["height"]) < 16
+        assert abs(footer_box["y"] + footer_box["height"] - content_bottom) < 1
+        assert audit.bounding_box()["y"] + audit.bounding_box()["height"] <= content_bottom + 1
         assert table_shell.evaluate("element => element.scrollHeight > element.clientHeight")
         assert abs(time_button_rect["y"] - page_size_rect["y"]) < 1
         assert abs(time_button_rect["y"] + time_button_rect["height"] - page_size_rect["y"] - page_size_rect["height"]) < 1
@@ -2269,6 +2347,14 @@ def test_palworld_tools_disables_player_migration_while_server_runs(
             migration.get_by_text(
                 "Palworld player ID migration", exact=True
             ).wait_for(timeout=5000)
+            instance_tools = page.locator("#pywebio-scope-tools_instance")
+            instance_tools.get_by_text(
+                "Rename is available only while PalServer and its detached agent are stopped.",
+                exact=True,
+            ).wait_for(timeout=5000)
+            assert instance_tools.get_by_role(
+                "button", name="Rename profile", exact=True
+            ).is_disabled()
             assert migration.get_by_role(
                 "button", name="Migrate player ID", exact=True
             ).is_disabled()
@@ -2987,6 +3073,9 @@ def test_server_settings_are_embedded_and_save(tmp_path, monkeypatch):
         page.locator('input[name="settings_query_port"]').fill("28000")
         dedicated_name = "A1" * 16
         page.locator('input[name="settings_dedicated_server_name"]').fill(dedicated_name)
+        page.evaluate(
+            "window.__serverSettingsField = document.querySelector('input[name=settings_query_port]')"
+        )
 
         validate_toggle = page.locator("#pywebio-scope-settings_toggle_steam_validate")
         validate_toggle.get_by_role("button", name="Off", exact=True).click()
@@ -2998,6 +3087,9 @@ def test_server_settings_are_embedded_and_save(tmp_path, monkeypatch):
             "button", name="Save", exact=True
         ).click()
         page.get_by_text("Settings saved").wait_for(timeout=5000)
+        assert page.evaluate(
+            "document.querySelector('input[name=settings_query_port]') === window.__serverSettingsField"
+        )
 
         monkeypatch.setenv("PALSITTER_CONFIG_DIR", str(config_dir))
         saved = load_profile("default")
@@ -3684,7 +3776,7 @@ def test_players_page_shows_cached_players_when_server_is_unavailable(tmp_path, 
 
 
 @pytest.mark.playwright
-def test_server_settings_reset_next_to_save_and_delete_instance(tmp_path, monkeypatch):
+def test_server_settings_reset_and_tools_manage_instance(tmp_path, monkeypatch):
     with _gui_page(tmp_path, monkeypatch) as (page, config_dir):
         # Create a second instance through the Add modal (real UI path).
         page.locator("#pywebio-scope-aside").get_by_text("Add").click()
@@ -3716,33 +3808,49 @@ def test_server_settings_reset_next_to_save_and_delete_instance(tmp_path, monkey
         assert abs(save_box["y"] - reset_box["y"]) < 5
         assert save_box["x"] >= reset_box["x"] + reset_box["width"]
 
-        # Reset reloads the saved values, discarding unsaved edits.
+        # Reset updates the existing control with the saved value.
         page.evaluate(
             "window.__queryBeforeReset = document.querySelector('input[name=settings_query_port]')"
         )
         reset.click()
         page.wait_for_function(
-            "document.querySelector('input[name=settings_query_port]') !== window.__queryBeforeReset",
+            "document.querySelector('input[name=settings_query_port]').value !== '29000'",
             timeout=5000,
+        )
+        assert page.evaluate(
+            "document.querySelector('input[name=settings_query_port]') === window.__queryBeforeReset"
         )
         assert page.locator('input[name="settings_query_port"]').input_value() != "29000"
 
-        # Delete instance: red button beneath a horizontal rule.
-        delete_scope = page.locator("#pywebio-scope-settings_delete")
-        delete_btn = delete_scope.get_by_role("button", name="Delete instance", exact=True)
-        delete_btn.wait_for(timeout=5000)
-        assert delete_btn.evaluate(
-            "(element) => getComputedStyle(element).backgroundColor"
-        ) == "rgb(231, 76, 60)"
-        hr_box = delete_scope.locator("hr").first.bounding_box()
-        del_box = delete_btn.bounding_box()
-        assert hr_box is not None and del_box is not None
-        assert hr_box["y"] < del_box["y"]
+        assert page.locator("#pywebio-scope-settings_delete").count() == 0
 
-        # Confirmation modal: Yes stays disabled until the exact instance name is typed.
         data_file = profile_dir("server2") / "server-data" / "save.sav"
         data_file.parent.mkdir()
         data_file.write_text("save-data", encoding="utf-8")
+        page.locator("#pywebio-scope-menu").get_by_text("Tools", exact=True).click()
+        instance_tools = page.locator("#pywebio-scope-tools_instance")
+        instance_tools.get_by_text("Instance", exact=True).wait_for(timeout=5000)
+        instance_tools.get_by_text(
+            "Rename is available only while PalServer and its detached agent are stopped.",
+            exact=True,
+        ).wait_for(timeout=5000)
+        instance_tools.get_by_role("button", name="Rename profile", exact=True).click()
+        rename_modal = page.locator(".modal.show")
+        rename_modal.get_by_label("Profile name", exact=True).fill("server3")
+        rename_modal.get_by_role("button", name="Rename profile", exact=True).click()
+        page.locator("#pywebio-scope-aside").get_by_text("server3", exact=True).wait_for(
+            timeout=5000
+        )
+        assert not data_file.exists()
+        data_file = profile_dir("server3") / "server-data" / "save.sav"
+        assert data_file.exists()
+
+        # Confirmation modal: Yes stays disabled until the exact instance name is typed.
+        delete_scope = page.locator("#pywebio-scope-tools_instance")
+        delete_btn = delete_scope.get_by_role("button", name="Delete instance", exact=True)
+        assert delete_btn.evaluate(
+            "(element) => getComputedStyle(element).backgroundColor"
+        ) == "rgb(231, 76, 60)"
         delete_btn.click()
         confirm = page.get_by_role("button", name="Yes, delete", exact=True)
         confirm.wait_for(timeout=5000)
@@ -3751,7 +3859,7 @@ def test_server_settings_reset_next_to_save_and_delete_instance(tmp_path, monkey
         assert not wipe.is_checked()
         page.locator('input[name="delete_confirm_name"]').fill("wrong")
         assert confirm.is_disabled()
-        page.locator('input[name="delete_confirm_name"]').fill("server2")
+        page.locator('input[name="delete_confirm_name"]').fill("server3")
         page.wait_for_function(
             "() => { const b = Array.from(document.querySelectorAll('button'))"
             ".find((x) => x.innerText.trim() === 'Yes, delete'); return b && !b.disabled; }",
@@ -3762,27 +3870,84 @@ def test_server_settings_reset_next_to_save_and_delete_instance(tmp_path, monkey
         wipe_confirm = page.get_by_role("button", name="Yes, wipe data", exact=True)
         wipe_confirm.wait_for(timeout=5000)
         page.get_by_role("button", name="Cancel", exact=True).click()
-        assert page.locator("#pywebio-scope-aside").get_by_text("server2", exact=True).count() >= 1
+        assert page.locator("#pywebio-scope-aside").get_by_text("server3", exact=True).count() >= 1
         assert data_file.exists()
 
-        delete_btn = page.locator("#pywebio-scope-settings_delete").get_by_role(
+        delete_btn = page.locator("#pywebio-scope-tools_instance").get_by_role(
             "button", name="Delete instance", exact=True
         )
         delete_btn.click()
-        page.locator('input[name="delete_confirm_name"]').fill("server2")
+        page.locator('input[name="delete_confirm_name"]').fill("server3")
         page.get_by_label("Wipe data", exact=True).check()
         page.get_by_role("button", name="Yes, delete", exact=True).click()
         page.get_by_role("button", name="Yes, wipe data", exact=True).click()
 
         # Instance removed from the sidebar; the default instance remains.
         page.locator("#pywebio-scope-aside").get_by_text(
-            "server2", exact=True
+            "server3", exact=True
         ).wait_for(state="detached", timeout=5000)
         assert page.locator("#pywebio-scope-aside").get_by_text("default", exact=True).count() >= 1
 
         monkeypatch.setenv("PALSITTER_CONFIG_DIR", str(config_dir))
-        assert "server2" not in list_profiles()
+        assert "server3" not in list_profiles()
         assert not data_file.exists()
+
+
+@pytest.mark.playwright
+def test_settings_resets_update_existing_controls_across_pages(tmp_path, monkeypatch):
+    workdir = _fixed_palserver_dir(tmp_path)
+    with _gui_page(
+        tmp_path,
+        monkeypatch,
+        profile_overrides={
+            "workdir": str(workdir),
+            "backup_source": str(_fixed_backup_source(tmp_path)),
+        },
+    ) as (page, _):
+        page.locator("#pywebio-scope-menu").get_by_text("Settings", exact=True).click()
+        web_settings = page.locator("#pywebio-scope-webui_settings_panel")
+        web_settings.wait_for(timeout=5000)
+        web_username = page.locator('input[name="web_auth_username"]')
+        page.evaluate(
+            "window.__webSettingsUsername = document.querySelector('input[name=web_auth_username]')"
+        )
+        web_username.fill("temporary")
+        web_settings.get_by_role("button", name="Reset", exact=True).click()
+        page.wait_for_function(
+            "document.querySelector('input[name=web_auth_username]').value === ''",
+            timeout=5000,
+        )
+        assert page.evaluate(
+            "document.querySelector('input[name=web_auth_username]') === window.__webSettingsUsername"
+        )
+
+        page.locator("#pywebio-scope-aside").get_by_text("default", exact=True).click()
+        for menu, form_scope, field_name, changed in (
+            ("Auto Restart", "auto_restart_form", "settings_memory_restart_mb", "9999"),
+            ("World Settings", "world_settings_form", "world_DayTimeSpeedRate", "1.9"),
+            ("Saves & Backups", "backup_settings_form", "settings_backup_retention_count", "99"),
+        ):
+            page.locator("#pywebio-scope-menu").get_by_text(menu, exact=True).click()
+            page.locator(f"#pywebio-scope-{form_scope}").wait_for(timeout=5000)
+            field = page.locator(f'input[name="{field_name}"]')
+            page.evaluate(
+                "(name) => { window.__settingsResetField = document.querySelector(`input[name=\"${name}\"]`); }",
+                field_name,
+            )
+            original = field.input_value()
+            field.fill(changed)
+            page.locator(
+                f"#pywebio-scope-{form_scope.replace('_form', '_actions')}"
+            ).get_by_role("button", name="Reset", exact=True).click()
+            page.wait_for_function(
+                "([name, value]) => document.querySelector(`input[name=\"${name}\"]`).value === value",
+                arg=[field_name, original],
+                timeout=5000,
+            )
+            assert page.evaluate(
+                "(name) => document.querySelector(`input[name=\"${name}\"]`) === window.__settingsResetField",
+                field_name,
+            )
 
 
 @pytest.mark.playwright
@@ -4038,6 +4203,9 @@ def test_world_settings_menu_position_and_field_types_save_to_ini(tmp_path, monk
         page.locator('input[name="world_BaseCampMaxNum"]').fill("77")
         page.locator('input[name="world_PhysicsActiveDropItemMaxNum"]').fill("42")
         page.locator('input[name="world_DayTimeSpeedRate"]').fill("2.5")
+        page.evaluate(
+            "window.__worldSettingsField = document.querySelector('input[name=world_DayTimeSpeedRate]')"
+        )
         page.locator('select[name="world_DeathPenalty"]').select_option(label="Item")
         page.locator('input[name="world_ServerDescription"]').fill("Hello World")
         xbox = page.get_by_label("Xbox", exact=True)
@@ -4047,6 +4215,9 @@ def test_world_settings_menu_position_and_field_types_save_to_ini(tmp_path, monk
             "button", name="Save", exact=True
         ).click()
         page.get_by_text("World settings saved", exact=True).wait_for(timeout=5000)
+        assert page.evaluate(
+            "document.querySelector('input[name=world_DayTimeSpeedRate]') === window.__worldSettingsField"
+        )
 
         profile = Profile(name="default", workdir=str(workdir))
         saved = read_ini_option_settings(resolve_ini_path(profile))
@@ -4378,6 +4549,10 @@ def test_world_filters_structured_launch_and_auto_restart_settings(tmp_path, mon
         editable_inputs.first.fill("-UsePerfThreads")
         argument_list.get_by_role("button", name="Add argument", exact=True).click()
         editable_inputs = argument_list.locator('input[name^="settings_extra_args_"]:not([name*="controlled"])')
+        page.wait_for_function(
+            "() => document.querySelectorAll('#pywebio-scope-settings_extra_args_argument_list button[aria-label=\"Remove argument\"]:not([disabled])').length === 2",
+            timeout=3000,
+        )
         assert argument_list.locator(
             'button[aria-label="Remove argument"]:not([disabled])'
         ).count() == 2
@@ -4409,6 +4584,7 @@ def test_world_filters_structured_launch_and_auto_restart_settings(tmp_path, mon
         page.locator("#pywebio-scope-auto_restart_form").wait_for(timeout=5000)
         page.locator('input[name="settings_memory_restart_mb"]').fill("2048")
         page.locator('input[name="settings_crash_restart_limit_per_hour"]').fill("3")
+        assert page.locator('input[name="settings_memory_restart_mb"]').input_value() == "2048"
         page.locator('select[name="settings_planned_restart_mode"]').select_option(
             label="Daily"
         )
@@ -4420,17 +4596,22 @@ def test_world_filters_structured_launch_and_auto_restart_settings(tmp_path, mon
             timeout=5000
         )
         page.locator('input[name="settings_planned_restart_daily_time"]').fill("04:30")
+        page.locator('input[name="settings_planned_restart_daily_time"]').press("Tab")
+        page.wait_for_timeout(1000)
         page.evaluate(
             "window.__autoRestartField = document.querySelector('input[name=settings_memory_restart_mb]')"
         )
         page.locator("#pywebio-scope-auto_restart_actions").get_by_role(
             "button", name="Save", exact=True
         ).click()
+        page.get_by_text("Settings saved", exact=True).last.wait_for(timeout=5000)
         page.wait_for_function(
-            "document.querySelector('input[name=settings_memory_restart_mb]') !== window.__autoRestartField",
+            "() => !document.querySelector('#pywebio-scope-auto_restart_actions').classList.contains('dirty')",
             timeout=5000,
         )
-        page.get_by_text("Settings saved", exact=True).last.wait_for(timeout=5000)
+        assert page.evaluate(
+            "document.querySelector('input[name=settings_memory_restart_mb]') === window.__autoRestartField"
+        )
         monkeypatch.setenv("PALSITTER_CONFIG_DIR", str(config_dir))
         saved = load_profile("default")
         assert saved.launch_useperfthreads is True

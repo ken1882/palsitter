@@ -63,7 +63,8 @@ embeds the profile form directly in the content area (no modal).
 - Editing the form reveals a floating unsaved-changes bar pinned above the bottom of the
   viewport, with `Reset` and `Save` actions. It is hidden while the form is clean.
 - `Save` is the green/purple primary-save action; `Reset` is a neutral button that
-  reloads the form from the saved profile, discarding unsaved edits. There is no `Back`
+  updates the mounted controls from the saved profile, discarding unsaved edits. Save
+  and Reset preserve the existing form DOM, filters, and mounted widgets. There is no `Back`
   button.
 - `Save` validates field types and checks every configured path field exists with the
   expected kind (folder or file). Invalid fields receive a red border and an inline error
@@ -73,17 +74,5 @@ embeds the profile form directly in the content area (no modal).
 - Leaving the page through in-app navigation while the form has unsaved edits opens an
   unsaved-changes dialog with `Save and leave`, `Discard changes`, and `Cancel`. Browser
   refresh/reload is not intercepted.
-- A horizontal rule separates the form from a red `Delete instance` button beneath it;
-  Delete remains in the document and is not part of the floating action bar.
-- `Delete instance` opens a confirmation modal; it does not delete immediately.
-- The confirmation modal shows a warning that only the profile reference is removed, an
-  input box, a `Wipe data` checkbox, and a red `Yes, delete` button that stays disabled
-  until the input exactly matches the instance's displayed name (e.g. `default` for the
-  default instance).
-- When `Wipe data` is checked, clicking `Yes, delete` opens a second confirmation modal;
-  confirming it permanently removes the instance directory, including server files,
-  save games, backups, and profile data. Canceling leaves the instance unchanged.
-- Confirming deletes only the profile reference (its `<name>.json`); the server working
-  directory, save games, and backups on disk are left intact.
-- After a successful delete the modal closes, the instance is removed from the sidebar,
-  and the Home view is shown.
+- Instance rename and deletion are intentionally kept on [Tools](./instance-tools.md),
+  separate from the server configuration form.

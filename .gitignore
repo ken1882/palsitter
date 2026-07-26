@@ -17,11 +17,14 @@ env/
 !/config/.gitkeep
 /logs/*
 !/logs/.gitkeep
-/Pal/*
-!/Pal/.gitkeep
+/tmp/*
+!/tmp/Pal/
+/tmp/Pal/*
+!/tmp/Pal/.gitkeep
 /profile/*
 !/profile/.gitkeep
-/tmp/*
+!/profile/template/
+!/profile/template/*.json
 
 # Electron build outputs
 /desktop/node_modules/

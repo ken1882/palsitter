@@ -11,8 +11,15 @@
   used for the Log, Metrics, and Players panels), never inline in the synchronous render
   path. A slow or hanging call must never delay another panel's initial paint — most
   notably the Log panel's immediate loading placeholder.
-- Deleting a profile removes only its `<name>.json` reference; it must never delete the
-  instance's working directory, save games, or backups on disk.
+- Reference-only deletion removes the profile's `<name>.json` and leaves its working
+  directory, save games, and backups on disk. `Wipe data` is a separate, exact-name
+  confirmed operation with a second destructive confirmation; it removes only the
+  resolved directory owned by that instance and never an import source or unrelated
+  external path.
+- A profile rename validates global case-insensitive uniqueness, moves only the managed
+  instance directory, and rewrites the profile record with its new name. Game adapters
+  refresh any derived paths before the move; runtime processes and detached agents must
+  be stopped first.
 - New game-specific profile fields get sensible defaults and are merged by that game's
   typed configuration loader.
 - Generic storage uses `InstanceRecord(name, game, game_config)`. Game modules convert the

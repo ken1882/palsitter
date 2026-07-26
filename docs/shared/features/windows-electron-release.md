@@ -15,9 +15,10 @@ The sparse checkout persists across updater fetch/reset operations, so updates r
 production-only working tree without requiring Git to be installed separately.
 
 Packaged runtime data is stored beside `Palsitter.exe` in the portable release's `data`
-directory instead of `%APPDATA%`: configuration is under `data/config`, instance state
-under `data/profile`, and logs under `data/logs`. The extracted release directory must be
-writable by the current user.
+directory instead of `%APPDATA%`: persistent configuration is under `data/config`,
+instance state under `data/profile`, and logs under `data/logs`. Runtime-only scratch
+state is kept under the backend working directory's `tmp` directory (`resources/backend/tmp`).
+The extracted release directory must be writable by the current user.
 
 Tray Exit requests the shared Home → Utils shutdown workflow. Its dialog offers `Cancel`,
 `GUI only`, and `Stop all`. `GUI only` stops the PyWebIO server and quits Electron while
@@ -69,3 +70,36 @@ locale for English, Traditional Chinese, and Japanese.
 
 The portable archive is built by the Windows GitHub Actions workflow and includes a
 SHA-256 checksum. It does not include an installer or automatic updater.
+
+## Building locally
+
+Local builds require Windows PowerShell, Node.js 24, Python 3.12 with `pip`, Git for
+Windows, and 7-Zip. From the repository root:
+
+```powershell
+Set-Location desktop
+npm.cmd ci
+Set-Location ..
+
+# Uncomment this line if script execution is not already allowed.
+# Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force
+.\desktop\scripts\build-runtime.ps1
+.\desktop\scripts\build-git.ps1
+.\desktop\scripts\prepare-source.ps1
+python -m compileall -q .
+
+Set-Location desktop
+npm.cmd run build:win
+Set-Location ..
+.\desktop\scripts\archive-release.ps1
+```
+
+If 7-Zip is missing, it can be installed with Chocolatey:
+
+```powershell
+choco install 7zip -y --no-progress
+```
+
+The unpacked application is written to `desktop/dist/win-unpacked/`. The archive and
+checksum are written to `desktop/dist/Palsitter-win-x64.7z` and
+`desktop/dist/Palsitter-win-x64.7z.sha256`.

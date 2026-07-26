@@ -138,6 +138,30 @@ def test_import_world_settings_ini_uses_windows_or_linux_server_relative_path(
     assert target.read_text(encoding="utf-8") == "linux"
 
 
+def test_import_world_settings_ini_keeps_profile_template_when_source_has_no_ini(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr("module.games.palworld.config.WINDOWS", True)
+    source = _world(tmp_path / "source", WORLD_B)
+    profile = _profile(tmp_path)
+    profile.workdir = str(tmp_path / "target")
+    profile.world_settings = {"BuildObjectDeteriorationDamageRate": 0.0}
+
+    assert import_world_settings_ini(profile, source / "Level.sav") is None
+
+    target = (
+        Path(profile.workdir)
+        / "Pal"
+        / "Saved"
+        / "Config"
+        / "WindowsServer"
+        / "PalWorldSettings.ini"
+    )
+    from module.worldsettings.ini_codec import read_ini_option_settings
+
+    assert read_ini_option_settings(target)["BuildObjectDeteriorationDamageRate"] == 0.0
+
+
 @pytest.mark.parametrize(
     ("save_root_name", "players", "expected"),
     [

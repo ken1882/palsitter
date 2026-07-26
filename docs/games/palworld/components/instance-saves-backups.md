@@ -24,6 +24,8 @@ work.
 
 - Settings include the safe backup-directory picker, interval in minutes, maximum files
   (default 20), and default-On `Skip scheduled backup with no players`, plus `Backup now`.
+- The settings bar's Save and Reset actions update the mounted controls in place without
+  repainting the page or its backup tables.
 - Above the `Managed backup files` table, a separate table lists only the active world's
   Palworld snapshots from `backup/world/<snapshot>`. Each row shows snapshot name,
   modification time, size, and Rollback; world and type columns are omitted because both

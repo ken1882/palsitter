@@ -10,7 +10,8 @@ Palworld-specific and is not exposed by unsupported game placeholders.
   `Self-heal trigger crash times` (default 2). Both accept positive whole numbers and
   control the rolling incident window and threshold used by the supervisor.
 - The page uses the standard square toggles, validation, floating Reset/Save bar, and
-  unsaved-navigation guard. Self-heal is disabled while Restart on crash is Off.
+  unsaved-navigation guard. Save and Reset update the existing controls in place;
+  Self-heal is disabled while Restart on crash is Off.
 - Restart History is a separate panel below the form. It displays the newest 20 persisted
   automatic-restart decisions in reverse chronological order with timestamp, trigger,
   detected cause, outcome, and expandable details. Manual restarts and routine schedule

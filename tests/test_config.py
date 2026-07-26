@@ -35,7 +35,7 @@ from module.instances import (
     profile_dir,
     save_instance,
 )
-from module.games.palworld.config import PALWORLD_CONFIG_VERSION, new_profile
+from module.games.palworld.config import PALWORLD_CONFIG_VERSION, new_profile, rename_profile
 
 
 def test_profile_bootstrap_and_clone(tmp_path, monkeypatch):
@@ -82,6 +82,23 @@ def test_clone_profile_allocates_free_ports(tmp_path, monkeypatch):
     # not copy server2's ports verbatim.
     server3 = clone_profile("server3", "server2")
     assert (server3.game_port, server3.query_port, server3.rest_port) == (8213, 27017, 8214)
+
+
+def test_rename_profile_moves_managed_data_and_refreshes_paths(tmp_path, monkeypatch):
+    monkeypatch.setenv("PALSITTER_CONFIG_DIR", str(tmp_path))
+    create_instance("palworld", "palworld")
+    source = profile_dir("palworld") / "server-data" / "save.sav"
+    source.parent.mkdir()
+    source.write_text("save-data", encoding="utf-8")
+
+    renamed = rename_profile("palworld", "server2")
+
+    assert renamed.name == "server2"
+    assert not profile_dir("palworld").exists()
+    assert (profile_dir("server2") / "server-data" / "save.sav").read_text(encoding="utf-8") == "save-data"
+    assert load_instance("server2").name == "server2"
+    assert renamed.workdir == str(fixed_palserver_dir("server2"))
+    assert renamed.backup_dir == str(fixed_backup_dir("server2"))
 
 
 def test_clone_profile_reuses_ports_freed_by_deleted_profile(tmp_path, monkeypatch):
@@ -141,6 +158,32 @@ def test_new_profile_worker_threads_has_single_cpu_fallback(tmp_path, monkeypatc
     monkeypatch.setattr("module.games.palworld.config.os.cpu_count", lambda: 1)
 
     assert new_profile("test").launch_worker_threads_server == 1
+
+
+def test_new_instance_uses_game_profile_template(tmp_path, monkeypatch):
+    template = tmp_path / "palworld.json"
+    template.write_text(
+        json.dumps(
+            {
+                "launch_useperfthreads": False,
+                "world_settings": {
+                    "BuildObjectDeteriorationDamageRate": 0.0,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("PALSITTER_CONFIG_DIR", str(tmp_path / "config"))
+    monkeypatch.setattr(
+        "module.instances.profile_template_path",
+        lambda game: template,
+    )
+
+    create_instance("custom", "palworld")
+    profile = load_profile("custom")
+
+    assert profile.launch_useperfthreads is False
+    assert profile.world_settings["BuildObjectDeteriorationDamageRate"] == 0.0
 
 
 def test_profile_load_uses_world_settings_for_rest_credentials_and_ports():

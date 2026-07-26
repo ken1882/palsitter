@@ -1,8 +1,7 @@
 # General UI Conventions
 
-The GUI foundation (layout, color palette, and components) is a pixel-faithful match of
-the Nechouli web UI (`G:\programming\Nechouli`, live at `http://localhost:22367/`). Verify
-visual parity by inspecting corresponding elements on both servers with Playwright.
+The registered assets and the shared conventions below are the source of truth for the
+GUI's layout, color palette, controls, and interaction behavior.
 
 - Shared visual tokens: base text `#d3d3d3`; dark surfaces `#202225`/`#2f3136`/`#36393f`
   with `#21262d` borders; accent purple `#7a77bb`; primary buttons blue `#375a7f`; info
@@ -25,6 +24,10 @@ visual parity by inspecting corresponding elements on both servers with Playwrig
   in the page. Popups/modals are reserved for transient or bulk actions (`Add Server`,
   `Delete instance` confirmation, instance selection) and for one-off input dialogs
   (`Announce`, graceful `Shutdown`).
+- A dismissible dialog with an action row provides a visible `Cancel` action. Cancel is
+  placed before the primary action, closes without mutation, and leaves the previously
+  selected page active. The header close button and Escape remain available for
+  dismissible dialogs; an operation in progress may explicitly become undismissible.
 - Destructive or hard-to-reverse actions never happen silently: `Delete instance` requires
   typing the exact instance name into a confirmation modal before its button enables, and
   any automatic action that overwrites save data (the crash self-heal rollback) takes a
@@ -34,7 +37,7 @@ visual parity by inspecting corresponding elements on both servers with Playwrig
   is auto-allocated to the next free value on create/clone; it is never copied verbatim
   from the source profile.
 - Every new UI-visible label follows [Language / i18n](./features/i18n.md)'s rules (a key
-  in both locale files with matching `{placeholder}` names).
+  in every locale catalog with matching `{placeholder}` names).
 - Live refreshes always prefer updating existing DOM nodes over repainting their parent
   scope. Compare data signatures before touching the DOM; patch text/attributes in place,
   append or remove only changed collection members by stable key, and preserve focus,

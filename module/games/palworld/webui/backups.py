@@ -18,8 +18,16 @@ def _backup_now(*args, **kwargs):
     from module.games.palworld.webui.overview import _backup_now as implementation
     return implementation(*args, **kwargs)
 
-def _clear_dirty_form(*args, **kwargs):
-    from module.webui.forms import _clear_dirty_form as implementation
+def _clear_dirty_form_state(*args, **kwargs):
+    from module.webui.forms import clear_dirty_form as implementation
+    return implementation(*args, **kwargs)
+
+def _clear_field_errors(*args, **kwargs):
+    from module.webui.forms import _clear_field_errors as implementation
+    return implementation(*args, **kwargs)
+
+def _update_form_values(*args, **kwargs):
+    from module.webui.forms import update_form_values as implementation
     return implementation(*args, **kwargs)
 
 def _manager(*args, **kwargs):
@@ -124,7 +132,7 @@ def render(name: str) -> None:
                 [
                     put_asset_widget("shared.strong_text", {"text": t("form.unsaved_bar")}),
                     None,
-                    put_button(t("common.reset"), onclick=lambda: _backups(name), color="secondary"),
+                    put_button(t("common.reset"), onclick=lambda: _reset_backup_settings(name), color="secondary"),
                     put_button(t("common.save"), onclick=lambda: _save_backup_settings(name), color="success"),
                 ],
                 size="auto 1fr auto auto",
@@ -141,6 +149,16 @@ def render(name: str) -> None:
 def _backups(name: str) -> None:
     from module.webui.instance import open_instance
     open_instance(name, "backups")
+
+
+def _reset_backup_settings(name: str) -> None:
+    profile = load_profile(name)
+    keys = ("backup_dir", "backup_interval_minutes", "backup_retention_count")
+    _update_form_values({_settings_pin(key): getattr(profile, key) for key in keys})
+    local.backup_skip_no_players = profile.skip_backup_when_no_players
+    _render_backup_skip_toggle()
+    _clear_field_errors([_settings_pin(key) for key in keys])
+    _clear_dirty_form_state()
 
 @use_scope("backup_skip_no_players_toggle", clear=True)
 def _render_backup_skip_toggle() -> None:
@@ -259,7 +277,7 @@ def _start_world_switch(name: str, world_id: str) -> None:
     register_thread(task)
     task.start()
 
-def _save_backup_settings(name: str, *, rerender: bool = True) -> bool:
+def _save_backup_settings(name: str, *, rerender: bool = False) -> bool:
     from module.webui.shutdown import is_shutting_down
 
     if is_shutting_down():
@@ -276,7 +294,7 @@ def _save_backup_settings(name: str, *, rerender: bool = True) -> bool:
     data["skip_backup_when_no_players"] = bool(local.backup_skip_no_players)
     updated = Profile.from_dict(data)
     save_profile(updated)
-    _clear_dirty_form()
+    _clear_dirty_form_state()
     toast(t("settings.saved"))
     if rerender:
         _backups(name)

@@ -11,8 +11,9 @@ The reusable pagination table is a browser-rendered widget under `module/webui`.
 - Search, filter, and time controls use the existing shared button and table styles.
 - Popovers use one shared viewport-aware pattern. They are bounded by the viewport,
   reposition on resize or scroll, and flip above the trigger when needed.
-- The table shell fills the available viewport space and scrolls its content internally.
-  The footer stays anchored at the bottom, so changing pages does not move the outer page.
+- The table shell fills the available space in its immediate layout container and scrolls
+  its content internally. The footer stays anchored at the container bottom, so changing
+  pages does not move the outer page.
 - The toolbar search input is a single-line control aligned with the other toolbar controls.
 - Pagination is centered and provides first/previous/next/last controls, numbered page
   buttons, ellipses for skipped ranges, and an editable current-page number.

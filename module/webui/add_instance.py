@@ -1,5 +1,5 @@
 from __future__ import annotations
-from pywebio.output import clear, close_popup, popup, put_button, put_loading, put_scope, put_text, put_warning, toast, use_scope
+from pywebio.output import clear, close_popup, popup, put_button, put_loading, put_row, put_scope, put_text, put_warning, toast, use_scope
 from pywebio.pin import pin, pin_on_change, pin_update, put_input, put_select
 from pywebio.session import local
 from module.games import list_games
@@ -43,7 +43,17 @@ def _add_server(values: dict[str, str] | None = None) -> None:
         put_scope("add_server_error", scope=scope)
         put_scope("add_server_confirm", scope=scope)
         with use_scope("add_server_confirm"):
-            put_button(t("common.confirm"), onclick=lambda: _confirm_add_server(scope))
+            put_row(
+                [
+                    put_button(t("common.cancel"), onclick=close_popup, color="secondary"),
+                    put_button(
+                        t("common.confirm"),
+                        onclick=lambda: _confirm_add_server(scope),
+                        color="primary",
+                    ),
+                ],
+                size="auto auto",
+            )
 
 def _render_add_server_source(game: str, *, origin: str = "template") -> None:
     origins = [{"label": "template", "value": "template"}]

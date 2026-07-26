@@ -13,9 +13,12 @@ import psutil
 
 from module.instances import (
     InstanceRecord,
+    load_profile_template,
     list_instances,
     load_instance,
     profile_dir,
+    rename_instance,
+    safe_profile_name,
     save_instance,
 )
 
@@ -213,7 +216,7 @@ class PalworldProfile:
     rest_port: int = 8212
     rest_username: str = "admin"
     rest_password: str = ""
-    backup_source: str = "./Pal/Saved/SaveGames/0"
+    backup_source: str = "./tmp/Pal/Saved/SaveGames/0"
     backup_dir: str = "./backups"
     backup_interval_minutes: float = 60
     backup_retention_count: int = 20
@@ -495,22 +498,25 @@ def _world_defaults() -> dict[str, Any]:
     return {item.key: item.default for item in WORLD_OPTION_FIELDS}
 
 
-def new_profile(name: str) -> PalworldProfile:
-    profile = PalworldProfile(name=name)
+def new_profile(name: str, template: Mapping[str, Any] | None = None) -> PalworldProfile:
+    profile = PalworldProfile.from_game_config(
+        name,
+        template if template is not None else load_profile_template("palworld"),
+    )
     allocated = _allocate_ports()
-    profile.launch_useperfthreads = True
-    profile.launch_no_async_loading_thread = False
-    profile.launch_use_multithread_for_ds = True
-    profile.launch_worker_threads_server = max(1, (os.cpu_count() or 2) - 1)
+    if profile.launch_worker_threads_server is None:
+        profile.launch_worker_threads_server = max(1, (os.cpu_count() or 2) - 1)
     profile.game_port = allocated["game_port"]
     profile.query_port = allocated["query_port"]
     profile.rest_port = allocated["rest_port"]
     profile.rest_password = generate_admin_password()
-    profile.backup_dir = str(fixed_backup_dir(name))
-    profile.world_settings = _world_defaults()
+    if profile.backup_dir in ("", "./backups"):
+        profile.backup_dir = str(fixed_backup_dir(name))
+    world_settings = _world_defaults()
+    world_settings.update(profile.world_settings)
+    profile.world_settings = world_settings
     profile.world_settings.update({
         "PublicPort": profile.game_port,
-        "RESTAPIEnabled": True,
         "RESTAPIPort": profile.rest_port,
         "AdminPassword": profile.rest_password,
     })
@@ -577,3 +583,21 @@ def save_profile(profile: PalworldProfile) -> None:
     profile.apply_fixed_paths(keep_backup_dir=profile.backup_dir not in ("", "./backups"))
     save_instance(InstanceRecord(profile.name, "palworld", profile.to_game_config()))
     sync_game_user_settings(profile)
+
+
+def rename_profile(name: str, new_name: str) -> PalworldProfile:
+    profile = load_profile(name)
+    replacement = safe_profile_name(new_name)
+    old_default_backup = str(profile_dir(profile.name) / "backups")
+    if profile.backup_dir == old_default_backup:
+        profile.backup_dir = str(profile_dir(replacement) / "backups")
+    profile.name = replacement
+    profile.apply_fixed_paths(keep_backup_dir=True)
+    record = rename_instance(
+        name,
+        replacement,
+        game_config=profile.to_game_config(),
+    )
+    profile.name = record.name
+    sync_game_user_settings(profile)
+    return profile

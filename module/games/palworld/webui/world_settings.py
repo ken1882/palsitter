@@ -10,12 +10,16 @@ from module.webui.assets import client_call, put_asset_icon, put_asset_widget
 from module.games.palworld.worldsettings import WORLD_OPTION_CATEGORIES, WORLD_OPTION_FIELDS, diagnose_ini, load_world_settings, recover_malformed_ini, resolve_ini_path, save_world_settings
 from module.games.palworld.worldsettings.ini_codec import coerce_integer
 
-def _clear_dirty_form(*args, **kwargs):
-    from module.webui.forms import _clear_dirty_form as implementation
+def _clear_dirty_form_state(*args, **kwargs):
+    from module.webui.forms import clear_dirty_form as implementation
     return implementation(*args, **kwargs)
 
 def _clear_field_errors(*args, **kwargs):
     from module.webui.forms import _clear_field_errors as implementation
+    return implementation(*args, **kwargs)
+
+def _update_form_values(*args, **kwargs):
+    from module.webui.forms import update_form_values as implementation
     return implementation(*args, **kwargs)
 
 def _field_error_scope(*args, **kwargs):
@@ -112,7 +116,7 @@ def render(name: str) -> None:
                 [
                     put_asset_widget("shared.strong_text", {"text": t("form.unsaved_bar")}),
                     put_asset_widget("shared.changed_count", {"text": t("world.changed_count", count=0)}),
-                    put_button(t("common.reset"), onclick=lambda: _world_settings(name), color="secondary"),
+                    put_button(t("common.reset"), onclick=lambda: _reset_world_settings(name), color="secondary"),
                     put_button(t("common.save"), onclick=lambda: _save_world_settings(name), color="success"),
                 ],
                 size="auto 1fr auto auto",
@@ -126,6 +130,43 @@ def render(name: str) -> None:
 def _world_settings(name: str) -> None:
     from module.webui.instance import open_instance
     open_instance(name, "world_settings")
+
+
+def _reset_world_settings(name: str) -> None:
+    profile = load_profile(name)
+    previous_world_settings = dict(profile.world_settings)
+    try:
+        loaded = load_world_settings(profile)
+    except Exception as exc:
+        toast(t("world.save_failed", error=exc), color="error")
+        return
+    if profile.world_settings != previous_world_settings:
+        save_profile(profile)
+    local.world_initial_values = dict(loaded.values)
+    local.world_toggles = {
+        field_.key: loaded.values.get(field_.key, field_.default)
+        for field_ in WORLD_OPTION_FIELDS
+        if field_.ftype == "bool"
+    }
+    _update_form_values(
+        {
+            _world_pin(field_.key): loaded.values.get(field_.key, field_.default)
+            for field_ in WORLD_OPTION_FIELDS
+            if field_.ftype != "bool"
+        }
+    )
+    _clear_field_errors(
+        [
+            _world_pin(field_.key)
+            for field_ in WORLD_OPTION_FIELDS
+            if field_.ftype != "bool"
+        ]
+    )
+    for field_ in WORLD_OPTION_FIELDS:
+        if field_.ftype == "bool":
+            _render_world_toggle(field_.key)
+    _clear_dirty_form_state()
+    client_call("palworld.worldSettings.markSaved")
 
 def _render_world_recovery(name: str, error: str) -> None:
     clear("content")
@@ -346,7 +387,7 @@ def _validate_world_settings_form(values: dict) -> bool:
                 valid = False
     return valid
 
-def _save_world_settings(name: str, *, rerender: bool = True) -> bool:
+def _save_world_settings(name: str, *, rerender: bool = False) -> bool:
     profile = load_profile(name)
     values = _collect_world_values()
     if not _validate_world_settings_form(values):
@@ -360,8 +401,9 @@ def _save_world_settings(name: str, *, rerender: bool = True) -> bool:
             backup_service=BackupService(profile, logger=_manager(name).append_log),
         )
         save_profile(profile)
-        _clear_dirty_form()
+        _clear_dirty_form_state()
         toast(t("world.saved"))
+        client_call("palworld.worldSettings.markSaved")
     except Exception as exc:
         toast(t("world.save_failed", error=exc), color="error")
         return False

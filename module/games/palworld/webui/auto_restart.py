@@ -26,12 +26,19 @@ from module.games.palworld.server import (
     is_zero_exit_code,
 )
 from module.games.palworld.webui.forms import (
+    _render_settings_toggle,
     _settings_field,
     _settings_select,
     _settings_toggle,
     _validate_settings_form,
 )
-from module.webui.forms import _clear_dirty_form, _register_dirty_form, _settings_label
+from module.webui.forms import (
+    clear_dirty_form,
+    _clear_field_errors,
+    _register_dirty_form,
+    _settings_label,
+    update_form_values,
+)
 from module.webui.pagination_table import TableColumn, put_pagination_table
 from module.webui.i18n import t
 from module.webui.session import page_context, register_page_stop_event, run_if_current
@@ -174,7 +181,7 @@ def render(name: str) -> None:
                     None,
                     put_button(
                         t("common.reset"),
-                        onclick=lambda: _auto_restart(name),
+                        onclick=lambda: _reset_auto_restart(name),
                         color="secondary",
                     ),
                     put_button(
@@ -199,7 +206,22 @@ def _auto_restart(name: str) -> None:
     open_instance(name, "auto_restart")
 
 
-def _save_auto_restart(name: str, *, rerender: bool = True) -> bool:
+def _reset_auto_restart(name: str) -> None:
+    profile = load_profile(name)
+    update_form_values(
+        {_settings_pin(key): getattr(profile, key) for key in AUTO_RESTART_FIELDS}
+    )
+    local.settings_toggles = {
+        "restart_on_crash": profile.restart_on_crash,
+        "self_heal_enabled": profile.self_heal_enabled,
+    }
+    _render_settings_toggle("restart_on_crash")
+    _render_settings_toggle("self_heal_enabled")
+    _clear_field_errors([_settings_pin(key) for key in AUTO_RESTART_FIELDS])
+    clear_dirty_form()
+
+
+def _save_auto_restart(name: str, *, rerender: bool = False) -> bool:
     profile = load_profile(name)
     data = profile.to_dict()
     for key in AUTO_RESTART_FIELDS:
@@ -219,7 +241,7 @@ def _save_auto_restart(name: str, *, rerender: bool = True) -> bool:
         toast(t("validation.fix_errors"), color="error")
         return False
     save_profile(updated)
-    _clear_dirty_form()
+    clear_dirty_form()
     toast(t("settings.saved"))
     if rerender:
         _auto_restart(name)

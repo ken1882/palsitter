@@ -60,6 +60,41 @@ def _runner(rules):
     return run
 
 
+def test_generic_tcp_port_fix_uses_port_rule_payload():
+    captured = {}
+    service = FirewallService(
+        backend="windows",
+        supported=True,
+        run_command=_runner(
+            [
+                _rule(
+                    name="web-block",
+                    action="Block",
+                    protocol="TCP",
+                    local_port="22368",
+                )
+            ]
+        ),
+        elevated_runner=lambda payload: captured.update(payload)
+        or SimpleNamespace(returncode=0, stdout="", stderr=""),
+    )
+
+    status = service.check_port(22368, protocol="tcp")
+    service.fix_port(status)
+
+    assert captured == {
+        "kind": "port",
+        "backend": "windows",
+        "port": 22368,
+        "protocol": "tcp",
+        "rule_name": "Palsitter-Web-TCP-22368",
+        "display_name": "Palsitter Web TCP 22368",
+        "remove_names": ["web-block"],
+        "remove_rich_rules": [],
+        "remove_block_rules": [],
+    }
+
+
 def test_backend_detection_prefers_active_installed_backend(monkeypatch):
     monkeypatch.setattr(
         "module.games.palworld.firewall.shutil.which",

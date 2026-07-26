@@ -15,7 +15,7 @@ from pywebio.output import clear, put_button, put_scope, use_scope
 from pywebio.session import register_thread, run_js
 
 from module.games import get_game
-from module.instances import list_instances, load_instance
+from module.instances import list_instances, load_instance, runtime_dir
 from module.webui.i18n import t
 from module.webui.process_manager import ProcessManager
 from module.webui.session import register_stop_event
@@ -34,9 +34,7 @@ _RESTORE_STARTED = False
 
 
 def state_path() -> Path:
-    from module.config import config_dir
-
-    return config_dir() / "webui" / "restart-state.json"
+    return runtime_dir() / "webui" / "restart-state.json"
 
 
 def _atomic_write(path: Path, data: dict[str, Any]) -> None:

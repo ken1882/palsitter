@@ -207,9 +207,12 @@ def find_import_world_settings_ini(level_path: str | Path) -> Optional[Path]:
 
 
 def import_world_settings_ini(profile: PalworldProfile, source: str | Path) -> Optional[Path]:
-    """Copy a detected source PalWorldSettings.ini into the new profile."""
+    """Copy a detected source INI, keeping the new profile template as fallback."""
     source_path = find_import_world_settings_ini(source)
     if source_path is None:
+        from module.games.palworld.worldsettings.service import ensure_world_settings
+
+        ensure_world_settings(profile)
         return None
     target = (
         Path(profile.workdir)

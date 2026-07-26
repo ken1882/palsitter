@@ -122,7 +122,6 @@ def migrate_world_option_sav_to_ini(profile: PalworldProfile) -> Optional[Path]:
 
 def load_world_settings(
     profile: PalworldProfile,
-    sav_codec: Optional[WorldOptionSavCodec] = None,
 ) -> LoadedWorldSettings:
     values = read_ini_option_settings(resolve_ini_path(profile))
     if not values and profile.world_settings:

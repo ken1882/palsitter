@@ -178,7 +178,7 @@ def _set_file_logger(name=pyw_name):
     try:
         file = logging.FileHandler(log_file, encoding='utf-8')
     except FileNotFoundError:
-        os.mkdir('./logs')
+        os.makedirs('./logs', exist_ok=True)
         file = logging.FileHandler(log_file, encoding='utf-8')
     file.setFormatter(file_formatter)
 
@@ -195,7 +195,7 @@ def set_file_logger(name=pyw_name):
     try:
         file = open(log_file, mode='a', encoding='utf-8')
     except FileNotFoundError:
-        os.mkdir('./logs')
+        os.makedirs('./logs', exist_ok=True)
         file = open(log_file, mode='a', encoding='utf-8')
 
     file_console = Console(

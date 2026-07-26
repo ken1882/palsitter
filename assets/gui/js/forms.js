@@ -32,8 +32,14 @@
             if (dirtyForm) mark(dirtyForm);
         },
         clear() {
+            if (dirtyForm) actionsFor(dirtyForm.scopeId)?.classList.remove("dirty");
             dirtyForm?.controller?.abort();
             dirtyForm = null;
+        },
+        clearDirty() {
+            if (!dirtyForm) return;
+            dirtyForm.dirty = false;
+            actionsFor(dirtyForm.scopeId)?.classList.remove("dirty");
         },
         setFieldInvalid({name, invalid}) {
             const element = document.querySelector(`[name="${CSS.escape(name)}"]`);

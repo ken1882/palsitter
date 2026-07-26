@@ -642,6 +642,11 @@ def _agent_identity_alive(state: dict[str, Any]) -> bool:
         return False
 
 
+def agent_is_running(profile_name: str) -> bool:
+    state = load_agent_state(profile_name)
+    return state is not None and _agent_identity_alive(state)
+
+
 def _agent_identity_matches(status: dict[str, Any], state: dict[str, Any]) -> bool:
     try:
         return (

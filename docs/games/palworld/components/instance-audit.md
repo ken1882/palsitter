@@ -14,8 +14,8 @@ It displays new audit events recorded by Palsitter in monthly files under the in
 - The type filter has a localized Select all/Select none button. It selects or clears only
   the audit type checkboxes in that filter popup.
 - It uses the shared pagination-table layout: standard shared controls without decorative
-  chevrons, content-based initial column sizing, a viewport-safe table shell, and a footer
-  that stays anchored while pages change.
+  chevrons, content-based initial column sizing, a table shell bounded by the content scope,
+  and a footer that stays anchored while pages change.
 - Audit code supplies rows, labels, and filters; it must not add audit-only width or popover
   positioning constants.
 - adminpassword command arguments are never written to audit or Overview logs; they
