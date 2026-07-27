@@ -653,19 +653,21 @@ class PalServerManager:
         emit_complete_lines(flush=True)
 
     def _server_output_line(self, line: str) -> None:
-        for parsed in self._server_output_lines(line):
-            if (
-                self.profile.suppress_rest_access_logs
-                and is_suppressible_rest_access_log(parsed)
-            ):
-                continue
-            admin_password = self.profile.rest_password
-            display_line = format_palserver_log_line(parsed, admin_password)
-            self._server_output_tail.append(display_line[:500])
-            event = parse_palserver_audit_line(parsed, admin_password)
-            if event is not None:
-                self.event_callback(event)
-            self.log(f"PalServer: {display_line}")
+        parsed = ANSI_ESCAPE_RE.sub("", line)
+        if not parsed:
+            return
+        if (
+            self.profile.suppress_rest_access_logs
+            and is_suppressible_rest_access_log(parsed)
+        ):
+            return
+        admin_password = self.profile.rest_password
+        display_line = format_palserver_log_line(parsed, admin_password)
+        self._server_output_tail.append(display_line[:500])
+        event = parse_palserver_audit_line(parsed, admin_password)
+        if event is not None:
+            self.event_callback(event)
+        self.log(f"PalServer: {display_line}")
 
     def _start_server_output(self, *, replay_existing: bool) -> None:
         self._stop_server_output()
@@ -1609,25 +1611,31 @@ class PalServerManager:
         if current < self.next_auto_update_check_at:
             return
         self.next_auto_update_check_at = current + AUTO_UPDATE_CHECK_INTERVAL_SECONDS
-        self.log("Checking for Palworld updates")
+        self.log("automatic game update checker started")
+        update_logs: list[str] = []
         info = PalworldUpdateService(
             self.profile,
-            logger=self.log,
+            logger=update_logs.append,
             pty_process_factory=self.pty_process_factory,
         ).check_update(force=True)
         if info.status == "update_available":
             self.auto_update_info = info
-            self.log(
-                "Palworld update available: "
-                f"{info.installed_build_id} -> {info.available_build_id}"
-            )
+            self.log("automatic update check complete, update available")
             self._record_update_check(info)
             return
         self._clear_auto_update_pending()
         if info.status == "up_to_date":
-            self.log(f"Palworld is up to date at build {info.installed_build_id}")
+            self.log("automatic update check complete, no update")
         elif info.status == "unknown":
-            self.log("Palworld update status is unknown; retrying at the next check")
+            failure = next(
+                (message for message in update_logs if message.startswith("Update check failed:")),
+                None,
+            )
+            self.log(
+                "automatic update check failed"
+                if failure is None
+                else f"automatic update check failed: {failure.removeprefix('Update check failed: ')}"
+            )
         self._record_update_check(info)
 
     def _online_player_count(self) -> int | None:

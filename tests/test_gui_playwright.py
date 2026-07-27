@@ -498,7 +498,12 @@ def test_home_and_utils_keep_specialized_layout_while_settings_uses_sections(
         settings.wait_for(timeout=5000)
         assert settings.locator(
             ".section-layout-navigation-button"
-        ).all_inner_texts() == ["Network", "HTTP authentication"]
+        ).all_inner_texts() == ["Network", "HTTP authentication", "Updates"]
+        updates = page.locator("#pywebio-scope-webui_settings_updates")
+        updates.get_by_text("Automatic update", exact=True).wait_for(timeout=5000)
+        assert updates.locator("#pywebio-scope-web_auto_update_toggle").get_by_role(
+            "button", name="Off", exact=True
+        ).count() == 1
 
         menu.get_by_text("Utils", exact=True).click()
         utils = page.locator("#pywebio-scope-overview")
@@ -511,6 +516,35 @@ def test_home_and_utils_keep_specialized_layout_while_settings_uses_sections(
         assert page.locator("#pywebio-scope-logs").evaluate(
             "(node) => node.parentElement.id === 'pywebio-scope-overview'"
         )
+
+
+@pytest.mark.playwright
+def test_home_settings_persist_automatic_update_toggle(tmp_path, monkeypatch):
+    mock_git = tmp_path / "git-mock.cmd"
+    mock_git.write_text("@exit /b 0", encoding="ascii")
+    with _gui_page(
+        tmp_path,
+        monkeypatch,
+        extra_env={"PALSITTER_GIT": str(mock_git)},
+    ) as (page, config_dir):
+        page.locator("#pywebio-scope-menu").get_by_text("Settings", exact=True).click()
+        toggle = page.locator("#pywebio-scope-web_auto_update_toggle")
+        toggle.get_by_role("button", name="Off", exact=True).click()
+        toggle.get_by_role("button", name="On", exact=True).wait_for(timeout=2000)
+        page.locator("#pywebio-scope-webui_settings_actions").get_by_role(
+            "button", name="Save", exact=True
+        ).click()
+        page.wait_for_function(
+            "() => !document.querySelector('#pywebio-scope-webui_settings_actions')"
+            ".classList.contains('dirty')",
+            timeout=5000,
+        )
+        assert page.locator(".modal.show").count() == 0
+
+        saved = json.loads(
+            (config_dir / "webui" / "settings.json").read_text(encoding="utf-8")
+        )
+        assert saved["auto_update"] is True
 
 
 @pytest.mark.playwright
@@ -791,6 +825,44 @@ def test_updater_page_checks_for_updates(tmp_path, monkeypatch):
         ):
             time.sleep(0.1)
         assert "fetch origin main" in git_calls.read_text(encoding="ascii")
+
+
+@pytest.mark.playwright
+def test_automatic_update_check_shows_clickable_toast(tmp_path, monkeypatch):
+    settings_dir = tmp_path / "config" / "webui"
+    settings_dir.mkdir(parents=True)
+    (settings_dir / "settings.json").write_text(
+        json.dumps({"auto_update": True}), encoding="utf-8"
+    )
+    mock_git = tmp_path / "git-mock.cmd"
+    git_calls = tmp_path / "git-calls.txt"
+    mock_git.write_text(
+        "\n".join(
+            [
+                f'@echo %* >> "{git_calls}"',
+                '@echo 1',
+                '@exit /b 0',
+            ]
+        ),
+        encoding="ascii",
+    )
+
+    with _gui_page(
+        tmp_path,
+        monkeypatch,
+        preferred_language=None,
+        extra_env={"PALSITTER_GIT": str(mock_git)},
+    ) as (page, _):
+        notice = page.locator(".toastify").get_by_text(
+            "New update available, click here to update", exact=False
+        )
+        deadline = time.time() + 10
+        while not git_calls.exists() and time.time() < deadline:
+            time.sleep(0.1)
+        assert git_calls.exists()
+        notice.wait_for(timeout=10000)
+        page.locator(".toastify").click()
+        page.get_by_text("New version available", exact=True).wait_for(timeout=10000)
 
 
 @pytest.mark.playwright

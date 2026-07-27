@@ -22,6 +22,7 @@ def test_web_settings_defaults_and_preserves_existing_ui_settings(tmp_path, monk
     config_dir = tmp_path / "config"
     monkeypatch.setenv("PALSITTER_CONFIG_DIR", str(config_dir))
     assert load_web_settings().bind_address == DEFAULT_BIND_ADDRESS
+    assert load_web_settings().auto_update is False
 
     config_dir.joinpath("webui").mkdir(parents=True)
     config_dir.joinpath("webui", "settings.json").write_text(
@@ -31,6 +32,7 @@ def test_web_settings_defaults_and_preserves_existing_ui_settings(tmp_path, monk
     save_web_settings(
         WebUISettings(
             bind_address="192.168.1.5",
+            auto_update=True,
             auth_enabled=True,
             auth_username="admin",
             auth_salt=salt,
@@ -41,6 +43,7 @@ def test_web_settings_defaults_and_preserves_existing_ui_settings(tmp_path, monk
     assert data["language"] == "en-US"
     assert data["theme"] == "light"
     assert load_web_settings().auth_enabled is True
+    assert load_web_settings().auto_update is True
     assert verify_password("secret", salt, digest)
     assert not verify_password("wrong", salt, digest)
 

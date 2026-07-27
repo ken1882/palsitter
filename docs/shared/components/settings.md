@@ -12,6 +12,9 @@ The Home secondary menu contains `Home`, `Updater`, `Settings`, and `Utils`.
 ## Network access
 
 - Settings persists the web UI bind address in `config/webui/settings.json`.
+- Settings includes an off-by-default `Automatic update` toggle. When enabled, Palsitter
+  checks for application updates every six hours and shows a persistent notification when
+  an update is available; clicking it opens Updater.
 - The address list includes localhost (`127.0.0.1`), all interfaces (`0.0.0.0`),
   and detected local IPv4 interface addresses. Localhost is the default.
 - Selecting a specific local IPv4 address listens on that address and localhost;

@@ -865,6 +865,21 @@ def test_server_output_filters_rest_access_logs_but_can_be_disabled():
     )
 
 
+def test_server_output_line_preserves_utf8_text_from_persisted_log():
+    logs = []
+    manager = PalServerManager(Profile(name="test"), logger=logs.append)
+
+    manager._server_output_line(
+        "[2026-07-27 21:04:56] [LOG] 雪碧 joined the server. "
+        "(User id: steam_76561198133438830, Player id: 286C854F000000000000000000000000)"
+    )
+
+    assert logs == [
+        "PalServer: [2026-07-27 21:04:56] [LOG] 雪碧 joined the server. "
+        "(User id: steam_76561198133438830, Player id: 286C854F000000000000000000000000)"
+    ]
+
+
 def test_server_output_sanitizes_adminpassword_in_log_and_audit():
     logs = []
     events = []
@@ -1969,13 +1984,15 @@ def test_auto_update_checks_after_thirty_minutes_and_restarts_on_verified_idle(
     rest.metrics = lambda: {"currentplayernum": 0}
     checks = []
     events = []
+    logs = []
 
     class FakeUpdateService:
         def __init__(self, *args, **kwargs):
-            pass
+            self.logger = kwargs["logger"]
 
         def check_update(self, *, force):
             checks.append(force)
+            self.logger("SteamCMD: noisy update output")
             return UpdateInfo("100", "200", status="update_available")
 
     monkeypatch.setattr(
@@ -1998,6 +2015,7 @@ def test_auto_update_checks_after_thirty_minutes_and_restarts_on_verified_idle(
         rest_client=rest,
         monotonic=lambda: next(monotonic),
         now=lambda: next(now),
+        logger=logs.append,
         event_callback=events.append,
     )
     manager.process = FakeProc()
@@ -2019,9 +2037,47 @@ def test_auto_update_checks_after_thirty_minutes_and_restarts_on_verified_idle(
     assert rest.saves == 1
     assert manager.recent_events[-1].reason == "auto_update"
     assert manager.recent_events[-1].detail["available_build_id"] == "200"
+    assert [message for message in logs if message.startswith("automatic ")] == [
+        "automatic game update checker started",
+        "automatic update check complete, update available",
+    ]
     update_events = [event for event in events if getattr(event, "type", None) == "update_check"]
     assert update_events
     assert update_events[-1].details["available_build_id"] == "200"
+
+
+def test_auto_update_logs_no_update_without_steamcmd_output(monkeypatch):
+    logs = []
+
+    class FakeUpdateService:
+        def __init__(self, *args, **kwargs):
+            self.logger = kwargs["logger"]
+
+        def check_update(self, *, force):
+            self.logger("SteamCMD: noisy update output")
+            return UpdateInfo("100", "100", status="up_to_date")
+
+    monkeypatch.setattr(
+        "module.games.palworld.server.manager.PalworldUpdateService",
+        FakeUpdateService,
+    )
+    monotonic = iter([0.0, 1800.0])
+    manager = PalServerManager(
+        Profile(name="test"),
+        monotonic=lambda: next(monotonic),
+        logger=logs.append,
+    )
+    manager.process = FakeProc()
+    manager.ps_process = SimpleNamespace(status=lambda: "running")
+
+    manager.monitor_once()
+    manager.monitor_once()
+
+    assert [message for message in logs if message.startswith("automatic ")] == [
+        "automatic game update checker started",
+        "automatic update check complete, no update",
+    ]
+    assert not any("SteamCMD:" in message for message in logs)
 
 
 def test_auto_update_idle_timer_resets_for_players_and_rest_failures(monkeypatch):

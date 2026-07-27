@@ -4,11 +4,12 @@ import subprocess
 import threading
 from pathlib import Path
 from pywebio.exceptions import SessionException
-from pywebio.output import clear, put_button, put_loading, put_row, put_scope, put_table, put_text, use_scope
+from pywebio.output import clear, put_button, put_loading, put_row, put_scope, put_table, put_text, toast, use_scope
 from pywebio.session import local, register_thread
 from module.webui.i18n import t
-from module.webui.session import page_context, register_page_stop_event, run_if_current
+from module.webui.session import page_context, register_page_stop_event, register_stop_event, run_if_current
 from module.webui.assets import put_asset_widget
+from module.webui.settings import load_web_settings
 
 def _home(*args, **kwargs):
     from module.webui.pages.home import _home as implementation
@@ -43,6 +44,8 @@ UPDATER_REMOTE = "https://github.com/ken1882/palsitter.git"
 UPDATER_BRANCH = "main"
 
 UPDATER_REPOSITORY = Path(__file__).resolve().parents[3]
+
+AUTO_UPDATE_INTERVAL_SECONDS = 6 * 60 * 60
 
 
 def _put_updater_loading(shape: str, color: str, *, fill: bool = False) -> None:
@@ -182,6 +185,29 @@ def _render_updater_state(state, *, error: str | None = None) -> None:
     if error:
         put_text(t("updater.git_error", error=error), scope="updater_state")
 
+def _check_repository() -> tuple[bool, str | None]:
+    try:
+        configured = _run_git("remote", "set-url", "origin", UPDATER_REMOTE)
+        if configured.returncode != 0:
+            return False, _git_diagnostic(configured)
+        fetched = _run_git("fetch", "origin", UPDATER_BRANCH, timeout=30)
+        if fetched.returncode != 0:
+            return False, _git_diagnostic(fetched)
+        result = _run_git(
+            "rev-list",
+            "--count",
+            f"HEAD..origin/{UPDATER_BRANCH}",
+        )
+        diagnostic = _git_diagnostic(result) if result.returncode != 0 else None
+        available = (
+            result.returncode == 0
+            and int((result.stdout or "0").strip() or "0") > 0
+        )
+        return available, diagnostic
+    except (OSError, ValueError, subprocess.SubprocessError) as exc:
+        return False, str(exc)
+
+
 def _check_updater() -> None:
     from module.webui.shutdown import is_shutting_down
 
@@ -193,32 +219,7 @@ def _check_updater() -> None:
     context = page_context()
 
     def check() -> None:
-        diagnostic = None
-        try:
-            configured = _run_git("remote", "set-url", "origin", UPDATER_REMOTE)
-            if configured.returncode != 0:
-                diagnostic = _git_diagnostic(configured)
-                available = False
-            else:
-                fetched = _run_git("fetch", "origin", UPDATER_BRANCH, timeout=30)
-                if fetched.returncode != 0:
-                    diagnostic = _git_diagnostic(fetched)
-                    available = False
-                else:
-                    result = _run_git(
-                        "rev-list",
-                        "--count",
-                        f"HEAD..origin/{UPDATER_BRANCH}",
-                    )
-                    if result.returncode != 0:
-                        diagnostic = _git_diagnostic(result)
-                    available = (
-                        result.returncode == 0
-                        and int((result.stdout or "0").strip() or "0") > 0
-                    )
-        except (OSError, ValueError, subprocess.SubprocessError) as exc:
-            available = False
-            diagnostic = str(exc)
+        available, diagnostic = _check_repository()
         if stop_event.is_set():
             return
         try:
@@ -235,6 +236,57 @@ def _check_updater() -> None:
     thread = threading.Thread(target=check, daemon=True)
     register_thread(thread)
     thread.start()
+
+
+def configure_automatic_update_checker(enabled: bool) -> None:
+    current_stop_event = getattr(local, "automatic_update_stop_event", None)
+    if current_stop_event is not None:
+        current_stop_event.set()
+        local.automatic_update_stop_event = None
+    if not enabled:
+        return
+    stop_event = threading.Event()
+    local.automatic_update_stop_event = stop_event
+    register_stop_event(stop_event)
+
+    def check() -> None:
+        notified = False
+        first = True
+        try:
+            while not stop_event.is_set():
+                if not first and stop_event.wait(AUTO_UPDATE_INTERVAL_SECONDS):
+                    return
+                first = False
+                if not load_web_settings().auto_update:
+                    return
+                available, _ = _check_repository()
+                if not available:
+                    notified = False
+                    continue
+                if notified:
+                    continue
+                notified = True
+                context = page_context()
+                run_if_current(
+                    context,
+                    lambda: toast(
+                        t("updater.toast_update_available"),
+                        duration=0,
+                        position="right",
+                        color="success",
+                        onclick=_updater,
+                    ),
+                )
+        except (SessionException, FileNotFoundError):
+            return
+
+    thread = threading.Thread(target=check, daemon=True)
+    register_thread(thread)
+    thread.start()
+
+
+def start_automatic_update_checker() -> None:
+    configure_automatic_update_checker(load_web_settings().auto_update)
 
 
 def _pull_update(*, on_error=None) -> bool:

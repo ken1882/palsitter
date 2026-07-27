@@ -89,6 +89,12 @@ def _force_restart(*args, **kwargs):
     return implementation(*args, **kwargs)
 
 
+def _configure_automatic_update_checker(enabled: bool) -> None:
+    from module.webui.pages.updater import configure_automatic_update_checker
+
+    configure_automatic_update_checker(enabled)
+
+
 def _render_firewall_status(message: str, *, warning: bool = False) -> None:
     with use_scope("webui_firewall_status", clear=True):
         if warning:
@@ -119,6 +125,22 @@ def _render_auth_toggle() -> None:
             onclick=_toggle_auth,
             color="success" if enabled else "secondary",
         )
+
+
+def _render_auto_update_toggle() -> None:
+    enabled = bool(getattr(local, "web_auto_update", False))
+    with use_scope("web_auto_update_toggle", clear=True):
+        put_button(
+            t("common.on") if enabled else t("common.off"),
+            onclick=_toggle_auto_update,
+            color="success" if enabled else "secondary",
+        )
+
+
+def _toggle_auto_update() -> None:
+    local.web_auto_update = not bool(getattr(local, "web_auto_update", False))
+    _mark_dirty_form()
+    _render_auto_update_toggle()
 
 
 def _toggle_auth() -> None:
@@ -312,7 +334,7 @@ def _check_firewall(*, ask_to_fix: bool = True, context=None, root_password=None
     thread.start()
 
 
-def _form_values() -> tuple[str, bool, str, str] | None:
+def _form_values() -> tuple[str, bool, bool, str, str] | None:
     address = str(pin.webui_bind_address or "").strip()
     try:
         address = str(ipaddress.IPv4Address(address))
@@ -320,15 +342,17 @@ def _form_values() -> tuple[str, bool, str, str] | None:
         put_warning(t("webui_settings.invalid_address"), scope="webui_settings_error")
         return None
     enabled = bool(getattr(local, "web_auth_enabled", False))
+    auto_update = bool(getattr(local, "web_auto_update", False))
     username = str(pin.web_auth_username or "").strip()
     password = str(pin.web_auth_password or "")
+    current = load_web_settings()
     if enabled and not username:
         put_warning(t("webui_settings.username_required"), scope="webui_settings_error")
         return None
-    if enabled and not password:
+    if enabled and not password and not current.auth_enabled:
         put_warning(t("webui_settings.password_required"), scope="webui_settings_error")
         return None
-    return address, enabled, username, password
+    return address, auto_update, enabled, username, password
 
 
 def _save_settings(*, save_anyway: bool = False) -> bool:
@@ -337,7 +361,14 @@ def _save_settings(*, save_anyway: bool = False) -> bool:
     if values is None:
         set_dirty_form_busy(False)
         return False
-    address, enabled, username, password = values
+    address, auto_update, enabled, username, password = values
+    current = load_web_settings()
+    auth_changed = (
+        enabled != current.auth_enabled
+        or (enabled and username != current.auth_username)
+        or (enabled and bool(password))
+    )
+    restart_required = address != current.bind_address or auth_changed
     if not enabled and not is_localhost(address) and not save_anyway:
         with popup(t("webui_settings.exposure_title"), closable=True) as scope:
             put_warning(t("webui_settings.exposure_warning"), scope=scope)
@@ -358,10 +389,16 @@ def _save_settings(*, save_anyway: bool = False) -> bool:
             )
         set_dirty_form_busy(False)
         return False
-    salt, password_hash = hash_password(password) if enabled else ("", "")
+    if not enabled:
+        salt, password_hash = "", ""
+    elif password:
+        salt, password_hash = hash_password(password)
+    else:
+        salt, password_hash = current.auth_salt, current.auth_password_hash
     save_web_settings(
         WebUISettings(
             bind_address=address,
+            auto_update=auto_update,
             auth_enabled=enabled,
             auth_username=username if enabled else "",
             auth_salt=salt,
@@ -370,12 +407,15 @@ def _save_settings(*, save_anyway: bool = False) -> bool:
     )
     close_popup()
     clear_dirty_form()
-    _force_restart()
+    _configure_automatic_update_checker(auto_update)
+    if restart_required:
+        _force_restart()
     return True
 
 
 def _reset_settings() -> None:
     settings = load_web_settings()
+    local.web_auto_update = settings.auto_update
     local.web_auth_enabled = settings.auth_enabled
     update_form_values(
         {
@@ -385,6 +425,7 @@ def _reset_settings() -> None:
         }
     )
     _render_auth_toggle()
+    _render_auto_update_toggle()
     _set_auth_fields_disabled()
     clear("webui_settings_error")
     _render_firewall_status(t("webui_settings.firewall_not_checked"))
@@ -401,6 +442,7 @@ def _render_settings() -> None:
         _menu_button(t("nav.settings"), _render_settings, True)
         _menu_button(t("nav.utils"), _utils)
     settings = load_web_settings()
+    local.web_auto_update = settings.auto_update
     local.web_auth_enabled = settings.auth_enabled
     clear("content")
     with use_scope("content"):
@@ -417,6 +459,12 @@ def _render_settings() -> None:
                     "authentication",
                     t("webui_settings.auth_title"),
                     "webui_settings_auth",
+                    ("settings-view",),
+                ),
+                SectionSpec(
+                    "updates",
+                    t("webui_settings.updates_title"),
+                    "webui_settings_updates",
                     ("settings-view",),
                 ),
             ],
@@ -451,6 +499,14 @@ def _render_settings() -> None:
             put_input("web_auth_password", label=t("webui_settings.password"), type="password", value="")
             put_text(t("webui_settings.password_help"))
             _set_auth_fields_disabled()
+        with use_scope("webui_settings_updates"):
+            put_asset_widget("shared.panel_title", {"title": t("webui_settings.updates_title")})
+            _settings_field_row(
+                t("webui_settings.automatic_update"),
+                put_scope("web_auto_update_toggle"),
+            )
+            put_text(t("webui_settings.automatic_update_help"))
+            _render_auto_update_toggle()
         with use_scope("webui_settings_actions"):
             put_row(
                 [

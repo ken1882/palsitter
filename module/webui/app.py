@@ -17,6 +17,11 @@ def _inject_css(*args, **kwargs):
     from module.webui.assets import inject_css as implementation
     return implementation(*args, **kwargs)
 
+
+def _start_automatic_update_checker(*args, **kwargs):
+    from module.webui.pages.updater import start_automatic_update_checker as implementation
+    return implementation(*args, **kwargs)
+
 @config(title="Palsitter", css_file=asset_urls("css"), js_file=asset_urls("js"))
 def app() -> None:
     set_env(title="Palsitter", output_animation=False)
@@ -27,6 +32,7 @@ def app() -> None:
     _inject_css()
     put_scope("ROOT")
     _home()
+    _start_automatic_update_checker()
     with use_scope("ROOT"):
         mount_overlay()
         mount_shutdown_overlay()
