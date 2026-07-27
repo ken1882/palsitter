@@ -14,6 +14,8 @@ The Home secondary menu contains `Home`, `Updater`, `Settings`, and `Utils`.
 - Settings persists the web UI bind address in `config/webui/settings.json`.
 - The address list includes localhost (`127.0.0.1`), all interfaces (`0.0.0.0`),
   and detected local IPv4 interface addresses. Localhost is the default.
+- Selecting a specific local IPv4 address listens on that address and localhost;
+  selecting localhost or all interfaces uses its normal single listener.
 - Selecting a non-localhost address while authentication is disabled requires an
   explicit `Save anyway` confirmation warning.
 - The firewall action reports that no configuration is needed while localhost is selected.

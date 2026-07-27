@@ -32,7 +32,7 @@ from module.games.palworld.server import PalRestClient, get_pal_rest_cache
 from module.games.palworld.audit import AuditEvent, AuditStore, utc_now
 from module.games.palworld.server.status import endpoint_ports, endpoint_status, instance_is_running
 from module.webui.i18n import t
-from module.webui.session import page_context, register_page_cleanup, register_page_stop_event, run_if_current
+from module.webui.session import is_local_browser_session, page_context, register_page_cleanup, register_page_stop_event, run_if_current
 from module.webui.assets import client_call, client_query, put_asset_widget
 from module.webui.checkbox_groups import mount_checkbox_group
 
@@ -192,10 +192,12 @@ def _render_scheduler(name: str) -> None:
     profile = load_profile(name)
     clear("scheduler")
     with use_scope("scheduler"):
-        folder_button = put_asset_widget(
-            "palworld.backup_icon_button",
-            {"label": t("scheduler.open_folder"), "glyph": "📁", "folder": True},
-        ).onclick(lambda: _open_scheduler_folder(name))
+        folder_button = None
+        if is_local_browser_session():
+            folder_button = put_asset_widget(
+                "palworld.backup_icon_button",
+                {"label": t("scheduler.open_folder"), "glyph": "📁", "folder": True},
+            ).onclick(lambda: _open_scheduler_folder(name))
         put_scope(
             "scheduler_panel",
             [

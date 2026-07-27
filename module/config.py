@@ -18,12 +18,14 @@ from module.games.palworld.config import (
     fixed_palserver_dir,
     fixed_server_launcher_path,
     fixed_steamcmd_path,
+    engine_settings_path,
     game_user_settings_path,
     load_profile,
     save_profile,
     server_config_dir_name,
     server_executable_relative_path,
     sync_game_user_settings,
+    sync_engine_settings,
 )
 from module.instances import (
     config_dir,

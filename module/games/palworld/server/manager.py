@@ -30,7 +30,10 @@ from module.games.palworld.config import (
 from module.pty_process import PtyProcessLike, spawn_pty_process
 from module.games.palworld.server.rest import PalRestClient
 from module.games.palworld.server.agent import AgentClient
-from module.games.palworld.server.output import PalServerLogWriter
+from module.games.palworld.server.output import (
+    PalServerLogWriter,
+    is_suppressible_rest_access_log,
+)
 from module.games.palworld.server.status import instance_is_running, matching_instance_processes
 from module.games.palworld.server.history import (
     LifecycleEvent,
@@ -472,13 +475,19 @@ class PalServerManager:
         if output is None:
             return
         log_directory = self._server_output_path.parent if self._server_output_path else None
-        writer = PalServerLogWriter(DailyLogWriter(
-            lambda: (
-                log_directory / f"palserver-{dt.datetime.now():%Y%m%d}.log"
-                if log_directory is not None
-                else profile_server_output_path(self.profile.name)
-            )
-        ))
+        writer = PalServerLogWriter(
+            DailyLogWriter(
+                lambda: (
+                    log_directory / f"palserver-{dt.datetime.now():%Y%m%d}.log"
+                    if log_directory is not None
+                    else profile_server_output_path(self.profile.name)
+                )
+            ),
+            line_filter=(
+                lambda line: self.profile.suppress_rest_access_logs
+                and is_suppressible_rest_access_log(line)
+            ),
+        )
         self._server_output_writer = writer
         try:
             for chunk in output:
@@ -645,6 +654,11 @@ class PalServerManager:
 
     def _server_output_line(self, line: str) -> None:
         for parsed in self._server_output_lines(line):
+            if (
+                self.profile.suppress_rest_access_logs
+                and is_suppressible_rest_access_log(parsed)
+            ):
+                continue
             admin_password = self.profile.rest_password
             display_line = format_palserver_log_line(parsed, admin_password)
             self._server_output_tail.append(display_line[:500])
@@ -1222,8 +1236,9 @@ class PalServerManager:
             str(exe),
             *launch_args,
             f"-port={self.profile.game_port}",
-            f"-queryport={self.profile.query_port}",
         ]
+        if self.profile.query_port > 0:
+            cmd.append(f"-queryport={self.profile.query_port}")
         self.log(f"Starting server: {' '.join(cmd)}")
         self._server_output_tail.clear()
         self._server_output_path = profile_server_output_path(self.profile.name)

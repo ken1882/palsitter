@@ -12,6 +12,7 @@ from pywebio.session import Session
 from pywebio.utils import STATIC_PATH, parse_file_size
 
 from module.webui.auth import WebAuth
+from module.webui.settings import DEFAULT_BIND_ADDRESS
 
 
 def run_server(
@@ -50,12 +51,17 @@ def run_server(
             {"path": str(STATIC_PATH), "default_filename": "index.html"},
         ),
     ]
-    tornado.web.Application(
+    web_application = tornado.web.Application(
         handlers,
         debug=False,
         websocket_ping_interval=30,
         websocket_max_message_size=max_payload_size,
-    ).listen(port, address=host, max_buffer_size=max_payload_size)
+    )
+    listen_addresses = (host,)
+    if host not in {DEFAULT_BIND_ADDRESS, "0.0.0.0"}:
+        listen_addresses += (DEFAULT_BIND_ADDRESS,)
+    for address in listen_addresses:
+        web_application.listen(port, address=address, max_buffer_size=max_payload_size)
     loop.start()
 
 

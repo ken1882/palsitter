@@ -1,5 +1,5 @@
 {
-  "config_version": 5,
+  "config_version": 6,
   "launch_useperfthreads": true,
   "launch_no_async_loading_thread": false,
   "launch_use_multithread_for_ds": true,
@@ -10,6 +10,10 @@
   "extra_args": [],
   "game_port": 8211,
   "query_port": 27015,
+  "net_server_max_tick_rate": 30,
+  "connection_timeout": 30.0,
+  "initial_connect_timeout": 60.0,
+  "suppress_rest_access_logs": true,
   "update_on_start": true,
   "auto_update": true,
   "auto_update_idle_minutes": 30,

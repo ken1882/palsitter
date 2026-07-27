@@ -4,8 +4,9 @@ Every Palworld instance profile has three ports allocated against other Palworld
 instances on the same host: `game_port` (default `8211`), `query_port` (default
 `27015`), and `rest_port` (default `8212`).
 
-`game_port`/`query_port` are passed to the platform Palworld server executable as launch
-arguments (`-port=`, `-queryport=`); `rest_port` is not a launch argument at all —
+`game_port` is passed to the platform Palworld server executable as `-port=`. A nonzero
+`query_port` is passed as `-queryport=`; `query_port=0` disables that argument. `rest_port`
+is not a launch argument at all —
 Palworld's REST API port and whether it's enabled are controlled entirely by that instance's own
 `PalWorldSettings.ini`. `rest_port` only tells Palsitter's REST client which address to
 connect *to*.

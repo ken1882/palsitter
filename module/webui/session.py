@@ -6,7 +6,7 @@ from collections.abc import Callable
 from contextlib import contextmanager
 from typing import Any
 
-from pywebio.session import local
+from pywebio.session import info, local
 
 
 @dataclass
@@ -56,6 +56,15 @@ def register_page_stop_event(stop_event: threading.Event) -> None:
 
 def page_context() -> PageContext | None:
     return getattr(local, "page_context", None)
+
+
+def is_local_browser_session() -> bool:
+    host = str(getattr(info, "server_host", "") or "").strip().casefold()
+    if host.startswith("["):
+        host = host[1:].split("]", 1)[0]
+    elif ":" in host:
+        host = host.rsplit(":", 1)[0]
+    return host in {"127.0.0.1", "localhost"}
 
 
 def request_navigation() -> int:
@@ -167,6 +176,7 @@ __all__ = [
     "begin_page_navigation",
     "initialize_page_lifecycle",
     "is_current",
+    "is_local_browser_session",
     "is_navigation_current",
     "navigation_transaction",
     "page_context",

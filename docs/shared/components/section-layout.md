@@ -17,8 +17,8 @@ in an independently scrolling content column and a right-side section navigator.
 - Single-purpose full-width pages such as a map or audit table do not add a redundant
   one-item navigator.
 
-The layout is shared by Home, global Settings, Utils, and applicable Palworld instance
-pages. Specialized full-width pages retain their own layouts.
+The layout is shared by global Settings and applicable Palworld instance pages. Home,
+Utils, and specialized full-width pages retain their own layouts.
 
 **Tests:** `tests/test_gui_playwright.py` follows real page navigation, verifies section
 and navigator order, clicks navigator targets, and checks desktop/mobile geometry and

@@ -70,14 +70,28 @@
       state.query = String(event.target.value || "").trim().toLocaleLowerCase();
       apply();
     }, { signal });
-    form.addEventListener("input", event => {
-      if (event.target.name !== "settings_launch_worker_threads_server") return;
-      const value = String(event.target.value || "").trim();
+    const updateControlledArgument = (prefix, value, disabled = false) => {
+      const nextValue = String(value || "").trim();
       form.querySelectorAll('input[name^="settings_extra_args_controlled_"]').forEach(control => {
-        if (!control.value.startsWith("-NumberOfWorkerThreadsServer=")) return;
-        control.value = `-NumberOfWorkerThreadsServer=${value}`;
+        if (!control.value.startsWith(prefix)) return;
+        control.value = `${prefix}${nextValue}`;
+        const row = control.closest(".argument-controlled-input")?.parentElement;
+        if (row) row.hidden = disabled;
       });
+    };
+    form.addEventListener("input", event => {
+      if (event.target.name === "settings_launch_worker_threads_server") {
+        updateControlledArgument("-NumberOfWorkerThreadsServer=", event.target.value);
+      } else if (event.target.name === "settings_query_port") {
+        const value = String(event.target.value || "").trim();
+        updateControlledArgument("-queryport=", value, value === "0");
+      }
     }, { signal });
+    const queryPort = form.querySelector('input[name="settings_query_port"]');
+    if (queryPort) {
+      const value = String(queryPort.value || "").trim();
+      updateControlledArgument("-queryport=", value, value === "0");
+    }
     apply();
   };
   server.destroy = () => {

@@ -47,16 +47,6 @@
   max-width: none;
 }
 
-.section-layout-section.home-preferences {
-  max-width: none;
-  margin: 0 0 .625rem;
-}
-
-#pywebio-scope-logs.section-layout-section {
-  height: auto;
-  overflow: visible;
-}
-
 .section-layout-section > .players-section-title {
   padding-top: 0;
   border-top: 0;

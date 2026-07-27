@@ -89,6 +89,10 @@ adding lifecycle controls to those pages.
   per-instance log. This allows the supervisor to detach and a fresh
   supervisor to adopt the same process after GUI replacement. Native
   server lines are prefixed with `PalServer:` and appended to the instance Overview log.
+  When Server Settings enables `Suppress REST access logs`, access lines for
+  `/v1/api/players`, `/v1/api/metrics`, and `/v1/api/game-data` are omitted from the
+  PalServer output and Overview logs to prevent spam; this does not disable the REST
+  requests or distinguish their caller.
   The Windows smoke diagnostic can query the agent's `job_status` response to enumerate
   the PalServer root and descendants and fails if any process is outside the Job Object.
   When UE4SS is installed in either supported layout, its `UE4SS.log` is tailed into the

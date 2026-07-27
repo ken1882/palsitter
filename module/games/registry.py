@@ -466,11 +466,12 @@ class GameAdapter:
     def after_create(self, record: InstanceRecord) -> None:
         if self.id != "palworld":
             return
-        from module.games.palworld.config import sync_game_user_settings
+        from module.games.palworld.config import sync_engine_settings, sync_game_user_settings
         from module.games.palworld.worldsettings.service import ensure_world_settings
 
         profile = self.load_typed_profile(record.name, record.game_config)
         sync_game_user_settings(profile)
+        sync_engine_settings(profile)
         ensure_world_settings(profile)
 
 

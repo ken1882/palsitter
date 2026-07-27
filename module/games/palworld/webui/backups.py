@@ -12,7 +12,7 @@ from module.games.palworld.server import PalRestClient
 from module.games.palworld.saves import ManagedWorldService
 from module.webui.i18n import t
 from module.webui.section_layout import SectionSpec, put_section_layout
-from module.webui.session import page_context, run_if_current
+from module.webui.session import is_local_browser_session, page_context, run_if_current
 from module.webui.assets import client_call, client_query, put_asset_widget
 
 def _backup_now(*args, **kwargs):
@@ -339,12 +339,14 @@ def _icon_button(label: str, glyph: str, onclick, *, danger: bool = False, folde
 @use_scope("builtin_backup_files", clear=True)
 def _render_builtin_backup_files(name: str) -> None:
     backups = BackupService(load_profile(name)).list_builtin_backups()
-    folder_button = _icon_button(
-        t("backups.open_builtin_folder"),
-        "📁",
-        lambda: _open_builtin_backup_folder(name),
-        folder=True,
-    )
+    folder_button = None
+    if is_local_browser_session():
+        folder_button = _icon_button(
+            t("backups.open_builtin_folder"),
+            "📁",
+            lambda: _open_builtin_backup_folder(name),
+            folder=True,
+        )
     put_scope(
         "builtin_backup_title_row",
         [put_row(
@@ -387,9 +389,11 @@ def _render_builtin_backup_files(name: str) -> None:
 def _render_backup_files(name: str) -> None:
     profile = load_profile(name)
     backups = BackupService(profile).list_backups()
-    folder_button = _icon_button(
-        t("backups.open_folder"), "📁", lambda: _open_backup_folder(name), folder=True
-    )
+    folder_button = None
+    if is_local_browser_session():
+        folder_button = _icon_button(
+            t("backups.open_folder"), "📁", lambda: _open_backup_folder(name), folder=True
+        )
     put_scope(
         "backup_title_row",
         [put_row(

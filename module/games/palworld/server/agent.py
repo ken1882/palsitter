@@ -35,7 +35,10 @@ from module.games.palworld.config import (
     load_profile,
     windows_console_executable_path,
 )
-from module.games.palworld.server.output import PalServerLogWriter
+from module.games.palworld.server.output import (
+    PalServerLogWriter,
+    is_suppressible_rest_access_log,
+)
 from module.instances import (
     DailyLogWriter,
     clear_agent_state,
@@ -762,12 +765,14 @@ class ServerAgent:
         else:
             args = []
         args.extend(self.profile.build_executable_args())
-        return [
+        command = [
             str(exe),
             *args,
             f"-port={self.profile.game_port}",
-            f"-queryport={self.profile.query_port}",
         ]
+        if self.profile.query_port > 0:
+            command.append(f"-queryport={self.profile.query_port}")
+        return command
 
     def _alive(self) -> bool:
         return self.process is not None and self.process.poll() is None
@@ -792,7 +797,11 @@ class ServerAgent:
             except OSError:
                 self.output_offset = 0
             self.output_handle = PalServerLogWriter(
-                DailyLogWriter(lambda: profile_server_output_path(self.name))
+                DailyLogWriter(lambda: profile_server_output_path(self.name)),
+                line_filter=(
+                    lambda line: self.profile.suppress_rest_access_logs
+                    and is_suppressible_rest_access_log(line)
+                ),
             )
             workdir = Path(
                 executable_workdir(self.profile.executable) or self.profile.workdir
@@ -838,7 +847,11 @@ class ServerAgent:
                 return
             if self.output_handle is None:
                 self.output_handle = PalServerLogWriter(
-                    DailyLogWriter(lambda: profile_server_output_path(self.name))
+                    DailyLogWriter(lambda: profile_server_output_path(self.name)),
+                    line_filter=(
+                        lambda line: self.profile.suppress_rest_access_logs
+                        and is_suppressible_rest_access_log(line)
+                    ),
                 )
         self._read_output()
         if not self._alive():

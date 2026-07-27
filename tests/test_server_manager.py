@@ -12,7 +12,10 @@ import pytest
 from module.config import Profile, game_user_settings_path
 from module.worldsettings.service import resolve_ini_path
 from module.games.registry import UpdateInfo
-from module.games.palworld.server.output import PalServerLogWriter
+from module.games.palworld.server.output import (
+    PalServerLogWriter,
+    is_suppressible_rest_access_log,
+)
 from module.instances import DailyLogWriter
 from module.server.manager import PalServerManager
 from module.steamcmd import steamcmd_platform_args
@@ -168,6 +171,26 @@ def test_start_passes_port_flags(monkeypatch):
     manager.start()
 
     assert captured_cmd["cmd"] == ["PalServer.exe", "-port=8222", "-queryport=27099"]
+
+
+def test_start_omits_disabled_query_port(monkeypatch):
+    captured_cmd = {}
+
+    def popen(cmd, **kwargs):
+        captured_cmd["cmd"] = cmd
+        return FakeProc()
+
+    monkeypatch.setattr(
+        "module.server.manager.psutil.Process", lambda pid: SimpleNamespace(status=lambda: "running")
+    )
+    manager = PalServerManager(
+        Profile(name="test", query_port=0, launch_enable_gamedata_api=False),
+        popen_factory=popen,
+        pty_process_factory=lambda *a, **k: FakeProc(stdout=iter([]), returncode=0),
+    )
+    manager.start()
+
+    assert captured_cmd["cmd"] == ["PalServer.exe", "-port=8211"]
 
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows detached-process behavior is Windows-only")
@@ -797,6 +820,49 @@ def test_palserver_log_writer_normalizes_line_endings_and_drops_empty_lines(tmp_
     writer.close()
 
     assert path.read_bytes() == b"first\nsecond\n"
+
+
+def test_palserver_log_writer_filters_configured_rest_access_logs(tmp_path):
+    path = tmp_path / "palserver.log"
+    writer = PalServerLogWriter(
+        DailyLogWriter(lambda: path),
+        line_filter=is_suppressible_rest_access_log,
+    )
+    writer.write(
+        b"[2026-07-17 21:10:47] [LOG] REST accessed endpoint /v1/api/players OK\n"
+        b"[2026-07-17 21:10:48] [LOG] REST accessed endpoint /v1/api/metrics OK\n"
+        b"[2026-07-17 21:10:49] [LOG] REST accessed endpoint /v1/api/game-data OK\n"
+        b"[2026-07-17 21:10:50] [LOG] REST accessed endpoint /v1/api/info OK\n"
+    )
+    writer.close()
+
+    assert path.read_text(encoding="utf-8") == (
+        "[2026-07-17 21:10:50] [LOG] REST accessed endpoint /v1/api/info OK\n"
+    )
+
+
+def test_server_output_filters_rest_access_logs_but_can_be_disabled():
+    logs = []
+    manager = PalServerManager(Profile(name="test"), logger=logs.append)
+
+    manager._server_output_line(
+        "[2026-07-17 21:10:47] [LOG] REST accessed endpoint /v1/api/players OK"
+    )
+    manager._server_output_line(
+        "[2026-07-17 21:10:48] [LOG] REST accessed endpoint /v1/api/info OK"
+    )
+    assert logs == [
+        "PalServer: [2026-07-17 21:10:48] [LOG] REST accessed endpoint /v1/api/info OK"
+    ]
+
+    manager.profile.suppress_rest_access_logs = False
+    manager._server_output_line(
+        "[2026-07-17 21:10:49] [LOG] REST accessed endpoint /v1/api/players OK"
+    )
+    assert logs[-1] == (
+        "PalServer: [2026-07-17 21:10:49] [LOG] "
+        "REST accessed endpoint /v1/api/players OK"
+    )
 
 
 def test_server_output_sanitizes_adminpassword_in_log_and_audit():

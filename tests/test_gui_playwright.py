@@ -17,7 +17,14 @@ from pathlib import Path
 import pytest
 import psutil
 
-from module.config import Profile, game_user_settings_path, list_profiles, load_profile, save_profile
+from module.config import (
+    Profile,
+    engine_settings_path,
+    game_user_settings_path,
+    list_profiles,
+    load_profile,
+    save_profile,
+)
 from module.instances import create_instance, load_instance, profile_dir, profile_log_path
 from module.games.palworld.server.history import (
     LifecycleEvent,
@@ -53,11 +60,11 @@ def _launch_browser(playwright):
         pytest.skip(f"No Playwright browser available: {first_error}")
 
 
-def _goto(page, port):
+def _goto(page, port, host="127.0.0.1"):
     deadline = time.time() + 20
     while True:
         try:
-            page.goto(f"http://127.0.0.1:{port}", wait_until="networkidle", timeout=2000)
+            page.goto(f"http://{host}:{port}", wait_until="networkidle", timeout=2000)
             return
         except Exception:
             if time.time() > deadline:
@@ -352,6 +359,8 @@ def _gui_page(
     profile_overrides=None,
     extra_env=None,
     seed_profile=True,
+    bind_host="127.0.0.1",
+    connect_host="127.0.0.1",
 ):
     pytest.importorskip("playwright.sync_api")
     from playwright.sync_api import sync_playwright
@@ -380,8 +389,12 @@ def _gui_page(
     port = _free_port()
     env = {**os.environ, "PALSITTER_CONFIG_DIR": str(config_dir)}
     env.update(extra_env or {})
+    command = [sys.executable, "gui.py"]
+    if bind_host is not None:
+        command.extend(["--host", bind_host])
+    command.extend(["--port", str(port)])
     proc = subprocess.Popen(
-        [sys.executable, "gui.py", "--host", "127.0.0.1", "--port", str(port)],
+        command,
         cwd=os.getcwd(),
         env=env,
         stdout=subprocess.PIPE,
@@ -415,7 +428,7 @@ def _gui_page(
                 if "/static/gui/" in response.url and response.status >= 400
                 else None,
             )
-            _goto(page, port)
+            _goto(page, port, connect_host)
             page.locator("#pywebio-scope-brand").get_by_text("Palsitter").wait_for(timeout=5000)
             yield page, config_dir
             page.wait_for_timeout(250)
@@ -466,49 +479,73 @@ def test_home_has_home_updater_settings_utils_and_no_add_server(tmp_path, monkey
 
 
 @pytest.mark.playwright
-def test_home_settings_and_utils_use_shared_section_layout(tmp_path, monkeypatch):
-    pages = [
-        (
-            "Home",
-            "home_page",
-            "home_sections",
-            ["home_preferences", "home_instances_section"],
-            ["Preferences", "Server instances"],
-        ),
-        (
-            "Settings",
-            "webui_settings_panel",
-            "webui_settings_form",
-            ["webui_settings_network", "webui_settings_auth"],
-            ["Network", "HTTP authentication"],
-        ),
-        (
-            "Utils",
-            "overview",
-            "utils_sections",
-            ["util-buttons", "logs"],
-            ["Utilities", "Log"],
-        ),
-    ]
-
+def test_home_and_utils_keep_specialized_layout_while_settings_uses_sections(
+    tmp_path, monkeypatch
+):
     with _gui_page(tmp_path, monkeypatch) as (page, _):
         menu = page.locator("#pywebio-scope-menu")
-        for label, panel_scope, groups_scope, section_scopes, nav_labels in pages:
-            menu.get_by_text(label, exact=True).click()
-            panel = page.locator(f"#pywebio-scope-{panel_scope}")
-            panel.wait_for(timeout=5000)
-            assert panel.locator(".section-layout-navigator").is_visible()
-            assert panel.locator(
-                ".section-layout-navigation-button"
-            ).all_inner_texts() == nav_labels
-            for section_scope in section_scopes:
-                section = page.locator(f"#pywebio-scope-{section_scope}")
-                assert section.evaluate(
-                    "(node, parentId) => "
-                    "node.parentElement.id === parentId && "
-                    "node.classList.contains('panel')",
-                    f"pywebio-scope-{groups_scope}",
-                )
+        home = page.locator("#pywebio-scope-home_page")
+        home.wait_for(timeout=5000)
+        assert "home-dashboard" in (home.get_attribute("class") or "")
+        assert home.locator(".section-layout-navigator").count() == 0
+        assert page.locator("#pywebio-scope-home_preferences").evaluate(
+            "(node) => node.parentElement.id === 'pywebio-scope-home_page' "
+            "&& node.classList.contains('panel')"
+        )
+
+        menu.get_by_text("Settings", exact=True).click()
+        settings = page.locator("#pywebio-scope-webui_settings_panel")
+        settings.wait_for(timeout=5000)
+        assert settings.locator(
+            ".section-layout-navigation-button"
+        ).all_inner_texts() == ["Network", "HTTP authentication"]
+
+        menu.get_by_text("Utils", exact=True).click()
+        utils = page.locator("#pywebio-scope-overview")
+        utils.wait_for(timeout=5000)
+        assert "overview" in (utils.get_attribute("class") or "")
+        assert utils.locator(".section-layout-navigator").count() == 0
+        assert page.locator("#pywebio-scope-util-buttons").evaluate(
+            "(node) => node.parentElement.id === 'pywebio-scope-overview'"
+        )
+        assert page.locator("#pywebio-scope-logs").evaluate(
+            "(node) => node.parentElement.id === 'pywebio-scope-overview'"
+        )
+
+
+@pytest.mark.playwright
+def test_gui_remains_reachable_on_localhost_for_specific_bind_address(tmp_path, monkeypatch):
+    with _gui_page(tmp_path, monkeypatch, bind_host="127.0.0.2") as (page, _):
+        page.get_by_text("Browser url: http://localhost:", exact=False).wait_for(timeout=5000)
+
+
+@pytest.mark.playwright
+def test_folder_actions_are_hidden_for_remote_browser_sessions(tmp_path, monkeypatch):
+    with _gui_page(
+        tmp_path,
+        monkeypatch,
+        bind_host="127.0.0.2",
+        connect_host="127.0.0.2",
+        extra_env={"PALSITTER_TEST_UE4SS_PLATFORM_SUPPORTED": "1"},
+    ) as (page, _):
+        page.locator("#pywebio-scope-aside").get_by_text("default", exact=True).click()
+        menu = page.locator("#pywebio-scope-menu")
+
+        scheduler = page.locator("#pywebio-scope-scheduler_panel")
+        scheduler.wait_for(timeout=5000)
+        assert scheduler.get_by_role("button", name="Open PalServer folder", exact=True).count() == 0
+
+        menu.get_by_text("Mods", exact=True).click()
+        mods = page.locator("#pywebio-scope-mods_panel")
+        mods.wait_for(timeout=5000)
+        assert mods.get_by_role("button", name="Open Lua mods folder", exact=True).count() == 0
+        assert mods.get_by_role("button", name="Open Paks folder", exact=True).count() == 0
+
+        menu.get_by_text("Saves & Backups", exact=True).click()
+        backups = page.locator("#pywebio-scope-backup_settings_panel")
+        backups.wait_for(timeout=5000)
+        assert backups.get_by_role("button", name="Open built-in backup folder", exact=True).count() == 0
+        assert backups.get_by_role("button", name="Open backup folder", exact=True).count() == 0
 
 
 @pytest.mark.playwright
@@ -2762,6 +2799,7 @@ def test_running_header_receives_new_palserver_output(tmp_path, monkeypatch):
             profile_overrides={
                 "executable_args": ["-c", launch_script],
                 "launch_enable_gamedata_api": False,
+                "suppress_rest_access_logs": False,
                 "shutdown_wait_seconds": 0,
             },
             extra_env={"PALSITTER_FAKE_STEAMCMD_CALLS": str(steam_calls)},
@@ -2955,8 +2993,8 @@ def test_palworld_pages_use_independent_section_scopes_and_navigation(
             "Server Settings",
             "settings_panel",
             "settings_form",
-            ["settings_installation", "settings_launch", "settings_instance"],
-            ["Installation", "Launch options", "Instance identity and ports"],
+            ["settings_installation", "settings_launch", "settings_engine"],
+            ["Installation", "Launch options", "Engine Config"],
         ),
         (
             "Auto Restart",
@@ -3182,6 +3220,24 @@ def test_server_settings_are_embedded_and_save(tmp_path, monkeypatch):
         assert query_label_box is not None and query_input_box is not None
         assert abs(query_label_box["y"] - query_input_box["y"]) < 8
         assert query_input_box["x"] > query_label_box["x"] + query_label_box["width"]
+        assert page.locator("#pywebio-scope-settings_launch input[name='settings_query_port']").count() == 1
+        assert page.locator("#pywebio-scope-settings_engine input[name='settings_query_port']").count() == 0
+        assert page.locator('input[name="settings_net_server_max_tick_rate"]').input_value() == "30"
+        assert page.locator('input[name="settings_connection_timeout"]').input_value() == "30"
+        assert page.locator('input[name="settings_initial_connect_timeout"]').input_value() == "60"
+        rest_log_toggle = page.locator(
+            "#pywebio-scope-settings_toggle_suppress_rest_access_logs"
+        )
+        assert rest_log_toggle.get_by_role("button", name="On", exact=True).count() == 1
+        rest_log_toggle.get_by_role("button", name="On", exact=True).click()
+        rest_log_toggle.get_by_role("button", name="Off", exact=True).wait_for(timeout=2000)
+        tick_rate = page.locator('input[name="settings_net_server_max_tick_rate"]')
+        tick_rate.fill("121")
+        page.locator("#pywebio-scope-settings_actions").get_by_role(
+            "button", name="Save", exact=True
+        ).click()
+        page.get_by_text("Enter a tick rate from 1 to 120.", exact=True).wait_for(timeout=5000)
+        tick_rate.fill("30")
         assert page.locator('input[name="settings_game_port"]').count() == 0
         assert page.locator('input[name="settings_rest_host"]').count() == 0
         assert page.locator('input[name="settings_rest_port"]').count() == 0
@@ -3216,9 +3272,13 @@ def test_server_settings_are_embedded_and_save(tmp_path, monkeypatch):
         assert saved.restart_on_crash is True
         assert saved.self_heal_enabled is True
         assert saved.steam_validate is True
+        assert saved.suppress_rest_access_logs is False
         assert f"DedicatedServerName={dedicated_name}" in game_user_settings_path(
             "default"
         ).read_text(encoding="utf-8")
+        engine_path = engine_settings_path("default")
+        assert engine_path.is_file()
+        assert "NetServerMaxTickRate=30" in engine_path.read_text(encoding="utf-8")
 
 
 @pytest.mark.playwright
@@ -3293,6 +3353,24 @@ def test_server_settings_help_icon_shows_real_tooltip_text(tmp_path, monkeypatch
         )
 
         assert help_icon.get_attribute("data-tooltip") == expected
+
+        misc_label = page.locator("#pywebio-scope-settings_form").locator("label").filter(
+            has_text="Suppress REST access logs"
+        ).first
+        misc_help = misc_label.locator(".field-help")
+        misc_help.evaluate(
+            "element => element.scrollIntoView({block: 'end', inline: 'nearest'})"
+        )
+        misc_help.hover()
+        tooltip = page.locator("body > .field-help-tooltip")
+        tooltip.wait_for(timeout=5000)
+        tooltip_box = tooltip.bounding_box()
+        viewport = page.evaluate("({width: innerWidth, height: innerHeight})")
+        assert tooltip_box is not None
+        assert tooltip_box["x"] >= 0
+        assert tooltip_box["y"] >= 0
+        assert tooltip_box["x"] + tooltip_box["width"] <= viewport["width"]
+        assert tooltip_box["y"] + tooltip_box["height"] <= viewport["height"]
 
         launch_tooltips = {
             "Use performance threads":
@@ -4565,6 +4643,8 @@ def test_world_filters_structured_launch_and_auto_restart_settings(tmp_path, mon
         settings = page.locator("#pywebio-scope-settings_panel")
         settings.wait_for(timeout=5000)
         worker = page.locator('input[name="settings_launch_worker_threads_server"]')
+        page.locator("#server-settings-search").wait_for(timeout=5000)
+        page.wait_for_timeout(250)
         page.locator("#server-settings-search").fill("launch_worker_threads_server")
         assert worker.is_visible()
         assert page.locator("#pywebio-scope-settings_launch").is_visible()
@@ -4604,17 +4684,37 @@ def test_world_filters_structured_launch_and_auto_restart_settings(tmp_path, mon
             "() => Array.from(document.querySelectorAll('#pywebio-scope-settings_extra_args_argument_list input[name^=\\\"settings_extra_args_controlled_\\\"]')).some(input => input.value === '-NumberOfWorkerThreadsServer=4')",
             timeout=3000,
         )
+        page.wait_for_function(
+            "() => Array.from(document.querySelectorAll('#pywebio-scope-settings_extra_args_argument_list input[name^=\\\"settings_extra_args_controlled_\\\"]')).some(input => input.value === '-queryport=27015')",
+            timeout=3000,
+        )
+        page.locator('input[name="settings_query_port"]').fill("28000")
+        page.wait_for_function(
+            "() => Array.from(document.querySelectorAll('#pywebio-scope-settings_extra_args_argument_list input[name^=\\\"settings_extra_args_controlled_\\\"]')).some(input => input.value === '-queryport=28000')",
+            timeout=3000,
+        )
+        page.locator('input[name="settings_query_port"]').fill("0")
+        page.wait_for_function(
+            "() => { const input = Array.from(document.querySelectorAll('#pywebio-scope-settings_extra_args_argument_list input[name^=\\\"settings_extra_args_controlled_\\\"]')).find(input => input.value.startsWith('-queryport=')); return input && input.closest('.argument-controlled-input').parentElement.hidden; }",
+            timeout=3000,
+        )
+        assert argument_list.locator('input[name^="settings_extra_args_"]:not([name*="controlled"])').is_visible()
+        page.locator('input[name="settings_query_port"]').fill("28001")
+        page.wait_for_function(
+            "() => { const input = Array.from(document.querySelectorAll('#pywebio-scope-settings_extra_args_argument_list input[name^=\\\"settings_extra_args_controlled_\\\"]')).find(input => input.value === '-queryport=28001'); return input && !input.closest('.argument-controlled-input').parentElement.hidden; }",
+            timeout=3000,
+        )
         perf_toggle = page.locator(
             "#pywebio-scope-settings_toggle_launch_useperfthreads"
         )
         perf_toggle.get_by_role("button", name="On", exact=True).click()
         page.wait_for_function(
-            "() => document.querySelectorAll('#pywebio-scope-settings_extra_args_argument_list input[name^=\\\"settings_extra_args_controlled_\\\"]').length === 3",
+            "() => document.querySelectorAll('#pywebio-scope-settings_extra_args_argument_list input[name^=\\\"settings_extra_args_controlled_\\\"]').length === 4",
             timeout=3000,
         )
         perf_toggle.get_by_role("button", name="Off", exact=True).click()
         page.wait_for_function(
-            "() => document.querySelectorAll('#pywebio-scope-settings_extra_args_argument_list input[name^=\\\"settings_extra_args_controlled_\\\"]').length >= 4",
+            "() => document.querySelectorAll('#pywebio-scope-settings_extra_args_argument_list input[name^=\\\"settings_extra_args_controlled_\\\"]').length >= 5",
             timeout=3000,
         )
 

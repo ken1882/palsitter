@@ -14,6 +14,10 @@ Before implementing:
 - If a simpler approach exists, say so. Push back when warranted.
 - If something is unclear, stop. Name what's confusing. Ask.
 
+After implementation:
+- Summarize changes and methods used to imeplement the feature.
+- Clarify the root cause and how new implementation address the issue when fixing bugs.
+
 ## 2. Simplicity First
 
 **Minimum code that solves the problem. Nothing speculative.**

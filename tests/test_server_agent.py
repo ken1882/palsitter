@@ -123,6 +123,18 @@ def test_agent_resolves_profile_relative_executable_from_repository_root():
     assert command[0] == expected
 
 
+def test_agent_command_omits_disabled_query_port():
+    manager = object.__new__(agent.ServerAgent)
+    manager.profile = PalworldProfile(
+        name="test",
+        executable="PalServer.exe",
+        query_port=0,
+        launch_enable_gamedata_api=False,
+    )
+
+    assert "-queryport=0" not in manager._command()
+
+
 def test_agent_start_command_is_explicit(monkeypatch):
     manager = object.__new__(agent.ServerAgent)
     manager._start_server = lambda: {"server_state": "running"}

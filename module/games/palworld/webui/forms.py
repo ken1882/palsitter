@@ -1,4 +1,5 @@
 from __future__ import annotations
+import math
 import re
 from pywebio.output import put_button, put_row, put_scope, use_scope
 from pywebio.pin import pin, put_input, put_select, put_textarea
@@ -63,6 +64,9 @@ SETTINGS_FIELD_PARENT = {"auto_update_idle_minutes": "auto_update"}
 
 SETTINGS_NUMERIC_FIELDS = {
     "query_port": int,
+    "net_server_max_tick_rate": int,
+    "connection_timeout": float,
+    "initial_connect_timeout": float,
     "backup_interval_minutes": float,
     "backup_retention_count": int,
     "memory_restart_mb": int,
@@ -230,6 +234,34 @@ def _validate_settings_form(data: dict, fields: set[str] | None = None) -> bool:
             caster(value)
         except (TypeError, ValueError):
             _show_field_error(_settings_pin(key), t("validation.number_required"))
+            valid = False
+    if fields is None or "query_port" in fields:
+        try:
+            query_port = int(data.get("query_port"))
+            if not 0 <= query_port <= 65535:
+                raise ValueError
+        except (TypeError, ValueError):
+            _show_field_error(_settings_pin("query_port"), t("validation.port_range"))
+            valid = False
+    if fields is None or "net_server_max_tick_rate" in fields:
+        try:
+            tick_rate = int(data.get("net_server_max_tick_rate"))
+            if not 1 <= tick_rate <= 120:
+                raise ValueError
+        except (TypeError, ValueError):
+            _show_field_error(
+                _settings_pin("net_server_max_tick_rate"),
+                t("validation.tick_rate_range"),
+            )
+            valid = False
+    for key in ("connection_timeout", "initial_connect_timeout"):
+        if fields is not None and key not in fields:
+            continue
+        try:
+            if not math.isfinite(float(data.get(key))) or float(data.get(key)) <= 0:
+                raise ValueError
+        except (TypeError, ValueError):
+            _show_field_error(_settings_pin(key), t("validation.positive_number"))
             valid = False
     for key, mode in BROWSE_FIELD_MODES.items():
         if fields is not None and key not in fields:

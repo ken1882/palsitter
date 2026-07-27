@@ -44,8 +44,9 @@ unsupported game adapters.
   have fixed widths so the table does not shift when the suffix changes. A separate
   confirmed Delete action removes only that Pak file.
 - Each table has a folder icon that opens its directory in the host operating system's
-  default file browser. Lua rows remain read-only, and the page does not provide browser
-  upload controls.
+  default file browser when the browser is connected through localhost. The icon is
+  hidden for remote browser sessions. Lua rows remain read-only, and the page does not
+  provide browser upload controls.
 
 **Tests:** Service tests fake the fixed release download and use temporary Palworld
 installations. `tests/test_gui_playwright.py` clicks the real Mods page, installs a fake

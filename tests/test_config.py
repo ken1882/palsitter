@@ -16,6 +16,7 @@ from module.config import (
     fixed_executable_path,
     fixed_palserver_dir,
     fixed_steamcmd_path,
+    engine_settings_path,
     game_user_settings_path,
     list_profiles,
     load_profile,
@@ -258,6 +259,8 @@ def test_new_instance_creates_server_and_world_settings_before_install(
     create_instance("default", "palworld")
 
     assert game_user_settings_path("default").is_file()
+    assert engine_settings_path("default").is_file()
+    assert engine_settings_path("default").parts[-2:] == (directory, "Engine.ini")
     world_path = (
         fixed_palserver_dir("default")
         / "Pal"
@@ -281,6 +284,7 @@ def test_palworld_fixed_paths_are_windows_aware(tmp_path, monkeypatch):
         "WindowsServer",
         "GameUserSettings.ini",
     )
+    assert engine_settings_path("default").parts[-2:] == ("WindowsServer", "Engine.ini")
 
 
 def test_palworld_fixed_paths_are_linux_aware(tmp_path, monkeypatch):
@@ -301,6 +305,98 @@ def test_palworld_fixed_paths_are_linux_aware(tmp_path, monkeypatch):
         "LinuxServer",
         "GameUserSettings.ini",
     )
+    assert engine_settings_path("default").parts[-2:] == ("LinuxServer", "Engine.ini")
+
+
+@pytest.mark.parametrize("query_port", [0, 1, 65535])
+def test_query_port_accepts_zero_and_boundaries(query_port):
+    profile = Profile.from_dict({"name": "test", "query_port": query_port})
+    assert profile.query_port == query_port
+
+
+@pytest.mark.parametrize("query_port", [-1, 65536])
+def test_query_port_rejects_values_outside_range(query_port):
+    with pytest.raises(ValueError, match="Query port"):
+        Profile.from_dict({"name": "test", "query_port": query_port}).to_game_config()
+
+
+def test_query_port_advanced_argument_is_rejected_as_duplicate():
+    with pytest.raises(ValueError, match="duplicate"):
+        Profile.from_dict({
+            "name": "test",
+            "query_port": 27015,
+            "extra_args": ["-queryport=27016"],
+        })
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    (
+        ("net_server_max_tick_rate", 0),
+        ("net_server_max_tick_rate", 121),
+        ("connection_timeout", 0),
+        ("initial_connect_timeout", 0),
+    ),
+)
+def test_engine_settings_reject_invalid_values(field, value):
+    profile = Profile(name="test")
+    setattr(profile, field, value)
+    with pytest.raises(ValueError):
+        profile.to_game_config()
+
+
+def test_engine_settings_sync_preserves_content_and_migrates_legacy_values(tmp_path, monkeypatch):
+    monkeypatch.setenv("PALSITTER_CONFIG_DIR", str(tmp_path / "config"))
+    monkeypatch.setattr("module.games.palworld.config.WINDOWS", True)
+    profile = Profile(
+        name="legacy",
+        net_server_max_tick_rate=120,
+        connection_timeout=2.25,
+        initial_connect_timeout=60.0,
+    )
+    path = engine_settings_path("legacy")
+    path.parent.mkdir(parents=True)
+    path.write_bytes(
+        b"[/Script/OnlineSubsystemUtils.IpNetDriver]\r\n"
+        b"NetServerMaxTickRate=45\r\n"
+        b"ConnectionTimeout=12.5\r\n"
+        b"InitialConnectTimeout=90.0\r\n"
+        b"[/Script/Other.Section]\r\n"
+        b"Keep=me\r\n"
+    )
+    save_instance(InstanceRecord("legacy", "palworld", {
+        "config_version": PALWORLD_CONFIG_VERSION,
+        "query_port": 27015,
+    }))
+
+    loaded = load_profile("legacy")
+
+    assert (loaded.net_server_max_tick_rate, loaded.connection_timeout, loaded.initial_connect_timeout) == (
+        45,
+        12.5,
+        90.0,
+    )
+    text = path.read_bytes()
+    assert b"Keep=me\r\n" in text
+    assert b"NetServerMaxTickRate=45\r\n" in text
+    assert b"ConnectionTimeout=12.5\r\n" in text
+    assert b"InitialConnectTimeout=90.0\r\n" in text
+    assert b"\n" not in text.replace(b"\r\n", b"")
+
+
+def test_engine_settings_sync_writes_managed_path_without_root_pal(tmp_path, monkeypatch):
+    monkeypatch.setenv("PALSITTER_CONFIG_DIR", str(tmp_path / "config"))
+    monkeypatch.setattr("module.games.palworld.config.WINDOWS", False)
+    profile = Profile(name="managed")
+    save_profile(profile)
+
+    path = engine_settings_path("managed")
+    assert path == (
+        tmp_path / "profile" / "managed" / "steamcmd" / "steamapps"
+        / "common" / "PalServer" / "Pal" / "Saved" / "Config" / "LinuxServer" / "Engine.ini"
+    )
+    assert path.is_file()
+    assert not (tmp_path / "Pal" / "Saved" / "Config" / "LinuxServer" / "Engine.ini").exists()
 
 
 def test_save_profile_syncs_dedicated_server_name_without_replacing_other_settings(
@@ -485,6 +581,7 @@ def test_current_profile_defaults_disable_optional_launch_and_memory_policies():
     assert profile.self_heal_trigger_frame_minutes == 30
     assert profile.self_heal_trigger_crash_times == 2
     assert profile.planned_restart_mode == "off"
+    assert profile.suppress_rest_access_logs is True
 
 
 def test_auto_update_idle_minutes_must_be_positive():

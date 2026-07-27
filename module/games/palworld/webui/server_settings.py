@@ -10,7 +10,7 @@ from module.games.palworld.config import PalworldProfile, fixed_steamcmd_path, l
 from module.steamcmd import ensure_steamcmd, steamcmd_download_url
 from module.webui.i18n import t
 from module.webui.section_layout import SectionSpec, put_section_layout
-from module.webui.session import page_context, register_page_cleanup
+from module.webui.session import is_local_browser_session, page_context, register_page_cleanup
 from module.webui.assets import client_call, put_asset_widget
 
 def _clear_dirty_form_state(*args, **kwargs):
@@ -121,6 +121,7 @@ SETTINGS_TOGGLE_KEYS = (
     "launch_enable_gamedata_api",
     "launch_public_lobby",
     "launch_log_format",
+    "suppress_rest_access_logs",
 )
 
 def render(name: str) -> None:
@@ -135,6 +136,7 @@ def render(name: str) -> None:
         "launch_enable_gamedata_api": profile.launch_enable_gamedata_api,
         "launch_public_lobby": profile.launch_public_lobby,
         "launch_log_format": profile.launch_log_format,
+        "suppress_rest_access_logs": profile.suppress_rest_access_logs,
     }
     local.settings_argument_list_refresh = lambda: _render_extra_args_list()
     clear("content")
@@ -155,9 +157,9 @@ def render(name: str) -> None:
                     ("settings-view",),
                 ),
                 SectionSpec(
-                    "instance",
-                    t("settings.category_instance"),
-                    "settings_instance",
+                    "engine",
+                    t("settings.category_engine_config"),
+                    "settings_engine",
                     ("settings-view",),
                 ),
             ],
@@ -218,6 +220,18 @@ def render(name: str) -> None:
             )
             _settings_toggle(_settings_label("launch_public_lobby"), "launch_public_lobby", escape_label=False)
             _settings_toggle(_settings_label("launch_log_format"), "launch_log_format", escape_label=False)
+            _settings_field(
+                _settings_label("query_port"),
+                "query_port",
+                profile.query_port,
+                type="number",
+                escape_label=False,
+            )
+            client_call(
+                "dom.setControlAttributes",
+                selector='input[name="settings_query_port"]',
+                attributes={"min": 0, "max": 65535, "step": 1},
+            )
             _settings_field_row(
                 _settings_label("extra_args"),
                 _put_argument_list(
@@ -232,20 +246,61 @@ def render(name: str) -> None:
                 escape_label=False,
             )
             _render_extra_args_list()
-        with use_scope("settings_instance"):
-            _settings_category(t("settings.category_instance"), "instance")
+        with use_scope("settings_engine"):
+            _settings_category(t("settings.category_engine_config"), "engine")
             _settings_field(
                 _settings_label("dedicated_server_name"),
                 "dedicated_server_name",
                 profile.dedicated_server_name,
                 escape_label=False,
             )
-            _settings_field(_settings_label("query_port"), "query_port", profile.query_port, type="number", escape_label=False)
+            _settings_field(
+                _settings_label("net_server_max_tick_rate"),
+                "net_server_max_tick_rate",
+                profile.net_server_max_tick_rate,
+                type="number",
+                escape_label=False,
+            )
+            client_call(
+                "dom.setControlAttributes",
+                selector='input[name="settings_net_server_max_tick_rate"]',
+                attributes={"min": 1, "max": 120, "step": 1},
+            )
+            _settings_field(
+                _settings_label("connection_timeout"),
+                "connection_timeout",
+                profile.connection_timeout,
+                type="number",
+                escape_label=False,
+            )
+            client_call(
+                "dom.setControlAttributes",
+                selector='input[name="settings_connection_timeout"]',
+                attributes={"min": 0.1, "step": 0.1},
+            )
+            _settings_field(
+                _settings_label("initial_connect_timeout"),
+                "initial_connect_timeout",
+                profile.initial_connect_timeout,
+                type="number",
+                escape_label=False,
+            )
+            client_call(
+                "dom.setControlAttributes",
+                selector='input[name="settings_initial_connect_timeout"]',
+                attributes={"min": 0.1, "step": 0.1},
+            )
+            _settings_category(t("settings.category_misc"), "misc")
+            _settings_toggle(
+                _settings_label("suppress_rest_access_logs"),
+                "suppress_rest_access_logs",
+                escape_label=False,
+            )
         context = page_context()
         client_call(
             "palworld.serverSettings.mount",
             generation=context.generation if context else None,
-            sectionScopes=["settings_installation", "settings_launch", "settings_instance"],
+            sectionScopes=["settings_installation", "settings_launch", "settings_engine"],
             layoutScope="settings_panel",
         )
         register_page_cleanup(lambda: client_call("palworld.serverSettings.destroy"))
@@ -275,6 +330,9 @@ def _reset_settings(name: str) -> None:
     input_keys = (
         "dedicated_server_name",
         "query_port",
+        "net_server_max_tick_rate",
+        "connection_timeout",
+        "initial_connect_timeout",
         "launch_worker_threads_server",
         "auto_update_idle_minutes",
     )
@@ -305,7 +363,7 @@ def _launch_controlled_arguments() -> list[str]:
     toggles = local.settings_toggles
     arguments: list[str] = []
     if toggles.get("launch_useperfthreads"):
-        arguments.append("-useprefthreads")
+        arguments.append("-useperfthreads")
     if toggles.get("launch_no_async_loading_thread"):
         arguments.append("-NoAsyncLoadingThread")
     if toggles.get("launch_use_multithread_for_ds"):
@@ -319,6 +377,12 @@ def _launch_controlled_arguments() -> list[str]:
         arguments.append("-publiclobby")
     if toggles.get("launch_log_format"):
         arguments.append("-logformat")
+    try:
+        query_port = int(str(getattr(pin, _settings_pin("query_port"), "") or "").strip())
+    except ValueError:
+        query_port = 0
+    if query_port >= 0:
+        arguments.append(f"-queryport={query_port}")
     return arguments
 
 
@@ -351,21 +415,28 @@ def _settings_steamcmd_action(name: str) -> None:
 def _render_steamcmd_action(name: str) -> None:
     steamcmd = fixed_steamcmd_path(name)
     installed = steamcmd.exists()
+    action = (
+        put_button(
+            t("settings.steamcmd_show") if installed else t("settings.steamcmd_download"),
+            onclick=lambda: _open_steamcmd_folder(name) if installed else _download_steamcmd(name),
+            color="secondary" if installed else "primary",
+        )
+        if not installed or is_local_browser_session()
+        else None
+    )
     with use_scope(_steamcmd_action_scope(name), clear=True):
         put_row(
             [
                 put_text(str(steamcmd.parent)),
                 None,
-                put_button(
-                    t("settings.steamcmd_show") if installed else t("settings.steamcmd_download"),
-                    onclick=lambda: _open_steamcmd_folder(name) if installed else _download_steamcmd(name),
-                    color="secondary" if installed else "primary",
-                ),
+                action,
             ],
             size="1fr .5rem auto",
         )
 
 def _open_steamcmd_folder(name: str) -> None:
+    if not is_local_browser_session():
+        return
     folder = fixed_steamcmd_path(name).parent
     try:
         if os.name == "nt":
@@ -402,7 +473,12 @@ def _save_settings(name: str, *, rerender: bool = False) -> bool:
     profile = load_profile(name)
     data = profile.to_dict()
     server_form_fields = {
-        "dedicated_server_name", "query_port", "launch_worker_threads_server",
+        "dedicated_server_name",
+        "query_port",
+        "net_server_max_tick_rate",
+        "connection_timeout",
+        "initial_connect_timeout",
+        "launch_worker_threads_server",
         "auto_update_idle_minutes",
     }
     for key in server_form_fields:
@@ -412,7 +488,11 @@ def _save_settings(name: str, *, rerender: bool = False) -> bool:
     if not _validate_settings_form(
         data,
         {
-            "query_port", "launch_worker_threads_server",
+            "query_port",
+            "net_server_max_tick_rate",
+            "connection_timeout",
+            "initial_connect_timeout",
+            "launch_worker_threads_server",
             "dedicated_server_name", "auto_update_idle_minutes",
         },
     ):
@@ -425,6 +505,10 @@ def _save_settings(name: str, *, rerender: bool = False) -> bool:
     worker_threads = str(data.get("launch_worker_threads_server", "") or "").strip()
     data["launch_worker_threads_server"] = int(worker_threads) if worker_threads else None
     data["auto_update_idle_minutes"] = int(data["auto_update_idle_minutes"])
+    data["query_port"] = int(data["query_port"])
+    data["net_server_max_tick_rate"] = int(data["net_server_max_tick_rate"])
+    data["connection_timeout"] = float(data["connection_timeout"])
+    data["initial_connect_timeout"] = float(data["initial_connect_timeout"])
     data["extra_args"] = _argument_list_values(_settings_pin("extra_args"))
     try:
         updated = Profile.from_dict(data)
@@ -442,6 +526,8 @@ def _save_settings(name: str, *, rerender: bool = False) -> bool:
     return True
 
 def _open_folder(path: Path) -> None:
+    if not is_local_browser_session():
+        return
     path.mkdir(parents=True, exist_ok=True)
     fake_log = os.getenv("PALSITTER_FAKE_OPEN_FOLDER_LOG")
     if fake_log:

@@ -455,13 +455,9 @@
   content: attr(data-icon);
 }
 
-.field-help:hover::after,
-.field-help:focus::after {
-  content: attr(data-tooltip);
-  position: absolute;
-  left: 1.35rem;
-  top: -.25rem;
-  z-index: 20;
+.field-help-tooltip {
+  position: fixed;
+  z-index: 100;
   width: 18rem;
   max-width: 60vw;
   padding: .5rem .6rem;
@@ -474,6 +470,8 @@
   line-height: 1.35;
   white-space: normal;
   text-align: left;
+  pointer-events: none;
+  box-sizing: border-box;
 }
 
 .settings-actions {

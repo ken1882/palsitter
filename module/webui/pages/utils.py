@@ -8,7 +8,6 @@ from pywebio.session import local, register_thread
 from module.games import get_game
 from module.instances import list_instances
 from module.webui.i18n import t
-from module.webui.section_layout import SectionSpec, put_section_layout
 from module.webui.restart import load_state, render_overlay, start_workflow
 from module.webui.shutdown_workflow import render_overlay as render_shutdown_overlay
 from module.webui.shutdown_workflow import stop_gui_only
@@ -289,19 +288,9 @@ def _render_utils() -> None:
         _menu_button(t("nav.utils"), _utils, True)
     clear("content")
     with use_scope("content"):
-        put_section_layout(
-            "overview",
-            [
-                SectionSpec("utilities", t("utils.actions"), "util-buttons"),
-                SectionSpec("log", t("log.title"), "logs"),
-            ],
-            groups_scope="utils_sections",
-            header=[
-                put_asset_widget("shared.panel_title", {"title": t("nav.utils")}),
-            ],
-        )
+        put_scope("overview", [put_scope("util-buttons"), put_scope("logs")])
+        client_call("dom.addClasses", scope="overview", classes=["overview"])
         with use_scope("util-buttons"):
-            put_asset_widget("shared.panel_title", {"title": t("utils.actions")})
             put_button(t("utils.raise_exception"), onclick=_raise_diagnostic_exception)
             put_button(t("utils.force_restart"), onclick=_force_restart)
             put_button(t("utils.shutdown"), onclick=_shutdown_palsitter)

@@ -4,12 +4,13 @@ Reached from the instance navigation menu on [Instance Overview](./instance-over
 embeds the profile form directly in the content area (no modal).
 
 - The panel title is `Settings`; it does not repeat the selected instance name.
-- Installation, Launch options, and Instance identity and ports are sibling section
+- Installation, Launch options, and Engine Config are sibling section
   cards with a right-side navigator. Search hides unmatched rows, empty cards, and their
   navigator entries; category filter chips are not duplicated above the cards.
 
-- The form includes `Query port`; newly created or cloned instances are assigned
+- Launch options includes `Query port`; newly created or cloned instances are assigned
   non-colliding ports automatically (see [Port Allocation](../features/port-allocation.md)).
+  A value of `0` disables the query port and omits `-queryport` from the launch command.
   The player-facing game port, REST port, and REST password are edited only in [World
   Settings](./instance-world-settings.md). Palsitter's REST client always connects to
   `localhost` with the fixed account `admin`.
@@ -36,7 +37,8 @@ embeds the profile form directly in the content area (no modal).
 - The SteamCMD row is not an editable path. It checks
   `profile/<name>/steamcmd/steamcmd.exe` on Windows and
   `profile/<name>/steamcmd/steamcmd` on Linux. If present, `Show` opens its folder with
-  the OS file explorer; otherwise it reports Missing. Installation, update, and
+  the OS file explorer when the browser is connected through localhost; otherwise the
+  `Show` action is hidden. Installation, update, and
   Validate/Repair actions live in Overview's Operations card and follow
   [Installation & Updates](../features/installation-and-updates.md).
 - Every field label has a small circular `[i]` help icon (`.field-help`). Hovering or
@@ -44,7 +46,7 @@ embeds the profile form directly in the content area (no modal).
   keys and describing the behavior implemented by the code path for that field.
 - The Launch Options section has typed controls for `-useperfthreads`,
   `-NoAsyncLoadingThread`, `-UseMultithreadForDS`, `-NumberOfWorkerThreadsServer`,
-  `-enable-gamedata-api`, `-publiclobby`, and `-logformat`, plus an Advanced extra-
+  `-enable-gamedata-api`, `-publiclobby`, and `-logformat`, plus `Query port` and an Advanced extra-
   arguments list. The `Enable Game Data API` control is below `Worker threads`. The extra
   arguments use one text input per argument, with add and remove icon buttons. New profiles
   enable `-useperfthreads` and `-UseMultithreadForDS`, leave `-NoAsyncLoadingThread`
@@ -57,10 +59,24 @@ embeds the profile form directly in the content area (no modal).
   worker-thread number is edited. Advanced arguments preserve order and casing for
   unrecognized values. Save rejects a recognized option repeated there, case-insensitively,
   so one setting cannot produce conflicting arguments. The only editable row has no remove
-  button until a second row is added.
+  button until a second row is added. Query port is omitted from the controlled preview
+  when set to 0.
 - Schema-v2 migration parses recognized legacy executable arguments into typed fields and
   retains all unrecognized arguments in their original order. Migration is atomic and
   does not change an existing profile's effective command line.
+- Engine Config contains `Net server max tick rate`, `Connection timeout`, and `Initial
+  connect timeout`. These values are synchronized to the
+  `[/Script/OnlineSubsystemUtils.IpNetDriver]` section of Engine.ini while preserving
+  unrelated settings. For managed instances, the file is under
+  `profile/<name>/steamcmd/steamapps/common/PalServer/Pal/Saved/Config/WindowsServer/Engine.ini`
+  on Windows or the corresponding `LinuxServer/Engine.ini` path on Linux. Existing valid
+  values are imported when an older profile has no saved Engine Config fields.
+- Engine Config also contains a `Misc` group with `Suppress REST access logs` (default On).
+  It prevents log-size spam caused by frequent Palsitter polling of
+  `/v1/api/players`, `/v1/api/metrics`, and `/v1/api/game-data`. Matching PalServer REST
+  access logs are suppressed for all callers, including external browsers; the REST
+  requests remain enabled. The setting applies when the server output capture starts and
+  does not rewrite historical log files.
 - Crash, memory, and planned restart settings live only on the separate
   [Auto Restart](./instance-auto-restart.md) page.
 - Editing the form reveals a floating unsaved-changes bar pinned above the bottom of the

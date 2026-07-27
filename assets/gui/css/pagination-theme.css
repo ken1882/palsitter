@@ -845,8 +845,7 @@ body.light-palsitter .field-help {
     color: #2c2c2c;
 }
 
-body.light-palsitter .field-help:hover::after,
-body.light-palsitter .field-help:focus::after {
+body.light-palsitter .field-help-tooltip {
     background: #fff;
     border-color: #d3d3d3;
     color: #2c2c2c;

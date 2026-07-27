@@ -53,6 +53,13 @@
             const control = document.querySelector(selector);
             if (control) control.disabled = Boolean(disabled);
         },
+        setControlAttributes({selector, attributes}) {
+            const control = document.querySelector(selector);
+            if (!control) return;
+            for (const [name, value] of Object.entries(attributes || {})) {
+                control.setAttribute(name, String(value));
+            }
+        },
         removeScope({scope}) {
             document.getElementById(`pywebio-scope-${scope}`)?.remove();
         },

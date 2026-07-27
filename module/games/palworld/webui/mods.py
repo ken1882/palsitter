@@ -30,7 +30,7 @@ from module.games.palworld.mods import (
 )
 from module.webui.i18n import t
 from module.webui.section_layout import SectionSpec, put_section_layout
-from module.webui.session import page_context, run_if_current
+from module.webui.session import is_local_browser_session, page_context, run_if_current
 from module.webui.assets import client_call, client_query, put_asset_widget
 
 
@@ -284,12 +284,14 @@ def _render_mod_table(name: str, kind: str) -> None:
         label = t("mods.open_lua_folder") if is_lua else t("mods.open_pak_folder")
         directory = status.lua_dir if is_lua else status.pak_dir
         mods = status.lua_mods if is_lua else status.pak_mods
-        folder = _icon_button(
-            label,
-            "📁",
-            lambda path=directory, pak=not is_lua: _open_mod_folder(path, pak=pak),
-            disabled=directory is None,
-        )
+        folder = None
+        if is_local_browser_session():
+            folder = _icon_button(
+                label,
+                "📁",
+                lambda path=directory, pak=not is_lua: _open_mod_folder(path, pak=pak),
+                disabled=directory is None,
+            )
         put_scope(
             f"mods_{kind}_title_row",
             [put_row(

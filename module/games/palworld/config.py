@@ -24,7 +24,7 @@ from module.instances import (
 
 
 PALWORLD_SERVER_APP_ID = "2394010"
-PALWORLD_CONFIG_VERSION = 5
+PALWORLD_CONFIG_VERSION = 6
 DEDICATED_SERVER_NAME_RE = re.compile(r"^[0-9A-Z]{32}$")
 ADMIN_PASSWORD_RE = re.compile(r"^[a-z0-9]{8}$")
 WINDOWS = os.name == "nt"
@@ -38,12 +38,15 @@ _LAUNCH_SWITCHES = {
     "-enable-gamedata-api": "launch_enable_gamedata_api",
 }
 _WORKER_THREADS_PREFIX = "-numberofworkerthreadsserver="
+_QUERY_PORT_PREFIX = "-queryport="
+ENGINE_CONFIG_SECTION = "[/Script/OnlineSubsystemUtils.IpNetDriver]"
 
 
 def _split_launch_args(args: list[str]) -> tuple[dict[str, Any], list[str]]:
     """Split the legacy argument list without losing unknown argument ordering."""
     values: dict[str, Any] = {field_name: False for field_name in _LAUNCH_SWITCHES.values()}
     values["launch_worker_threads_server"] = None
+    values["query_port"] = 27015
     extra: list[str] = []
     for raw in args:
         argument = str(raw).strip()
@@ -64,13 +67,26 @@ def _split_launch_args(args: list[str]) -> tuple[dict[str, Any], list[str]]:
             if worker_threads > 0:
                 values["launch_worker_threads_server"] = worker_threads
                 continue
+        if folded.startswith(_QUERY_PORT_PREFIX):
+            try:
+                query_port = int(argument.split("=", 1)[1])
+            except ValueError:
+                extra.append(argument)
+                continue
+            if 0 <= query_port <= 65535:
+                values["query_port"] = query_port
+                continue
         extra.append(argument)
     return values, extra
 
 
 def _is_structured_launch_argument(argument: str) -> bool:
     folded = str(argument).strip().casefold()
-    return folded in _LAUNCH_SWITCHES or folded.startswith(_WORKER_THREADS_PREFIX)
+    return (
+        folded in _LAUNCH_SWITCHES
+        or folded.startswith(_WORKER_THREADS_PREFIX)
+        or folded.startswith(_QUERY_PORT_PREFIX)
+    )
 
 
 def legacy_memory_restart_mb(percent: float, total_physical_bytes: int) -> int:
@@ -160,6 +176,91 @@ def game_user_settings_path(name: str) -> Path:
     )
 
 
+def engine_settings_path(name: str) -> Path:
+    return (
+        fixed_palserver_dir(name)
+        / "Pal"
+        / "Saved"
+        / "Config"
+        / server_config_dir_name()
+        / "Engine.ini"
+    )
+
+
+def _read_ini_section(path: Path, section: str) -> dict[str, str]:
+    if not path.exists():
+        return {}
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        lines = handle.read().splitlines()
+    section_index = next((i for i, line in enumerate(lines) if line.strip() == section), None)
+    if section_index is None:
+        return {}
+    end = next(
+        (i for i in range(section_index + 1, len(lines)) if lines[i].strip().startswith("[")),
+        len(lines),
+    )
+    values: dict[str, str] = {}
+    for line in lines[section_index + 1 : end]:
+        if "=" not in line or line.lstrip().startswith((";", "#")):
+            continue
+        key, value = line.split("=", 1)
+        values[key.strip()] = value.strip()
+    return values
+
+
+def _update_ini_section(path: Path, section: str, values: Mapping[str, str]) -> None:
+    if path.exists():
+        with path.open("r", encoding="utf-8", newline="") as handle:
+            text = handle.read()
+        newline = "\r\n" if "\r\n" in text else "\n"
+        lines = text.splitlines()
+        had_trailing_newline = text.endswith(("\n", "\r"))
+    else:
+        newline = "\r\n" if WINDOWS else "\n"
+        lines = []
+        had_trailing_newline = True
+    section_index = next((i for i, line in enumerate(lines) if line.strip() == section), None)
+    if section_index is None:
+        if lines and lines[-1].strip():
+            lines.append("")
+        lines.append(section)
+        lines.extend(f"{key}={value}" for key, value in values.items())
+    else:
+        end = next(
+            (i for i in range(section_index + 1, len(lines)) if lines[i].strip().startswith("[")),
+            len(lines),
+        )
+        for key, value in values.items():
+            prefix = f"{key}="
+            setting_index = next(
+                (i for i in range(section_index + 1, end) if lines[i].strip().startswith(prefix)),
+                None,
+            )
+            if setting_index is None:
+                lines.insert(end, f"{key}={value}")
+                end += 1
+            else:
+                lines[setting_index] = f"{key}={value}"
+    output = newline.join(lines)
+    if had_trailing_newline or lines:
+        output += newline
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        handle.write(output)
+
+
+def _engine_profile_values(profile: "PalworldProfile") -> dict[str, str]:
+    return {
+        "NetServerMaxTickRate": str(int(profile.net_server_max_tick_rate)),
+        "ConnectionTimeout": str(float(profile.connection_timeout)),
+        "InitialConnectTimeout": str(float(profile.initial_connect_timeout)),
+    }
+
+
+def sync_engine_settings(profile: "PalworldProfile") -> None:
+    _update_ini_section(engine_settings_path(profile.name), ENGINE_CONFIG_SECTION, _engine_profile_values(profile))
+
+
 def sync_game_user_settings(profile: "PalworldProfile") -> None:
     path = game_user_settings_path(profile.name)
     section = "[/Script/Pal.PalGameLocalSettings]"
@@ -207,6 +308,10 @@ class PalworldProfile:
     extra_args: list[str] = field(default_factory=list)
     game_port: int = 8211
     query_port: int = 27015
+    net_server_max_tick_rate: int = 30
+    connection_timeout: float = 30.0
+    initial_connect_timeout: float = 60.0
+    suppress_rest_access_logs: bool = True
     steamcmd: str = "steamcmd"
     update_on_start: bool = True
     auto_update: bool = True
@@ -343,6 +448,33 @@ class PalworldProfile:
             raise ValueError("Idle shutdown for update must be at least one minute.")
         self.auto_update_idle_minutes = idle_minutes
 
+    def validate_engine_settings(self) -> None:
+        try:
+            query_port = int(self.query_port)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Query port must be an integer from 0 to 65535.") from exc
+        if not 0 <= query_port <= 65535:
+            raise ValueError("Query port must be an integer from 0 to 65535.")
+        self.query_port = query_port
+        try:
+            tick_rate = int(self.net_server_max_tick_rate)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Net server max tick rate must be an integer from 1 to 120.") from exc
+        if not 1 <= tick_rate <= 120:
+            raise ValueError("Net server max tick rate must be an integer from 1 to 120.")
+        self.net_server_max_tick_rate = tick_rate
+        for field_name, value in (
+            ("Connection timeout", self.connection_timeout),
+            ("Initial connect timeout", self.initial_connect_timeout),
+        ):
+            try:
+                numeric = float(value)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(f"{field_name} must be greater than zero.") from exc
+            if not math.isfinite(numeric) or numeric <= 0:
+                raise ValueError(f"{field_name} must be greater than zero.")
+            setattr(self, field_name.replace(" ", "_").lower(), numeric)
+
     @classmethod
     def from_game_config(cls, name: str, data: Mapping[str, Any]) -> "PalworldProfile":
         values = dict(data)
@@ -384,6 +516,10 @@ class PalworldProfile:
         profile.extra_args = list(profile.extra_args or [])
         if profile.launch_worker_threads_server is not None:
             profile.launch_worker_threads_server = int(profile.launch_worker_threads_server)
+        profile.query_port = int(profile.query_port)
+        profile.net_server_max_tick_rate = int(profile.net_server_max_tick_rate)
+        profile.connection_timeout = float(profile.connection_timeout)
+        profile.initial_connect_timeout = float(profile.initial_connect_timeout)
         profile.auto_update_idle_minutes = int(profile.auto_update_idle_minutes)
         profile.memory_restart_mb = int(profile.memory_restart_mb or 0)
         profile.crash_restart_limit_per_hour = int(profile.crash_restart_limit_per_hour)
@@ -426,6 +562,7 @@ class PalworldProfile:
         self._sync_world_network_settings()
         self._sync_compatibility_launch_args()
         self.validate_restart_schedule()
+        self.validate_engine_settings()
         result = {
             "config_version": PALWORLD_CONFIG_VERSION,
             "launch_useperfthreads": self.launch_useperfthreads,
@@ -438,6 +575,10 @@ class PalworldProfile:
             "extra_args": list(self.extra_args),
             "game_port": self.game_port,
             "query_port": self.query_port,
+            "net_server_max_tick_rate": self.net_server_max_tick_rate,
+            "connection_timeout": self.connection_timeout,
+            "initial_connect_timeout": self.initial_connect_timeout,
+            "suppress_rest_access_logs": self.suppress_rest_access_logs,
             "update_on_start": self.update_on_start,
             "auto_update": self.auto_update,
             "auto_update_idle_minutes": self.auto_update_idle_minutes,
@@ -557,6 +698,28 @@ def load_profile(name: str) -> PalworldProfile:
         or "executable_args" in record.game_config
         or "memory_restart_percent" in record.game_config
     )
+    engine_values = _read_ini_section(engine_settings_path(name), ENGINE_CONFIG_SECTION)
+    for field_name, ini_name, caster in (
+        ("net_server_max_tick_rate", "NetServerMaxTickRate", int),
+        ("connection_timeout", "ConnectionTimeout", float),
+        ("initial_connect_timeout", "InitialConnectTimeout", float),
+    ):
+        if field_name in record.game_config:
+            continue
+        try:
+            value = caster(engine_values[ini_name])
+            if (field_name == "net_server_max_tick_rate" and not 1 <= value <= 120) or (
+                field_name != "net_server_max_tick_rate" and value <= 0
+            ):
+                raise ValueError
+        except (KeyError, TypeError, ValueError):
+            continue
+        setattr(profile, field_name, value)
+        needs_save = True
+    if any(field_name not in record.game_config for field_name in (
+        "net_server_max_tick_rate", "connection_timeout", "initial_connect_timeout"
+    )):
+        needs_save = True
     if (
         "memory_restart_mb" not in record.game_config
         and float(record.game_config.get("memory_restart_percent") or 0) > 0
@@ -583,6 +746,7 @@ def save_profile(profile: PalworldProfile) -> None:
     profile.apply_fixed_paths(keep_backup_dir=profile.backup_dir not in ("", "./backups"))
     save_instance(InstanceRecord(profile.name, "palworld", profile.to_game_config()))
     sync_game_user_settings(profile)
+    sync_engine_settings(profile)
 
 
 def rename_profile(name: str, new_name: str) -> PalworldProfile:
@@ -600,4 +764,5 @@ def rename_profile(name: str, new_name: str) -> PalworldProfile:
     )
     profile.name = record.name
     sync_game_user_settings(profile)
+    sync_engine_settings(profile)
     return profile
