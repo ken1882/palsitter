@@ -106,12 +106,27 @@ def _wait_for_operations(records: list[Any], deadline: float) -> dict[str, dict[
     return failures
 
 
-def _save_one(record: Any) -> tuple[str, str | None]:
+def _save_one(record: Any) -> tuple[str, str | None, bool]:
+    adapter = get_game(record.game)
     try:
         manager = ProcessManager.get(record.name)
-        adapter = get_game(record.game)
         if manager.active or adapter.is_running(record):
             adapter.save_before_shutdown(record)
+    except Exception as exc:
+        is_api_unavailable = getattr(adapter, "is_api_unavailable_error", lambda _: False)
+        return record.name, str(exc), bool(is_api_unavailable(exc))
+    return record.name, None, False
+
+
+def _force_stop_one(record: Any) -> tuple[str, str | None]:
+    manager = ProcessManager.get(record.name)
+    adapter = get_game(record.game)
+    try:
+        if manager.active or manager.alive:
+            if not manager.kill(shutdown=True):
+                return record.name, "Could not force-stop the instance"
+        else:
+            adapter.force_stop(record)
     except Exception as exc:
         return record.name, str(exc)
     return record.name, None
@@ -185,9 +200,31 @@ def shutdown_all(timeout: float = SHUTDOWN_TIMEOUT_SECONDS) -> ShutdownResult:
 
         with ThreadPoolExecutor(max_workers=max(1, len(records))) as executor:
             save_results = executor.map(_save_one, records)
-            save_failures = {name: error for name, error in save_results if error}
+            save_results = list(save_results)
+        save_failures = {
+            name: error for name, error, unavailable in save_results if error and not unavailable
+        }
+        api_unavailable = {
+            name for name, error, unavailable in save_results if error and unavailable
+        }
+        force_failures: dict[str, str] = {}
+        force_stopped: set[str] = set()
         for record in records:
-            if record.name in save_failures:
+            if record.name in api_unavailable:
+                name, error = _force_stop_one(record)
+                if error is None:
+                    force_stopped.add(record.name)
+                    statuses[record.name] = {
+                        "status": "force_stopped",
+                        "message": "REST API unavailable; force-stopped",
+                    }
+                else:
+                    force_failures[name] = error
+                    statuses[record.name] = {
+                        "status": "force_stop_failed",
+                        "message": error,
+                    }
+            elif record.name in save_failures:
                 statuses[record.name] = {
                     "status": "save_failed",
                     "message": save_failures[record.name],
@@ -196,11 +233,14 @@ def shutdown_all(timeout: float = SHUTDOWN_TIMEOUT_SECONDS) -> ShutdownResult:
                 statuses[record.name] = {"status": "saved", "message": "State saved"}
         if save_failures:
             return ShutdownResult(False, statuses, "Could not save every active server")
+        if force_failures:
+            return ShutdownResult(False, statuses, "Could not force-stop every unavailable server")
 
+        stop_records = [record for record in records if record.name not in force_stopped]
         with ThreadPoolExecutor(max_workers=max(1, len(records))) as executor:
-            stop_results = executor.map(_stop_one, records)
+            stop_results = executor.map(_stop_one, stop_records)
             stop_failures = {name: error for name, error in stop_results if error}
-        for record in records:
+        for record in stop_records:
             if record.name in stop_failures:
                 statuses[record.name] = {
                     "status": "stop_failed",
@@ -212,7 +252,7 @@ def shutdown_all(timeout: float = SHUTDOWN_TIMEOUT_SECONDS) -> ShutdownResult:
             return ShutdownResult(False, statuses, "Could not request every server shutdown")
 
         while time.monotonic() < deadline:
-            pending = [record for record in records if ProcessManager.get(record.name).active]
+            pending = [record for record in stop_records if ProcessManager.get(record.name).active]
             if not pending:
                 break
             time.sleep(0.25)
@@ -221,6 +261,8 @@ def shutdown_all(timeout: float = SHUTDOWN_TIMEOUT_SECONDS) -> ShutdownResult:
             verify_results = executor.map(_verify_stopped, records)
             verify_failures = {name: error for name, error in verify_results if error}
         for record in records:
+            if record.name in force_stopped and record.name not in verify_failures:
+                continue
             if record.name in verify_failures:
                 statuses[record.name] = {
                     "status": "shutdown_failed",

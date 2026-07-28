@@ -252,6 +252,13 @@ class GameAdapter:
 
         PalRestClient(self.load_typed_profile(record.name, record.game_config)).save()
 
+    def is_api_unavailable_error(self, error: BaseException) -> bool:
+        if self.id != "palworld":
+            return False
+        from module.games.palworld.server import RestError
+
+        return isinstance(error, RestError)
+
     def is_running(self, record: InstanceRecord) -> bool:
         if not self.runnable:
             return False

@@ -7,6 +7,7 @@ import urllib.request
 from types import SimpleNamespace
 
 from module.webui import desktop_control, shutdown
+from module.games.palworld.server import RestError
 
 
 class FakeManager:
@@ -80,6 +81,34 @@ def test_shutdown_timeout_does_not_force_kill(monkeypatch):
     assert manager.stop_calls == 1
     assert manager.kill_calls == 0
     assert result.instances["alpha"]["status"] == "shutdown_failed"
+
+
+def test_shutdown_all_force_stops_when_save_api_is_unavailable(monkeypatch):
+    record = SimpleNamespace(name="alpha", game="palworld")
+    manager = FakeManager()
+    force_stop_calls = []
+
+    def save_before_shutdown(current):
+        raise RestError("Palworld server is not running or REST API is unavailable")
+
+    adapter = SimpleNamespace(
+        capabilities=SimpleNamespace(lifecycle=True),
+        save_before_shutdown=save_before_shutdown,
+        is_running=lambda current: False,
+        is_api_unavailable_error=lambda error: isinstance(error, RestError),
+        force_stop=lambda current: force_stop_calls.append(current.name),
+    )
+    monkeypatch.setattr(shutdown, "list_instances", lambda: [record])
+    monkeypatch.setattr(shutdown, "get_game", lambda game: adapter)
+    monkeypatch.setattr(shutdown.ProcessManager, "get", lambda name: manager)
+
+    result = shutdown.shutdown_all(timeout=1)
+
+    assert result.ok is True
+    assert manager.kill_calls == 1
+    assert manager.stop_calls == 0
+    assert force_stop_calls == []
+    assert result.instances["alpha"]["status"] == "force_stopped"
 
 
 def test_force_shutdown_kills_every_active_instance(monkeypatch):

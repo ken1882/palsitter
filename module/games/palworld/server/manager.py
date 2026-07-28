@@ -819,7 +819,11 @@ class PalServerManager:
                 stat = path.stat()
                 current_id = (stat.st_dev, stat.st_ino)
                 if file_id is not None and current_id != file_id:
-                    offset = 0
+                    # UE4SS may replace its log while the server is starting
+                    # (for example after SteamCMD replaces the executable).
+                    # The replacement can still contain historical output;
+                    # treat its current end as the new tail position.
+                    offset = stat.st_size
                     pending = b""
                     prefix = b""
                 elif stat.st_size < offset:
@@ -832,7 +836,10 @@ class PalServerManager:
                     with path.open("rb") as handle:
                         current_prefix = handle.read(len(prefix))
                     if current_prefix != prefix:
-                        offset = 0
+                        # The file was rewritten in place.  Do not replay the
+                        # rewritten historical contents, but continue from its
+                        # current end for subsequently appended lines.
+                        offset = stat.st_size
                         pending = b""
                         prefix = b""
 

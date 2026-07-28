@@ -954,6 +954,42 @@ def test_ue4ss_stream_skips_managed_stale_bytes_and_reads_new_lines(tmp_path):
     assert "UE4SS: stale line" not in logs
 
 
+def test_ue4ss_stream_skips_historical_bytes_after_log_replacement(tmp_path):
+    path = tmp_path / "UE4SS.log"
+    path.write_bytes(b"stale line\n")
+    stat = path.stat()
+    logs = []
+    active = threading.Event()
+    active.set()
+    stop_event = threading.Event()
+    manager = PalServerManager(Profile(name="test"), logger=logs.append)
+    thread = threading.Thread(
+        target=manager._stream_ue4ss_output,
+        args=(path, stop_event),
+        kwargs={
+            "initial_offset": stat.st_size,
+            "initial_file_id": (stat.st_dev, stat.st_ino),
+            "active": active.is_set,
+        },
+        daemon=True,
+    )
+    thread.start()
+    time.sleep(0.1)
+
+    replacement = tmp_path / "UE4SS.replacement"
+    replacement.write_bytes(b"stale line\n")
+    replacement.replace(path)
+    time.sleep(0.1)
+    with path.open("ab") as handle:
+        handle.write(b"fresh line\n")
+
+    _wait_for_log(logs, "UE4SS: fresh line")
+    active.clear()
+    stop_event.set()
+    thread.join(timeout=1)
+    assert "UE4SS: stale line" not in logs
+
+
 def test_ue4ss_stream_replays_external_log_handles_partial_utf8_and_truncation(tmp_path):
     path = tmp_path / "UE4SS.log"
     path.write_bytes(b"existing line\npartial")
