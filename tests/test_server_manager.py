@@ -116,9 +116,10 @@ def test_update_failure_prevents_launch(monkeypatch):
     assert launched is False
 
 
-def test_memory_restart_announcement_uses_countdown_value(monkeypatch):
+def test_memory_restart_announcement_uses_datetime_countdown(monkeypatch):
     proc = FakeProc()
     rest = FakeRest()
+    current = [dt.datetime(2026, 1, 1, 0, 0)]
 
     rss = 64 * 1024 * 1024
     monkeypatch.setattr(
@@ -135,6 +136,7 @@ def test_memory_restart_announcement_uses_countdown_value(monkeypatch):
         rest_client=rest,
         popen_factory=lambda *a, **k: proc,
         pty_process_factory=lambda *a, **k: FakeProc(stdout=iter([]), returncode=0),
+        now=lambda: current[0],
     )
     manager.start()
     manager.monitor_once()
@@ -144,6 +146,18 @@ def test_memory_restart_announcement_uses_countdown_value(monkeypatch):
     assert rest.announcements == [
         "Server will restart in 3 minutes due to excessive PalServer memory use"
     ]
+    assert manager.countdown == 3
+
+    current[0] += dt.timedelta(seconds=30)
+    manager.monitor_once()
+    assert rest.announcements == [
+        "Server will restart in 3 minutes due to excessive PalServer memory use"
+    ]
+    assert manager.countdown == 3
+
+    current[0] += dt.timedelta(seconds=30)
+    manager.monitor_once()
+    assert rest.announcements[-1] == "Server will restart in 2 minutes due to excessive PalServer memory use"
     assert manager.countdown == 2
 
 
@@ -1880,7 +1894,39 @@ def test_memory_policy_sums_process_tree_and_requires_three_samples(monkeypatch)
     assert rest.announcements == [
         "Server will restart in 2 minutes due to excessive PalServer memory use"
     ]
-    assert manager.countdown == 1
+    assert manager.countdown == 2
+
+
+def test_memory_policy_uses_a_rolling_one_hour_sample_window(monkeypatch):
+    rest = FakeRest()
+    current = [dt.datetime(2026, 1, 1, 0, 0)]
+    rss = [64 * 1024 * 1024]
+    root = SimpleNamespace(
+        status=lambda: "running",
+        memory_info=lambda: SimpleNamespace(rss=rss[0]),
+        children=lambda recursive: [],
+    )
+    monkeypatch.setattr("module.server.manager.psutil.Process", lambda pid: root)
+    manager = PalServerManager(
+        Profile(name="test", memory_restart_mb=50),
+        rest_client=rest,
+        popen_factory=lambda *args, **kwargs: FakeProc(),
+        now=lambda: current[0],
+    )
+    manager.start()
+
+    manager.monitor_once()
+    current[0] += dt.timedelta(minutes=30)
+    manager.monitor_once()
+    current[0] += dt.timedelta(minutes=31)
+    manager.monitor_once()
+    assert rest.announcements == []
+
+    current[0] += dt.timedelta(minutes=1)
+    manager.monitor_once()
+    assert rest.announcements == [
+        "Server will restart in 10 minutes due to excessive PalServer memory use"
+    ]
 
 
 def test_failed_safety_backup_prevents_self_heal_restore(monkeypatch):
@@ -2039,6 +2085,7 @@ def test_auto_update_checks_after_thirty_minutes_and_restarts_on_verified_idle(
     now = iter(
         [
             dt.datetime(2026, 1, 1, 0, 0),
+            dt.datetime(2026, 1, 1, 0, 30),
             dt.datetime(2026, 1, 1, 0, 30),
         ]
     )

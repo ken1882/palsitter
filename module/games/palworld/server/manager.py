@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import datetime as dt
 import base64
+import math
 import os
 import queue
 import re
@@ -67,7 +68,8 @@ STEAMCMD_PROGRESS_LOG_INTERVAL_SECONDS = 2.0
 STEAMCMD_PROGRESS_RE = re.compile(r"Update state \(0x[0-9a-fA-F]+\).*progress: (\d+\.\d+)")
 ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 PACKED_OUTPUT_RE = re.compile(r"[\u0080-\uffff]+")
-MEMORY_RESTART_SUSTAINED_SAMPLES = 3
+MEMORY_RESTART_SAMPLE_WINDOW_SECONDS = 3600
+MEMORY_RESTART_REQUIRED_SAMPLES = 3
 MEBIBYTE = 1024 * 1024
 CRASH_POLL_INTERVAL_SECONDS = 1
 AUTO_UPDATE_CHECK_INTERVAL_SECONDS = 30 * 60
@@ -239,7 +241,9 @@ class PalServerManager:
         self.countdown_reason: str | None = None
         self.countdown_detail: dict[str, object] = {}
         self.countdown_triggered_at: dt.datetime | None = None
-        self.memory_threshold_samples = 0
+        self.countdown_deadline: dt.datetime | None = None
+        self.countdown_announced_minute: int | None = None
+        self.memory_threshold_times: deque[dt.datetime] = deque()
         self.warning = False
         self.external_attached = False
         self.crash_times: deque[dt.datetime] = deque()
@@ -1046,11 +1050,8 @@ class PalServerManager:
             active=lambda: self.alive,
         )
         self.warning = False
-        self.countdown = -1
-        self.countdown_reason = None
-        self.countdown_detail = {}
-        self.countdown_triggered_at = None
-        self.memory_threshold_samples = 0
+        self._clear_restart_countdown()
+        self.memory_threshold_times.clear()
         self._reset_auto_update_schedule()
         self.state_callback("running")
 
@@ -1127,11 +1128,8 @@ class PalServerManager:
         self._start_server_output(replay_existing=replay_existing)
         self._start_ue4ss_output(replay_existing=replay_existing, active=lambda: self.alive)
         self.warning = False
-        self.countdown = -1
-        self.countdown_reason = None
-        self.countdown_detail = {}
-        self.countdown_triggered_at = None
-        self.memory_threshold_samples = 0
+        self._clear_restart_countdown()
+        self.memory_threshold_times.clear()
         self._reset_auto_update_schedule()
         self.state_callback("running")
         return True
@@ -1302,11 +1300,8 @@ class PalServerManager:
             watchdog.start()
             self._capture_output_thread = watchdog.thread
         self.warning = False
-        self.countdown = -1
-        self.countdown_reason = None
-        self.countdown_detail = {}
-        self.countdown_triggered_at = None
-        self.memory_threshold_samples = 0
+        self._clear_restart_countdown()
+        self.memory_threshold_times.clear()
         self._reset_auto_update_schedule()
         self.state_callback("running")
 
@@ -1580,6 +1575,29 @@ class PalServerManager:
             return 0
         return legacy_memory_restart_mb(legacy_percent, int(total))
 
+    def _clear_restart_countdown(self) -> None:
+        self.countdown = -1
+        self.countdown_reason = None
+        self.countdown_detail = {}
+        self.countdown_triggered_at = None
+        self.countdown_deadline = None
+        self.countdown_announced_minute = None
+
+    def _start_restart_countdown(
+        self,
+        *,
+        minutes: int,
+        reason: str,
+        detail: dict[str, object],
+        now: dt.datetime,
+    ) -> None:
+        self.countdown = int(minutes)
+        self.countdown_reason = reason
+        self.countdown_detail = detail
+        self.countdown_triggered_at = now
+        self.countdown_deadline = now + dt.timedelta(minutes=self.countdown)
+        self.countdown_announced_minute = None
+
     def _auto_update_enabled(self) -> bool:
         return bool(self.profile.update_on_start and self.profile.auto_update)
 
@@ -1679,10 +1697,12 @@ class PalServerManager:
             "available_build_id": info.available_build_id,
             "idle_minutes": int(self.profile.auto_update_idle_minutes),
         }
-        self.countdown = int(self.profile.planned_restart_countdown_minutes)
-        self.countdown_reason = "auto_update"
-        self.countdown_detail = detail
-        self.countdown_triggered_at = now
+        self._start_restart_countdown(
+            minutes=self.profile.planned_restart_countdown_minutes,
+            reason="auto_update",
+            detail=detail,
+            now=now,
+        )
         self.log(
             "Palworld update restart countdown started "
             f"after {self.profile.auto_update_idle_minutes} idle minutes"
@@ -1747,35 +1767,41 @@ class PalServerManager:
             )
             return
         if self.countdown < 0:
-            self.countdown = int(self.profile.planned_restart_countdown_minutes)
-            self.countdown_reason = "planned_restart"
-            self.countdown_detail = detail
-            self.countdown_triggered_at = now
+            self._start_restart_countdown(
+                minutes=self.profile.planned_restart_countdown_minutes,
+                reason="planned_restart",
+                detail=detail,
+                now=now,
+            )
             self.log(f"Planned restart countdown started ({self.countdown} minutes)")
 
     def _check_memory_restart(self) -> None:
         threshold_mb = self._memory_restart_threshold_mb()
         if threshold_mb <= 0:
-            self.memory_threshold_samples = 0
+            self.memory_threshold_times.clear()
             return
+        now = self.now()
+        cutoff = now - dt.timedelta(seconds=MEMORY_RESTART_SAMPLE_WINDOW_SECONDS)
+        while self.memory_threshold_times and self.memory_threshold_times[0] < cutoff:
+            self.memory_threshold_times.popleft()
         rss_mb = self._process_tree_rss_mb()
         if rss_mb > threshold_mb:
-            self.memory_threshold_samples += 1
-        else:
-            self.memory_threshold_samples = 0
+            self.memory_threshold_times.append(now)
         if (
             self.countdown < 0
-            and self.memory_threshold_samples >= MEMORY_RESTART_SUSTAINED_SAMPLES
+            and len(self.memory_threshold_times) >= MEMORY_RESTART_REQUIRED_SAMPLES
         ):
-            self.countdown = int(self.profile.memory_restart_countdown_minutes)
-            self.countdown_reason = "memory_threshold"
-            self.countdown_detail = {
-                "observed_rss_mb": round(rss_mb, 1),
-                "threshold_mb": threshold_mb,
-                "sustained_samples": MEMORY_RESTART_SUSTAINED_SAMPLES,
-            }
-            self.countdown_triggered_at = self.now()
-            self.memory_threshold_samples = 0
+            self._start_restart_countdown(
+                minutes=self.profile.memory_restart_countdown_minutes,
+                reason="memory_threshold",
+                detail={
+                    "observed_rss_mb": round(rss_mb, 1),
+                    "threshold_mb": threshold_mb,
+                    "sustained_samples": MEMORY_RESTART_REQUIRED_SAMPLES,
+                },
+                now=now,
+            )
+            self.memory_threshold_times.clear()
             self.log(
                 f"PalServer process-tree memory threshold exceeded: "
                 f"{rss_mb:.1f} MiB > {threshold_mb} MiB"
@@ -1784,14 +1810,13 @@ class PalServerManager:
     def _process_restart_countdown(self) -> None:
         if self.countdown < 0:
             return
+        now = self.now()
         reason = self.countdown_reason or "automatic_restart"
-        if self.countdown == 0:
-            self.countdown = -1
-            self.countdown_reason = None
+        deadline = self.countdown_deadline or self.countdown_triggered_at or now
+        if now >= deadline:
             detail = self.countdown_detail
             triggered_at = self.countdown_triggered_at
-            self.countdown_detail = {}
-            self.countdown_triggered_at = None
+            self._clear_restart_countdown()
             save_outcome = "world saved"
             try:
                 self.rest.save()
@@ -1831,7 +1856,10 @@ class PalServerManager:
                 detail=detail,
             )
             return
-        minute = self.countdown
+        minute = max(1, math.ceil((deadline - now).total_seconds() / 60))
+        self.countdown = minute
+        if self.countdown_announced_minute == minute:
+            return
         message = (
             f"Server will restart in {minute} minutes due to excessive PalServer memory use"
             if reason == "memory_threshold"
@@ -1843,7 +1871,7 @@ class PalServerManager:
             self.rest.announce(message)
         except Exception as exc:
             self.log(f"{reason.title()} announce failed: {exc}")
-        self.countdown -= 1
+        self.countdown_announced_minute = minute
 
     def monitor_once(self) -> None:
         if self.external_attached:

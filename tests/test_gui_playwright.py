@@ -4828,6 +4828,22 @@ def test_world_filters_structured_launch_and_auto_restart_settings(tmp_path, mon
 
         page.locator("#pywebio-scope-menu").get_by_text("Auto Restart", exact=True).click()
         page.locator("#pywebio-scope-auto_restart_form").wait_for(timeout=5000)
+        memory_section = page.locator("#pywebio-scope-auto_restart_memory")
+        memory_help = memory_section.locator("label.settings-field-label").filter(
+            has_text="Memory restart threshold (MiB)"
+        ).locator(".field-help")
+        assert memory_help.get_attribute("data-tooltip") == (
+            "Restarts after PalServer and its child processes exceed this amount of memory usage "
+            "in three samples within a rolling one-hour window. Samples at or below the threshold "
+            "do not count. Zero disables the policy."
+        )
+        countdown_help = memory_section.locator("label.settings-field-label").filter(
+            has_text="Countdown minutes"
+        ).locator(".field-help")
+        assert countdown_help.get_attribute("data-tooltip") == (
+            "Minutes before a memory restart. Palsitter uses elapsed time from when the countdown "
+            "starts and announces each remaining whole minute before restarting."
+        )
         page.locator('input[name="settings_memory_restart_mb"]').fill("2048")
         page.locator('input[name="settings_crash_restart_limit_per_hour"]').fill("3")
         assert page.locator('input[name="settings_memory_restart_mb"]').input_value() == "2048"

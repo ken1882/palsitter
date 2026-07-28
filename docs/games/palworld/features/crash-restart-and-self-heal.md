@@ -40,10 +40,12 @@ Detach using an explicit requested-operation state set before process terminatio
 - `Process memory restart MiB` defaults to 0, which disables the policy. A positive value
   compares only the combined RSS of the owned PalServer process tree, not whole-machine
   memory or unrelated instances.
-- The threshold must be exceeded in three consecutive supervisor samples. A sample below
-  or equal to the threshold resets the consecutive count.
-- After triggering, Palsitter broadcasts the configured countdown, including each
-  remaining minute, invokes REST Save, gracefully restarts, and does not run SteamCMD.
+- The threshold must be exceeded in three supervisor samples within a rolling one-hour
+  window. Samples at or below the threshold do not count, and samples older than one hour
+  expire from the window.
+- After triggering, Palsitter starts a countdown based on the actual elapsed time,
+  broadcasts each remaining whole minute, invokes REST Save when the deadline arrives,
+  gracefully restarts, and does not run SteamCMD.
 - Legacy percentage-only profiles migrate to
   `ceil(total physical memory MiB × percentage / 100)` so their approximate threshold is
   preserved while changing the measurement to PalServer RSS. Migration is atomic.
@@ -64,7 +66,7 @@ Detach using an explicit requested-operation state set before process terminatio
   routine schedule-created events are excluded.
 
 **Tests:** `tests/test_server_manager.py` fakes process trees, RSS, clocks, REST, backups,
-and exits to cover sustained thresholds, reset samples, planned schedules/countdowns,
+and exits to cover rolling threshold samples, elapsed-time countdowns, planned schedules,
 intentional operations, external attachment, rolling crash caps, manual clearing,
 configurable self-heal frames/counts, strict rollback boundaries, and safety failures.
 Config tests cover defaults and both migrations;
