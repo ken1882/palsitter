@@ -181,6 +181,25 @@ def _render_status(status: FirewallStatus) -> None:
             put_warning(t("tools.manual_block", rules=", ".join(status.external_block_rule_names)))
 
 
+def _status_log_details(status: FirewallStatus) -> str:
+    details = []
+    if status.executable_supported:
+        details.append(
+            f"executable rule: {'allowed' if status.executable_allowed else 'not allowed'}"
+        )
+    else:
+        details.append("executable rule: not applicable")
+    details.append(f"UDP port rule: {'allowed' if status.port_allowed else 'not allowed'}")
+    block_rules = tuple(
+        dict.fromkeys(
+            [*status.owned_block_rule_names, *status.external_block_rule_names]
+        )
+    )
+    if block_rules:
+        details.append(f"matching block rules: {', '.join(block_rules)}")
+    return "; ".join(details)
+
+
 def _check(name: str, *, ask_to_fix: bool = True, context=None) -> None:
     context = context or page_context()
     profile = load_profile(name)
@@ -199,9 +218,9 @@ def _check(name: str, *, ask_to_fix: bool = True, context=None) -> None:
     if status.error:
         _log(name, f"check failed: {status.error}")
     elif status.allowed:
-        _log(name, "check passed")
+        _log(name, f"check passed ({_status_log_details(status)})")
     else:
-        _log(name, "check blocked")
+        _log(name, f"check blocked ({_status_log_details(status)})")
     run_if_current(
         context,
         lambda: _apply_check_result(name, status, ask_to_fix, context),
@@ -264,7 +283,7 @@ def _fix(name: str, status: FirewallStatus, context=None) -> None:
             lambda: _render_fix_error("tools.fix_failed", exc),
         )
         return
-    _log(name, "repair completed")
+    _log(name, "repair command completed; rechecking firewall")
     run_if_current(context, lambda: toast(t("tools.fixed")))
     _check(name, ask_to_fix=False, context=context)
 
@@ -354,9 +373,9 @@ def _retry_check_with_password(name: str, ask_to_fix: bool, context) -> None:
     finally:
         password = ""
     if status.allowed:
-        _log(name, "check passed")
+        _log(name, f"check passed ({_status_log_details(status)})")
     else:
-        _log(name, "check blocked")
+        _log(name, f"check blocked ({_status_log_details(status)})")
     run_if_current(
         context,
         lambda: _apply_check_result(name, status, ask_to_fix, context),
@@ -389,7 +408,7 @@ def _retry_fix_with_password(name: str, status: FirewallStatus, context) -> None
         return
     finally:
         password = ""
-    _log(name, "repair completed")
+    _log(name, "repair command completed; rechecking firewall")
     run_if_current(context, lambda: toast(t("tools.fixed")))
     _check(name, ask_to_fix=False, context=context)
 

@@ -19,7 +19,7 @@ from pywebio.output import (
 from pywebio.pin import pin, put_input, put_select
 from pywebio.session import info, local, register_thread
 
-from module.games.palworld.firewall import (
+from module.firewall import (
     FirewallError,
     FirewallPermissionDenied,
     FirewallService,
@@ -226,7 +226,11 @@ def _retry_firewall_with_password(
         service = FirewallService()
         if action == "fix":
             assert status is not None
-            service.fix_port(status, root_password=password)
+            service.ensure_port(
+                status.port,
+                status.protocol,
+                root_password=password,
+            )
         else:
             status = service.check_port(_web_port(), protocol="tcp", root_password=password)
     except FirewallPermissionDenied:
@@ -275,7 +279,7 @@ def _confirm_firewall_fix(status: PortFirewallStatus, context) -> None:
 def _fix_firewall(status: PortFirewallStatus, context) -> None:
     close_popup()
     try:
-        FirewallService().fix_port(status)
+        FirewallService().ensure_port(status.port, status.protocol)
     except FirewallPermissionDenied as exc:
         _request_firewall_root_password("fix", status, context, exc.command)
         return

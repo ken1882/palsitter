@@ -1,4 +1,5 @@
 import base64
+import inspect
 import json
 import subprocess
 from pathlib import Path
@@ -6,15 +7,17 @@ from types import SimpleNamespace
 
 import pytest
 
+from module import firewall
+from module.firewall import (
+    FirewallPermissionDenied,
+    FirewallService as UniversalFirewallService,
+    _fix_port_script,
+    detect_firewall_backend,
+)
 from module.games.palworld.config import PalworldProfile
 from module.games.palworld.firewall import (
-    FirewallPermissionDenied,
     FirewallService,
-    _fix_port_script,
-    _fix_script,
-    detect_firewall_backend,
     port_rule_name,
-    program_rule_name,
 )
 
 
@@ -61,9 +64,22 @@ def _runner(rules):
     return run
 
 
+def test_universal_firewall_api_signatures():
+    assert tuple(inspect.signature(firewall.check_port).parameters) == (
+        "port",
+        "protocol",
+    )
+    assert tuple(inspect.signature(firewall.check_executable).parameters) == ("path",)
+    assert tuple(inspect.signature(firewall.ensure_port).parameters) == (
+        "port",
+        "protocol",
+        "executable",
+    )
+
+
 def test_generic_tcp_port_fix_uses_port_rule_payload():
     captured = {}
-    service = FirewallService(
+    service = UniversalFirewallService(
         backend="windows",
         supported=True,
         run_command=_runner(
@@ -80,25 +96,53 @@ def test_generic_tcp_port_fix_uses_port_rule_payload():
         or SimpleNamespace(returncode=0, stdout="", stderr=""),
     )
 
-    status = service.check_port(22368, protocol="tcp")
-    service.fix_port(status)
+    service.ensure_port(22368, "tcp")
 
     assert captured == {
         "kind": "port",
         "backend": "windows",
         "port": 22368,
         "protocol": "tcp",
-        "rule_name": "Palsitter-Web-TCP-22368",
-        "display_name": "Palsitter Web TCP 22368",
+        "rule_name": "Palsitter-TCP-22368",
+        "display_name": "Palsitter TCP 22368",
         "remove_names": ["web-block"],
         "remove_rich_rules": [],
         "remove_block_rules": [],
     }
 
 
+def test_ensure_port_removes_matching_executable_block_rule():
+    executable = str(Path("C:/PalServer/PalServer.exe").resolve())
+    captured = {}
+    service = UniversalFirewallService(
+        backend="windows",
+        supported=True,
+        run_command=_runner(
+            [
+                _rule(
+                    name="palserver-block",
+                    action="Block",
+                    program=executable,
+                )
+            ]
+        ),
+        elevated_runner=lambda payload: captured.update(payload)
+        or SimpleNamespace(returncode=0, stdout="", stderr=""),
+    )
+
+    executable_status = service.check_executable(executable)
+    service.ensure_port(8211, "udp", executable=executable)
+
+    assert executable_status.blocked
+    assert executable_status.block_rule_names == ("palserver-block",)
+    assert captured["remove_names"] == ["palserver-block"]
+    assert captured["rule_name"] == "Palsitter-UDP-8211"
+
+
 def test_backend_detection_prefers_active_installed_backend(monkeypatch):
+    monkeypatch.setattr("module.firewall.os.name", "posix")
     monkeypatch.setattr(
-        "module.games.palworld.firewall.shutil.which",
+        "module.firewall.shutil.which",
         lambda command: f"/usr/bin/{command}",
     )
 
@@ -113,8 +157,9 @@ def test_backend_detection_prefers_active_installed_backend(monkeypatch):
 
 
 def test_backend_detection_falls_back_to_installed_backend(monkeypatch):
+    monkeypatch.setattr("module.firewall.os.name", "posix")
     monkeypatch.setattr(
-        "module.games.palworld.firewall.shutil.which",
+        "module.firewall.shutil.which",
         lambda command: "/usr/bin/firewall-cmd" if command == "firewall-cmd" else None,
     )
 
@@ -143,6 +188,8 @@ def test_check_accepts_matching_executable_rule(tmp_path):
 def test_check_accepts_palworld_console_executable_rule(tmp_path):
     profile = _profile(tmp_path)
     console = Path(profile.workdir) / "Pal" / "Binaries" / "Win64" / "PalServer-Win64-Shipping-Cmd.exe"
+    console.parent.mkdir(parents=True)
+    console.touch()
     service = FirewallService(
         backend="windows",
         supported=True,
@@ -233,7 +280,7 @@ def test_windows_port_check_falls_back_for_localized_netsh_output():
     calls = []
     localized_netsh = "規則名稱: Palsitter Web TCP 22368\n已啟用: 是\n方向: 入\n"
     powershell_rules = json.dumps(
-        [_rule(name="Palsitter-Web-TCP-22368", protocol="TCP", local_port="22368")]
+        [_rule(name="Palsitter-TCP-22368", protocol="TCP", local_port="22368")]
     )
 
     def run(args, **kwargs):
@@ -253,7 +300,7 @@ def test_windows_port_check_falls_back_for_localized_netsh_output():
 def test_windows_port_check_falls_back_when_netsh_times_out():
     calls = []
     powershell_rules = json.dumps(
-        [_rule(name="Palsitter-Web-TCP-22368", protocol="TCP", local_port="22368")]
+        [_rule(name="Palsitter-TCP-22368", protocol="TCP", local_port="22368")]
     )
 
     def run(args, **kwargs):
@@ -328,23 +375,7 @@ def test_matching_block_rule_takes_precedence(tmp_path):
     assert result.repairable
 
 
-def test_fix_creates_owned_program_rule_and_removes_owned_block(tmp_path):
-    profile = _profile(tmp_path)
-    captured = {}
-
-    def elevated(payload):
-        captured.update(payload)
-        return SimpleNamespace(returncode=0, stdout="", stderr="")
-
-    status = FirewallService(backend="windows", supported=True, run_command=_runner([])).check(profile)
-    FirewallService(backend="windows", supported=True, elevated_runner=elevated).fix(profile, status)
-
-    assert captured["executable"] == str(Path(profile.executable).resolve())
-    assert captured["rule_name"] == program_rule_name(profile.name)
-    assert captured["remove_names"] == []
-
-
-def test_fix_removes_external_block_rule(tmp_path):
+def test_fix_creates_universal_owned_port_rule(tmp_path):
     profile = _profile(tmp_path)
     captured = {}
 
@@ -358,32 +389,67 @@ def test_fix_removes_external_block_rule(tmp_path):
         run_command=_runner([]),
         elevated_runner=elevated,
     )
-    status = service.check(profile)
-    status = status.__class__(
-        **{**status.__dict__, "external_block_rule_names": ("third-party",), "port_blocked": True}
+    service.fix(profile, service.check(profile))
+
+    assert captured == {
+        "backend": "windows",
+        "kind": "port",
+        "port": 8211,
+        "protocol": "udp",
+        "rule_name": "Palsitter-UDP-8211",
+        "display_name": "Palsitter UDP 8211",
+        "remove_names": [],
+        "remove_rich_rules": [],
+        "remove_block_rules": [],
+    }
+
+
+def test_fix_removes_external_block_rule(tmp_path):
+    profile = _profile(tmp_path)
+    captured = {}
+
+    def elevated(payload):
+        captured.update(payload)
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    service = FirewallService(
+        backend="windows",
+        supported=True,
+        run_command=_runner(
+            [
+                _rule(
+                    name="third-party",
+                    action="Block",
+                    program=str(Path(profile.executable).resolve()),
+                )
+            ]
+        ),
+        elevated_runner=elevated,
     )
+    status = service.check(profile)
 
     service.fix(profile, status)
 
     assert captured["remove_names"] == ["third-party"]
 
 
-def test_windows_fix_suppresses_powershell_progress_clixml():
-    script = _fix_script("C:\\PalServer.exe", "rule-name", "display", ())
-
-    assert "$ProgressPreference = 'SilentlyContinue'" in script
-    assert "Get-NetFirewallRule -Name 'rule-name'" in script
-
-
 def test_windows_port_fix_replaces_existing_owned_rule():
-    script = _fix_port_script(22368, "tcp", "Palsitter-Web-TCP-22368", "display", ())
+    script = _fix_port_script(22368, "tcp", "Palsitter-TCP-22368", "display", ())
 
-    assert "Get-NetFirewallRule -Name 'Palsitter-Web-TCP-22368'" in script
+    assert "Get-NetFirewallRule -Name 'Palsitter-TCP-22368'" in script
     assert "Remove-NetFirewallRule -ErrorAction Stop" in script
 
 
-def test_windows_fix_removes_netsh_rule_names_as_display_names():
-    script = _fix_script("C:\\PalServer.exe", "rule-name", "display", ("Pal",))
+def test_windows_port_fix_removes_block_rules_before_replacing_allow_rule():
+    script = _fix_port_script(8211, "udp", "owned-rule", "display", ("block-rule",))
+
+    assert script.index("foreach ($name in @('block-rule'))") < script.index(
+        "$existing = @"
+    )
+
+
+def test_windows_port_fix_removes_netsh_rule_names_as_display_names():
+    script = _fix_port_script(8211, "udp", "rule-name", "display", ("Pal",))
 
     assert "Get-NetFirewallRule -Name $name" in script
     assert "Get-NetFirewallRule -DisplayName $name" in script
@@ -445,10 +511,10 @@ def test_windows_elevated_fix_collects_helper_output_without_redirect_parameters
         return subprocess.CompletedProcess(args, 1, stdout="outer", stderr="")
 
     monkeypatch.setattr(
-        "module.games.palworld.firewall._read_elevated_result",
+        "module.firewall._read_elevated_result",
         lambda path: ("child stdout", "child stderr"),
     )
-    service = FirewallService(
+    service = UniversalFirewallService(
         backend="windows",
         supported=True,
         run_command=run,
@@ -457,6 +523,7 @@ def test_windows_elevated_fix_collects_helper_output_without_redirect_parameters
     result = service._run_elevated({})
 
     assert "-Verb RunAs" in captured["script"]
+    assert "'module.firewall'" in captured["script"]
     assert "-RedirectStandardOutput" not in captured["script"]
     assert "-RedirectStandardError" not in captured["script"]
     assert "outer\nchild stdout" == result.stdout
@@ -622,13 +689,13 @@ def test_linux_fix_adds_only_the_configured_udp_port(tmp_path, monkeypatch):
         commands.append(args)
         return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
 
-    monkeypatch.setattr("module.games.palworld.firewall.os.geteuid", lambda: 0)
+    monkeypatch.setattr("module.firewall.os.geteuid", lambda: 0, raising=False)
     service = FirewallService(supported=True, backend="iptables", run_command=run)
     status = service.check(profile)
     service.fix(profile, status)
 
     assert commands[0] == ["iptables", "-S", "INPUT"]
-    assert commands[1][-4:] == ["--comment", port_rule_name(profile.name, 8211), "-j", "ACCEPT"]
+    assert commands[-1][-4:] == ["--comment", "Palsitter-UDP-8211", "-j", "ACCEPT"]
 
 
 def test_linux_firewalld_fix_adds_permanent_port_and_reloads(tmp_path):
@@ -639,12 +706,13 @@ def test_linux_firewalld_fix_adds_permanent_port_and_reloads(tmp_path):
         captured.update(payload)
         return SimpleNamespace(returncode=0, stdout="", stderr="")
 
-    status = FirewallService(
+    service = FirewallService(
         supported=True,
         backend="firewalld",
         run_command=lambda args, **kwargs: subprocess.CompletedProcess(args, 0, stdout="", stderr=""),
-    ).check(profile)
-    FirewallService(supported=True, backend="firewalld", elevated_runner=elevated).fix(profile, status)
+        elevated_runner=elevated,
+    )
+    service.fix(profile, service.check(profile))
 
     assert captured["backend"] == "firewalld"
     assert captured["port"] == 8211
@@ -683,9 +751,9 @@ def test_linux_sudo_password_is_sent_only_to_stdin_after_permission_denied(
     profile = _profile(tmp_path)
     calls = []
 
-    monkeypatch.setattr("module.games.palworld.firewall.os.geteuid", lambda: 1000)
+    monkeypatch.setattr("module.firewall.os.geteuid", lambda: 1000, raising=False)
     monkeypatch.setattr(
-        "module.games.palworld.firewall.shutil.which",
+        "module.firewall.shutil.which",
         lambda command: "/usr/bin/sudo" if command == "sudo" else None,
     )
 

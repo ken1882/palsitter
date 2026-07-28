@@ -3,7 +3,7 @@ import json
 import subprocess
 from types import SimpleNamespace
 
-from module.games.palworld.firewall import FirewallService
+from module.firewall import FirewallService
 from module.webui.auth import WebAuth
 from module.webui.global_audit import GlobalAuditEvent, GlobalAuditStore
 from module.webui.settings import (

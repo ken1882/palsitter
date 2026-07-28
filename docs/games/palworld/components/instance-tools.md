@@ -51,10 +51,11 @@ The page also exposes Palworld player-ID migration for imported local worlds:
 - If no matching Allow rule exists, the page asks for confirmation before launching a
   narrowly scoped administrator repair. The Fix Firewall confirmation identifies any
   detected matching Block rules that will be removed.
-- Repair creates a Palsitter-owned executable rule by default on Windows, removes the
-  detected matching Block rules, and rechecks the firewall afterward. On Linux it
-  creates an inbound UDP-port allow rule in the selected backend and removes detected
-  matching deny/drop/reject rules. If Linux elevation is
+- Repair creates a Palsitter-owned inbound UDP-port allow rule on Windows and Linux,
+  using the shared firewall service. On Windows the effective PalServer executable is
+  supplied so matching executable-scoped Block rules are also removed. All detected
+  Block rules are removed before the allow rule is replaced, and the firewall is then
+  rechecked. If Linux elevation is
   denied, the page displays the exact password-free sudo command being retried, asks for
   the root password, and sends it only to that one-time sudo retry; it is never included
   in a rule payload, command argument, instance profile, or log. Third-party Block rules

@@ -25,6 +25,9 @@ The Home secondary menu contains `Home`, `Updater`, `Settings`, and `Utils`.
   For another bind address, it checks the Palsitter web port over TCP and, when the port
   is blocked or has no matching allow rule, offers to remove matching block rules and
   create an allow rule with administrator approval.
+- The game-neutral firewall service provides port checks, executable checks on Windows,
+  and port repair. A repair may receive an executable path so its matching Block rules
+  are removed before the port allow rule is replaced.
 - Saved settings take effect through the shared restart confirmation workflow.
 - Save and Reset update the mounted controls in place without repainting the Settings
   page.

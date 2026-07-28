@@ -2048,6 +2048,20 @@ def test_palworld_tools_checks_and_repairs_windows_firewall(tmp_path, monkeypatc
             "Open", exact=True
         ).wait_for(timeout=5000)
         assert firewall_state.read_text(encoding="utf-8") == "open"
+        page.locator("#pywebio-scope-menu").get_by_text("Overview", exact=True).click()
+        log_box = page.locator("#overview-log-box")
+        log_box.get_by_text(
+            "Firewall: check blocked (executable rule: not allowed; "
+            "UDP port rule: not allowed; matching block rules: third-party-block)",
+            exact=False,
+        ).wait_for(timeout=5000)
+        log_box.get_by_text(
+            "Firewall: repair command completed; rechecking firewall", exact=False
+        ).wait_for(timeout=5000)
+        log_box.get_by_text(
+            "Firewall: check passed (executable rule: allowed; UDP port rule: allowed)",
+            exact=False,
+        ).wait_for(timeout=5000)
         assert page.evaluate(
             "() => document.documentElement.scrollWidth <= document.documentElement.clientWidth"
         )
