@@ -18,7 +18,7 @@ from pywebio.output import (
     use_scope,
 )
 from pywebio.pin import pin, put_input, put_select
-from pywebio.session import register_thread
+from pywebio.session import local, register_thread
 
 from module.games.palworld.backup import BackupService
 from module.games.palworld.config import load_profile, rename_profile
@@ -200,19 +200,60 @@ def _status_log_details(status: FirewallStatus) -> str:
     return "; ".join(details)
 
 
+def _set_tools_firewall_check_disabled(disabled: bool) -> None:
+    client_call(
+        "dom.setControlDisabled",
+        selector="#pywebio-scope-tools_check_button button",
+        disabled=disabled,
+    )
+
+
+def _begin_tools_firewall_check() -> bool:
+    if bool(getattr(local, "tools_firewall_check_busy", False)):
+        return False
+    local.tools_firewall_check_busy = True
+    _set_tools_firewall_check_disabled(True)
+    return True
+
+
+def _end_tools_firewall_check() -> None:
+    local.tools_firewall_check_busy = False
+    _set_tools_firewall_check_disabled(False)
+
+
+def _finish_tools_check(
+    name: str,
+    status: FirewallStatus,
+    ask_to_fix: bool,
+    context,
+) -> None:
+    _end_tools_firewall_check()
+    _apply_check_result(name, status, ask_to_fix, context)
+
+
+def _finish_tools_check_auth(
+    name: str,
+    ask_to_fix: bool,
+    context,
+    command: tuple[str, ...],
+) -> None:
+    _end_tools_firewall_check()
+    _request_check_root_password(name, ask_to_fix, context, command)
+
+
 def _check(name: str, *, ask_to_fix: bool = True, context=None) -> None:
     context = context or page_context()
+    if not _begin_tools_firewall_check():
+        return
     profile = load_profile(name)
     try:
-        status = _service().check(profile)
+        status = _service(name).check(profile)
     except FirewallPermissionDenied as exc:
         _log(name, "check requires administrator authentication")
         command = exc.command
         run_if_current(
             context,
-            lambda: _request_check_root_password(
-                name, ask_to_fix, context, command
-            ),
+            lambda: _finish_tools_check_auth(name, ask_to_fix, context, command),
         )
         return
     if status.error:
@@ -223,7 +264,7 @@ def _check(name: str, *, ask_to_fix: bool = True, context=None) -> None:
         _log(name, f"check blocked ({_status_log_details(status)})")
     run_if_current(
         context,
-        lambda: _apply_check_result(name, status, ask_to_fix, context),
+        lambda: _finish_tools_check(name, status, ask_to_fix, context),
     )
 
 
@@ -355,10 +396,13 @@ def _retry_check_with_password(name: str, ask_to_fix: bool, context) -> None:
             lambda: _render_fix_error("tools.root_password_required", ""),
         )
         return
+    if not _begin_tools_firewall_check():
+        return
     try:
-        status = _service().check(load_profile(name), root_password=password)
+        status = _service(name).check(load_profile(name), root_password=password)
     except FirewallPermissionDenied:
         _log(name, "check failed: administrator authentication was rejected")
+        _end_tools_firewall_check()
         run_if_current(
             context,
             lambda: _render_fix_error(
@@ -368,6 +412,7 @@ def _retry_check_with_password(name: str, ask_to_fix: bool, context) -> None:
         return
     except (FirewallError, OSError) as exc:
         _log(name, f"check failed: {exc}")
+        _end_tools_firewall_check()
         run_if_current(context, lambda: _render_fix_error("tools.check_failed", exc))
         return
     finally:
@@ -378,7 +423,7 @@ def _retry_check_with_password(name: str, ask_to_fix: bool, context) -> None:
         _log(name, f"check blocked ({_status_log_details(status)})")
     run_if_current(
         context,
-        lambda: _apply_check_result(name, status, ask_to_fix, context),
+        lambda: _finish_tools_check(name, status, ask_to_fix, context),
     )
 
 
@@ -834,6 +879,7 @@ def _render_migration_success(backup: Path) -> None:
 
 
 def render(name: str) -> None:
+    local.tools_firewall_check_busy = False
     profile = load_profile(name)
     service = _service()
     executable = str(resolve_executable(profile))
@@ -857,7 +903,12 @@ def render(name: str) -> None:
         firewall_children.append(
             put_scope(
                 "tools_actions",
-                [put_button(t("tools.check"), onclick=lambda: _check(name))],
+                [
+                    put_scope(
+                        "tools_check_button",
+                        [put_button(t("tools.check"), onclick=lambda: _check(name))],
+                    )
+                ],
             )
         )
     with use_scope("content", clear=True):

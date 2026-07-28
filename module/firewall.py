@@ -183,7 +183,9 @@ def _fix_port_script(
         f"-Name {_quote_powershell(rule_name)} "
         f"-DisplayName {_quote_powershell(display_name)} "
         "-Direction Inbound -Action Allow -Enabled True -Profile Any "
-        f"-Protocol {_quote_powershell(protocol)} -LocalPort {int(port)} | Out-Null"
+        f"-Protocol {_quote_powershell(protocol)} -LocalPort {int(port)} | "
+        "Select-Object Name,DisplayName,Enabled,Direction,Action,Profile,Protocol,LocalPort | "
+        "ConvertTo-Json -Compress -Depth 4"
     )
 
 
@@ -753,6 +755,7 @@ class FirewallService:
             text=True,
             timeout=_COMMAND_TIMEOUT,
         )
+        self._log_process_output(result)
         if result.returncode:
             detail = (result.stderr or result.stdout or "").strip()
             raise FirewallError(detail or "Windows Firewall PowerShell query failed")
@@ -778,6 +781,7 @@ class FirewallService:
             command = ["sudo", "-S", "-p", "", *command]
             kwargs["input"] = root_password + "\n"
         result = self.run_command(command, **kwargs)
+        self._log_process_output(result)
         if result.returncode:
             detail = (result.stderr or result.stdout or "").strip()
             if _permission_denied(result):
@@ -836,6 +840,7 @@ class FirewallService:
                     if result.returncode:
                         detail = (result.stderr or result.stdout or "").strip()
                         raise FirewallError(detail or "Windows Firewall query failed")
+                    self._log_process_output(result)
                     rules = self._windows_rules(result.stdout)
                 except subprocess.TimeoutExpired:
                     rules = self._windows_rules("")
@@ -951,6 +956,7 @@ class FirewallService:
                 if result.returncode:
                     detail = (result.stderr or result.stdout or "").strip()
                     raise FirewallError(detail or "Windows Firewall query failed")
+                self._log_process_output(result)
                 rules = self._windows_rules(result.stdout)
             except subprocess.TimeoutExpired:
                 rules = self._windows_rules("")
@@ -1020,6 +1026,14 @@ class FirewallService:
         payload: Mapping[str, Any],
         root_password: str | None = None,
     ) -> None:
+        if self.logger is not None:
+            self.logger(
+                "repair command: "
+                f"backend={payload.get('backend', self.backend)} "
+                f"protocol={payload.get('protocol', '')} "
+                f"port={payload.get('port', '')} "
+                f"remove_rules={','.join(str(name) for name in payload.get('remove_names', ())) or 'none'}"
+            )
         try:
             if root_password is None:
                 result = self.elevated_runner(payload)
@@ -1030,6 +1044,8 @@ class FirewallService:
         except (OSError, subprocess.SubprocessError) as exc:
             raise FirewallError(_command_error(exc, self._firewall_name)) from exc
         self._log_process_output(result)
+        if self.logger is not None and not result.returncode:
+            self.logger(f"repair command exit code: {result.returncode}")
         if result.returncode:
             detail = _process_failure_detail(result)
             if self.backend in _LINUX_BACKENDS and _permission_denied(result):

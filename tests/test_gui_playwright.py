@@ -681,6 +681,9 @@ def test_home_settings_checks_and_repairs_web_firewall(tmp_path, monkeypatch):
         page.locator("#pywebio-scope-webui_firewall_status").get_by_text(
             "TCP port", exact=False
         ).wait_for(timeout=5000)
+        assert settings.get_by_role(
+            "button", name="Check web firewall", exact=True
+        ).is_enabled()
         assert firewall_state.read_text(encoding="utf-8") == "open"
 
 
@@ -699,7 +702,12 @@ def test_home_settings_firewall_check_does_not_update_after_navigation(tmp_path,
         page.locator("#pywebio-scope-menu").get_by_text("Settings", exact=True).click()
         settings = page.locator("#pywebio-scope-webui_settings_panel")
         page.locator('select[name="webui_bind_address"]').select_option(value='"0.0.0.0"')
-        settings.get_by_role("button", name="Check web firewall", exact=True).click()
+        check = settings.get_by_role("button", name="Check web firewall", exact=True)
+        check.click()
+        page.wait_for_function(
+            "() => document.querySelector('#pywebio-scope-webui_firewall_check button')?.disabled === true",
+            timeout=5000,
+        )
         page.locator("#pywebio-scope-menu").get_by_text("Home", exact=True).click()
         page.get_by_role("button", name="Discard changes", exact=True).click()
         page.get_by_text("Browser url: http://localhost:", exact=False).wait_for(timeout=5000)
@@ -2047,6 +2055,7 @@ def test_palworld_tools_checks_and_repairs_windows_firewall(tmp_path, monkeypatc
         page.locator("#pywebio-scope-tools_status").get_by_text(
             "Open", exact=True
         ).wait_for(timeout=5000)
+        assert tools_panel.get_by_role("button", name="Check", exact=True).is_enabled()
         assert firewall_state.read_text(encoding="utf-8") == "open"
         page.locator("#pywebio-scope-menu").get_by_text("Overview", exact=True).click()
         log_box = page.locator("#overview-log-box")
@@ -2146,7 +2155,12 @@ def test_palworld_tools_check_does_not_update_after_navigation(tmp_path, monkeyp
         page.locator("#pywebio-scope-aside").get_by_text("default", exact=True).click()
         page.locator("#pywebio-scope-menu").get_by_text("Tools", exact=True).click()
         tools_panel = page.locator("#pywebio-scope-tools_panel")
-        tools_panel.get_by_role("button", name="Check", exact=True).click()
+        check = tools_panel.get_by_role("button", name="Check", exact=True)
+        check.click()
+        page.wait_for_function(
+            "() => document.querySelector('#pywebio-scope-tools_check_button button')?.disabled === true",
+            timeout=5000,
+        )
         page.wait_for_timeout(100)
         page.locator("#pywebio-scope-menu").get_by_text("Overview", exact=True).click()
         page.locator("#pywebio-scope-overview").wait_for(timeout=5000)

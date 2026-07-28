@@ -103,6 +103,37 @@ def _render_firewall_status(message: str, *, warning: bool = False) -> None:
             put_text(message)
 
 
+def _set_firewall_check_disabled(disabled: bool) -> None:
+    client_call(
+        "dom.setControlDisabled",
+        selector="#pywebio-scope-webui_firewall_check button",
+        disabled=disabled,
+    )
+
+
+def _begin_firewall_check() -> bool:
+    if bool(getattr(local, "webui_firewall_check_busy", False)):
+        return False
+    local.webui_firewall_check_busy = True
+    _set_firewall_check_disabled(True)
+    return True
+
+
+def _end_firewall_check() -> None:
+    local.webui_firewall_check_busy = False
+    _set_firewall_check_disabled(False)
+
+
+def _finish_firewall_check(status: PortFirewallStatus, ask_to_fix: bool, context) -> None:
+    _end_firewall_check()
+    _apply_firewall_result(status, ask_to_fix, context)
+
+
+def _finish_firewall_check_auth(command: tuple[str, ...], context) -> None:
+    _end_firewall_check()
+    _request_firewall_root_password("check", None, context, command)
+
+
 def _web_port() -> int:
     return int(str(info.server_host).rsplit(":", 1)[-1])
 
@@ -222,6 +253,8 @@ def _retry_firewall_with_password(
             t("webui_settings.firewall_root_password_required"), warning=True
         )
         return
+    if action == "check" and not _begin_firewall_check():
+        return
     try:
         service = FirewallService()
         if action == "fix":
@@ -234,12 +267,16 @@ def _retry_firewall_with_password(
         else:
             status = service.check_port(_web_port(), protocol="tcp", root_password=password)
     except FirewallPermissionDenied:
+        if action == "check":
+            _end_firewall_check()
         _render_firewall_status(
             t("webui_settings.firewall_error", error="administrator authentication was rejected"),
             warning=True,
         )
         return
     except (FirewallError, OSError, ValueError) as exc:
+        if action == "check":
+            _end_firewall_check()
         _render_firewall_status(
             t("webui_settings.firewall_error", error=exc), warning=True
         )
@@ -250,6 +287,7 @@ def _retry_firewall_with_password(
         toast(t("webui_settings.firewall_fixed"))
         _check_firewall(ask_to_fix=False, context=context)
     else:
+        _end_firewall_check()
         _apply_firewall_result(status, True, context)
 
 
@@ -297,6 +335,8 @@ def _check_firewall(*, ask_to_fix: bool = True, context=None, root_password=None
     if is_localhost(address):
         _render_firewall_status(t("webui_settings.firewall_localhost"))
         return
+    if not _begin_firewall_check():
+        return
     _render_firewall_status(t("webui_settings.firewall_checking"))
     stop_event = threading.Event()
     register_page_stop_event(stop_event)
@@ -313,9 +353,7 @@ def _check_firewall(*, ask_to_fix: bool = True, context=None, root_password=None
             try:
                 run_if_current(
                     context,
-                    lambda: _request_firewall_root_password(
-                        "check", None, context, exc.command
-                    ),
+                    lambda: _finish_firewall_check_auth(exc.command, context),
                 )
             except SessionException:
                 pass
@@ -328,7 +366,7 @@ def _check_firewall(*, ask_to_fix: bool = True, context=None, root_password=None
         try:
             run_if_current(
                 context,
-                lambda: _apply_firewall_result(status, ask_to_fix, context),
+                lambda: _finish_firewall_check(status, ask_to_fix, context),
             )
         except SessionException:
             return
@@ -439,6 +477,7 @@ def _reset_settings() -> None:
 def _render_settings() -> None:
     if _set_frame(t("nav.settings"), "Home") is None:
         return
+    local.webui_firewall_check_busy = False
     clear("menu")
     with use_scope("menu"):
         _menu_button(t("nav.home"), _home)
@@ -490,7 +529,10 @@ def _render_settings() -> None:
                 value=settings.bind_address,
             )
             put_scope("webui_firewall_status", [put_text(t("webui_settings.firewall_not_checked"))])
-            put_button(t("webui_settings.firewall_check"), onclick=_check_firewall, color="secondary")
+            put_scope(
+                "webui_firewall_check",
+                [put_button(t("webui_settings.firewall_check"), onclick=_check_firewall, color="secondary")],
+            )
         with use_scope("webui_settings_auth"):
             put_asset_widget("shared.panel_title", {"title": t("webui_settings.auth_title")})
             put_text(t("webui_settings.auth_help"))

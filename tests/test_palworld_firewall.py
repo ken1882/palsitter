@@ -438,6 +438,7 @@ def test_windows_port_fix_replaces_existing_owned_rule():
 
     assert "Get-NetFirewallRule -Name 'Palsitter-TCP-22368'" in script
     assert "Remove-NetFirewallRule -ErrorAction Stop" in script
+    assert "Select-Object Name,DisplayName,Enabled,Direction,Action,Profile,Protocol,LocalPort" in script
 
 
 def test_windows_port_fix_removes_block_rules_before_replacing_allow_rule():
@@ -494,10 +495,35 @@ def test_fix_includes_raw_stdout_stderr_and_exit_code(tmp_path):
     assert "stderr: raw stderr reason" in message
     assert "stdout: raw stdout reason" in message
     assert "exit code: 1" in message
-    assert logs == [
+    assert logs[-4:] == [
+        "repair command: backend=windows protocol=udp port=8211 remove_rules=none",
         "stderr: raw stderr reason",
         "stdout: raw stdout reason",
         "exit code: 1",
+    ]
+
+
+def test_fix_logs_successful_command_output_and_exit_code(tmp_path):
+    profile = _profile(tmp_path)
+    logs = []
+    service = FirewallService(
+        backend="windows",
+        supported=True,
+        logger=logs.append,
+        run_command=_runner([]),
+        elevated_runner=lambda payload: SimpleNamespace(
+            returncode=0,
+            stdout='{"Name":"Palsitter-UDP-8211","LocalPort":"8211"}',
+            stderr="",
+        ),
+    )
+
+    service.fix(profile, service.check(profile))
+
+    assert logs[-3:] == [
+        "repair command: backend=windows protocol=udp port=8211 remove_rules=none",
+        'stdout: {"Name":"Palsitter-UDP-8211","LocalPort":"8211"}',
+        "repair command exit code: 0",
     ]
 
 
