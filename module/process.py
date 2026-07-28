@@ -5,6 +5,8 @@ import subprocess
 
 import psutil
 
+from module.debug_log import append_debug_log, log_command_result
+
 
 def pids_listening_on(port: int, proto: str = "tcp") -> set[int]:
     """Return process IDs listening on the requested local port."""
@@ -70,9 +72,14 @@ def kill_by_port(port: int, proto: str = "tcp", grace: float = 5.0) -> list[int]
         try:
             if system == "Windows":
                 # netstat -ano | findstr :<port>
+                command = ["netstat", "-ano"]
                 out = subprocess.check_output(
-                    ["netstat", "-ano"], text=True, errors="ignore"
+                    command,
+                    text=True,
+                    errors="ignore",
+                    stderr=subprocess.STDOUT,
                 )
+                log_command_result("port-check", command, returncode=0, stdout=out)
                 for line in out.splitlines():
                     if f":{port} " in line and "LISTEN" in line.upper():
                         parts = line.split()
@@ -80,14 +87,28 @@ def kill_by_port(port: int, proto: str = "tcp", grace: float = 5.0) -> list[int]
                         pids.add(pid)
             else:
                 # lsof -iTCP:<port> -sTCP:LISTEN -t
+                command = ["lsof", f"-iTCP:{port}", "-sTCP:LISTEN", "-t"]
                 out = subprocess.check_output(
-                    ["lsof", f"-iTCP:{port}", "-sTCP:LISTEN", "-t"],
+                    command,
                     text=True,
                     errors="ignore",
+                    stderr=subprocess.STDOUT,
                 )
+                log_command_result("port-check", command, returncode=0, stdout=out)
                 for line in out.split():
                     pids.add(int(line.strip()))
-        except Exception:
+        except subprocess.CalledProcessError as exc:
+            log_command_result(
+                "port-check",
+                list(exc.cmd)
+                if isinstance(exc.cmd, (list, tuple))
+                else [str(exc.cmd)],
+                returncode=exc.returncode,
+                stdout=exc.output,
+                stderr=exc.stderr,
+            )
+        except Exception as exc:
+            append_debug_log("port-check", f"port lookup failed: {exc}")
             pass
     for pid in list(pids):
         print(f"Killing {pid}")

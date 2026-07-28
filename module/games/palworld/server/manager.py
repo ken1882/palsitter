@@ -51,6 +51,7 @@ from module.games.palworld.update import PalworldUpdateService
 from module.steamcmd import steamcmd_platform_args
 from module.thread_watchdog import ThreadWatchdog
 from module.games.registry import AdapterEvent, UpdateInfo
+from module.debug_log import debug_enabled
 from module.instances import (
     DailyLogWriter,
     clear_runtime,
@@ -1071,7 +1072,11 @@ class PalServerManager:
         server_pid = status.get("server_pid")
         server_state = str(status.get("server_state") or "")
         if server_pid is None or server_state not in {"running", "starting"}:
-            self.agent_client = client
+            try:
+                client.stop()
+            except (OSError, RuntimeError, TimeoutError) as exc:
+                self.log(f"Could not clean up idle PalServer agent: {exc}")
+            self.agent_client = None
             self.process = None
             self.ps_process = None
             self.state_callback("inactive")
@@ -1643,6 +1648,9 @@ class PalServerManager:
             logger=update_logs.append,
             pty_process_factory=self.pty_process_factory,
         ).check_update(force=True)
+        if debug_enabled():
+            for line in update_logs:
+                self.log(f"SteamCMD (automatic): {line}")
         if info.status == "update_available":
             self.auto_update_info = info
             self.log("automatic update check complete, update available")

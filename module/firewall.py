@@ -375,19 +375,19 @@ def _windows_rule_query_script() -> str:
 
 
 def _rule_is_enabled_allow(rule: Mapping[str, Any]) -> bool:
-    return _fold(rule.get("Direction")) in {"in", "inbound"} and _fold(rule.get("Enabled")) in {
+    return _fold(rule.get("Direction")) in {"in", "inbound", "1"} and _fold(rule.get("Enabled")) in {
         "true",
         "yes",
         "1",
-    } and _fold(rule.get("Action")) == "allow"
+    } and _fold(rule.get("Action")) in {"allow", "2"}
 
 
 def _rule_is_enabled_block(rule: Mapping[str, Any]) -> bool:
-    return _fold(rule.get("Direction")) in {"in", "inbound"} and _fold(rule.get("Enabled")) in {
+    return _fold(rule.get("Direction")) in {"in", "inbound", "1"} and _fold(rule.get("Enabled")) in {
         "true",
         "yes",
         "1",
-    } and _fold(rule.get("Action")) == "block"
+    } and _fold(rule.get("Action")) in {"block", "4"}
 
 
 def _firewall_backend_is_active(
@@ -710,9 +710,11 @@ class FirewallService:
         supported: bool | None = None,
         backend: str | None = None,
         logger: OutputLogger | None = None,
+        debug: bool = False,
     ) -> None:
         self.run_command = run_command
         self.logger = logger
+        self.debug = bool(debug)
         self._test_state_path = os.getenv("PALSITTER_TEST_FIREWALL_STATE")
         self._test_delay = float(os.getenv("PALSITTER_TEST_FIREWALL_DELAY", "0") or 0)
         if backend is not None and backend not in {"windows", *_LINUX_BACKENDS}:
@@ -781,7 +783,8 @@ class FirewallService:
             command = ["sudo", "-S", "-p", "", *command]
             kwargs["input"] = root_password + "\n"
         result = self.run_command(command, **kwargs)
-        self._log_process_output(result)
+        if self.backend not in _LINUX_BACKENDS:
+            self._log_process_output(result)
         if result.returncode:
             detail = (result.stderr or result.stdout or "").strip()
             if _permission_denied(result):
@@ -1043,7 +1046,8 @@ class FirewallService:
                 result = self._run_elevated(payload, root_password)
         except (OSError, subprocess.SubprocessError) as exc:
             raise FirewallError(_command_error(exc, self._firewall_name)) from exc
-        self._log_process_output(result)
+        if self.backend not in _LINUX_BACKENDS:
+            self._log_process_output(result)
         if self.logger is not None and not result.returncode:
             self.logger(f"repair command exit code: {result.returncode}")
         if result.returncode:
@@ -1059,7 +1063,7 @@ class FirewallService:
             raise FirewallError(detail or f"{self._firewall_name} repair failed")
 
     def _log_process_output(self, result: subprocess.CompletedProcess) -> None:
-        if self.logger is None:
+        if self.logger is None or not self.debug:
             return
         for stream_name, output in (("stderr", result.stderr), ("stdout", result.stdout)):
             if not output:
@@ -1175,6 +1179,8 @@ class FirewallService:
                 )
         last = subprocess.CompletedProcess([], 0, stdout="", stderr="")
         for command in commands:
+            if self.logger is not None and self.debug:
+                self.logger(f"repair command: {shlex.join([*prefix, *command])}")
             last = self.run_command(
                 [*prefix, *command],
                 capture_output=True,
@@ -1182,6 +1188,7 @@ class FirewallService:
                 timeout=_COMMAND_TIMEOUT,
                 input=input_data,
             )
+            self._log_process_output(last)
             if last.returncode:
                 if _permission_denied(last):
                     detail = (last.stderr or last.stdout or "").strip()

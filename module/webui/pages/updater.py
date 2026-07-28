@@ -6,6 +6,7 @@ from pathlib import Path
 from pywebio.exceptions import SessionException
 from pywebio.output import clear, put_button, put_loading, put_row, put_scope, put_table, put_text, toast, use_scope
 from pywebio.session import local, register_thread
+from module.debug_log import log_command_result
 from module.webui.i18n import t
 from module.webui.session import page_context, register_page_stop_event, register_stop_event, run_if_current
 from module.webui.assets import put_asset_widget
@@ -98,7 +99,7 @@ def _run_git(*args: str, timeout: float = 10) -> subprocess.CompletedProcess:
         f"safe.directory={UPDATER_REPOSITORY}",
         *args,
     ]
-    return subprocess.run(
+    result = subprocess.run(
         git_args,
         cwd=UPDATER_REPOSITORY,
         capture_output=True,
@@ -106,6 +107,14 @@ def _run_git(*args: str, timeout: float = 10) -> subprocess.CompletedProcess:
         timeout=timeout,
         env=env,
     )
+    log_command_result(
+        "updater-git",
+        git_args,
+        returncode=result.returncode,
+        stdout=getattr(result, "stdout", None),
+        stderr=getattr(result, "stderr", None),
+    )
+    return result
 
 
 def _git_diagnostic(result: subprocess.CompletedProcess) -> str:

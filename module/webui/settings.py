@@ -29,6 +29,7 @@ def settings_path() -> Path:
 class WebUISettings:
     bind_address: str = DEFAULT_BIND_ADDRESS
     auto_update: bool = False
+    debug_mode: bool = False
     auth_enabled: bool = False
     auth_username: str = ""
     auth_salt: str = ""
@@ -42,6 +43,7 @@ class WebUISettings:
         return {
             "bind_address": self.bind_address,
             "auto_update": self.auto_update,
+            "debug_mode": self.debug_mode,
             "web_auth": {
                 "enabled": self.auth_enabled,
                 "username": self.auth_username,
@@ -71,6 +73,7 @@ def load_web_settings() -> WebUISettings:
     return WebUISettings(
         bind_address=address,
         auto_update=bool(data.get("auto_update", False)),
+        debug_mode=bool(data.get("debug_mode", False)),
         auth_enabled=bool(auth.get("enabled", False)),
         auth_username=str(auth.get("username") or ""),
         auth_salt=str(auth.get("salt") or ""),

@@ -3,6 +3,7 @@ import json
 import subprocess
 from types import SimpleNamespace
 
+from module.debug_log import debug_log_path, log_command_result
 from module.firewall import FirewallService
 from module.webui.auth import WebAuth
 from module.webui.global_audit import GlobalAuditEvent, GlobalAuditStore
@@ -23,6 +24,7 @@ def test_web_settings_defaults_and_preserves_existing_ui_settings(tmp_path, monk
     monkeypatch.setenv("PALSITTER_CONFIG_DIR", str(config_dir))
     assert load_web_settings().bind_address == DEFAULT_BIND_ADDRESS
     assert load_web_settings().auto_update is False
+    assert load_web_settings().debug_mode is False
 
     config_dir.joinpath("webui").mkdir(parents=True)
     config_dir.joinpath("webui", "settings.json").write_text(
@@ -33,6 +35,7 @@ def test_web_settings_defaults_and_preserves_existing_ui_settings(tmp_path, monk
         WebUISettings(
             bind_address="192.168.1.5",
             auto_update=True,
+            debug_mode=True,
             auth_enabled=True,
             auth_username="admin",
             auth_salt=salt,
@@ -44,8 +47,29 @@ def test_web_settings_defaults_and_preserves_existing_ui_settings(tmp_path, monk
     assert data["theme"] == "light"
     assert load_web_settings().auth_enabled is True
     assert load_web_settings().auto_update is True
+    assert load_web_settings().debug_mode is True
     assert verify_password("secret", salt, digest)
     assert not verify_password("wrong", salt, digest)
+
+
+def test_debug_command_log_requires_debug_mode(tmp_path, monkeypatch):
+    config_dir = tmp_path / "config"
+    monkeypatch.setenv("PALSITTER_CONFIG_DIR", str(config_dir))
+
+    log_command_result(
+        "updater-git", ["git", "status"], returncode=0, stdout="clean\n"
+    )
+    assert not (config_dir / "webui" / "debug").exists()
+
+    save_web_settings(WebUISettings(debug_mode=True))
+    log_command_result(
+        "updater-git", ["git", "status"], returncode=0, stdout="clean\n"
+    )
+
+    output = debug_log_path("updater-git").read_text(encoding="utf-8")
+    assert "command: git status" in output
+    assert "stdout: clean" in output
+    assert "exit code: 0" in output
 
 
 def test_interface_options_include_required_addresses_and_saved_missing_address(monkeypatch):

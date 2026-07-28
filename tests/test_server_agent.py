@@ -11,13 +11,111 @@ from module.config import Profile
 from module.games.palworld.config import PalworldProfile
 from module.games.palworld.server.manager import AgentServerProcess, PalServerManager
 from module.games.palworld.server import agent
-from module.instances import load_agent_state, profile_agent_state_path
+from module.instances import load_agent_state, profile_agent_state_path, save_agent_state
 
 
 def test_pipe_name_is_stable_and_instance_scoped():
     assert agent.pipe_name("Default") == agent.pipe_name("default")
     assert agent.pipe_name("Default") != agent.pipe_name("other")
     assert agent.pipe_name("Default").startswith(r"\\.\pipe\palsitter-agent-v1-")
+
+
+def test_agent_server_is_running_ignores_idle_agent(tmp_path, monkeypatch):
+    monkeypatch.setenv("PALSITTER_CONFIG_DIR", str(tmp_path / "config"))
+    monkeypatch.setenv("PALSITTER_PROFILE_DIR", str(tmp_path / "profile"))
+    create_time = agent._create_time(os.getpid())
+    save_agent_state(
+        "test",
+        {
+            "agent_pid": os.getpid(),
+            "agent_create_time": create_time,
+            "server_state": "stopped",
+        },
+    )
+
+    assert agent.agent_is_running("test")
+    assert not agent.agent_server_is_running("test")
+
+
+def test_agent_server_is_running_requires_live_server_for_running_state(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setenv("PALSITTER_CONFIG_DIR", str(tmp_path / "config"))
+    monkeypatch.setenv("PALSITTER_PROFILE_DIR", str(tmp_path / "profile"))
+    create_time = agent._create_time(os.getpid())
+    save_agent_state(
+        "test",
+        {
+            "agent_pid": os.getpid(),
+            "agent_create_time": create_time,
+            "server_pid": os.getpid(),
+            "server_create_time": create_time,
+            "server_state": "running",
+        },
+    )
+
+    assert agent.agent_server_is_running("test")
+
+
+def test_stop_idle_agent_stops_live_idle_agent(tmp_path, monkeypatch):
+    monkeypatch.setenv("PALSITTER_CONFIG_DIR", str(tmp_path / "config"))
+    monkeypatch.setenv("PALSITTER_PROFILE_DIR", str(tmp_path / "profile"))
+    save_agent_state(
+        "test",
+        {
+            "agent_pid": os.getpid(),
+            "agent_create_time": agent._create_time(os.getpid()),
+            "server_state": "stopped",
+        },
+    )
+    calls = []
+
+    class Client:
+        def status(self):
+            calls.append("status")
+            return {"server_state": "stopped"}
+
+        def stop(self):
+            calls.append("stop")
+            agent.clear_agent_state("test")
+
+    monkeypatch.setattr(agent.AgentClient, "connect_existing", lambda name: Client())
+
+    agent.stop_idle_agent("test")
+
+    assert calls == ["status", "stop"]
+    assert load_agent_state("test") is None
+
+
+def test_agent_idle_lease_expires_only_without_a_server(monkeypatch):
+    manager = object.__new__(agent.ServerAgent)
+    manager.lock = threading.RLock()
+    manager.server_state = "stopped"
+    manager.last_touched_at = 0.0
+    manager._last_touched_monotonic = time.monotonic() - agent.AGENT_IDLE_TIMEOUT_SECONDS - 1
+
+    assert manager._idle_timeout_elapsed()
+
+    manager.server_state = "running"
+    assert not manager._idle_timeout_elapsed()
+
+
+def test_agent_pipe_action_refreshes_idle_lease():
+    manager = object.__new__(agent.ServerAgent)
+    manager.lock = threading.RLock()
+    manager.server_state = "stopped"
+    manager.last_touched_at = 0.0
+    manager._last_touched_monotonic = 0.0
+    manager.status = lambda: {}
+
+    result, close = manager.handle(
+        {"protocol": {"major": 1, "minor": 0}, "command": "status"}
+    )
+
+    assert result == {"ok": True, "result": {}}
+    assert not close
+    assert manager.last_touched_at > 0
+    assert manager._last_touched_monotonic > 0
 
 
 def test_agent_client_sends_versioned_json_request(monkeypatch):
@@ -40,6 +138,28 @@ def test_agent_client_sends_versioned_json_request(monkeypatch):
     assert result == {"server_state": "idle"}
     assert writes[0]["protocol"] == {"major": 1, "minor": 0}
     assert writes[0]["command"] == "status"
+
+
+@pytest.mark.parametrize(("method", "command"), [("stop", "stop"), ("kill", "kill")])
+def test_agent_shutdown_waits_for_agent_cleanup(monkeypatch, method, command):
+    state = {"agent_pid": 123, "agent_create_time": 4.5}
+    waits = []
+    monkeypatch.setattr(agent, "load_agent_state", lambda name: state)
+    monkeypatch.setattr(
+        agent.AgentClient,
+        "request",
+        lambda self, requested: {"command": requested},
+    )
+    monkeypatch.setattr(
+        agent,
+        "_wait_for_agent_exit",
+        lambda name, expected: waits.append((name, expected)),
+    )
+
+    result = getattr(agent.AgentClient("test"), method)()
+
+    assert result == {"command": command}
+    assert waits == [("test", state)]
 
 
 @pytest.mark.skipif(os.name != "nt", reason="PalServer agent is Windows-only")
@@ -137,6 +257,9 @@ def test_agent_command_omits_disabled_query_port():
 
 def test_agent_start_command_is_explicit(monkeypatch):
     manager = object.__new__(agent.ServerAgent)
+    manager.lock = threading.RLock()
+    manager.last_touched_at = 0.0
+    manager._last_touched_monotonic = 0.0
     manager._start_server = lambda: {"server_state": "running"}
     manager._stop_server = lambda force: {"server_state": "stopped"}
     manager.status = lambda: {"server_state": "idle"}
@@ -171,6 +294,10 @@ def test_managed_restore_connects_to_idle_agent_without_starting_server(monkeypa
             calls.append(("start",))
             raise AssertionError("restore must not launch PalServer")
 
+        def stop(self):
+            calls.append(("stop",))
+            return {"server_state": "stopped"}
+
     monkeypatch.setattr("module.games.palworld.server.manager.WINDOWS", True)
     manager = PalServerManager(
         Profile(name="test"),
@@ -181,7 +308,7 @@ def test_managed_restore_connects_to_idle_agent_without_starting_server(monkeypa
 
     manager.start(update=False, manual=False)
 
-    assert calls == [("connect", "test"), ("status",)]
+    assert calls == [("connect", "test"), ("status",), ("stop",)]
     assert manager.process is None
 
 

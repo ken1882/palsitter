@@ -179,7 +179,7 @@ python -m pytest -q
 For the project test workflow, use:
 
 ```bash
-python test.py
+python run_tests.py
 ```
 
 Before submitting a change, also run `python -m compileall -q .` and update the

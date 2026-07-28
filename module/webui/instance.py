@@ -1,5 +1,6 @@
 from __future__ import annotations
 import threading
+from collections.abc import Callable
 from pywebio.exceptions import SessionException
 from pywebio.output import clear, close_popup, popup, put_button, put_loading, put_row, put_scope, put_text, put_warning, toast, use_scope
 from pywebio.pin import pin, put_checkbox, put_input
@@ -305,7 +306,12 @@ def _change_theme(theme: str) -> None:
     client_call("dom.setTheme", theme=selected)
     toast(t("home.theme_selected", theme=t(f"home.{selected}")))
 
-def _delete_instance(name: str) -> None:
+def _delete_instance(
+    name: str,
+    *,
+    delete_guard: Callable[[], str | None] | None = None,
+    delete_prepare: Callable[[], str | None] | None = None,
+) -> None:
     label = _profile_label(name)
     with popup(t("settings.delete"), closable=True) as scope:
         put_asset_widget(
@@ -325,18 +331,33 @@ def _delete_instance(name: str) -> None:
         with use_scope("delete_confirm"):
             put_button(
                 t("settings.delete_yes"),
-                onclick=lambda: _confirm_delete_instance(name),
+                onclick=lambda: _confirm_delete_instance(
+                    name,
+                    delete_guard=delete_guard,
+                    delete_prepare=delete_prepare,
+                ),
                 color="danger",
-                disabled=True,
+                disabled=delete_guard is not None and delete_guard() is not None,
             )
     client_call("instance.configureDeleteConfirmation", target=label)
 
-def _confirm_delete_instance(name: str) -> None:
+def _confirm_delete_instance(
+    name: str,
+    *,
+    delete_guard: Callable[[], str | None] | None = None,
+    delete_prepare: Callable[[], str | None] | None = None,
+) -> None:
     label = _profile_label(name)
     if str(pin.delete_confirm_name or "").strip() != label:
         clear("delete_error")
         put_warning(t("settings.delete_mismatch"), scope="delete_error")
         return
+    if delete_guard is not None:
+        error = delete_guard()
+        if error:
+            clear("delete_error")
+            put_warning(error, scope="delete_error")
+            return
     if bool(pin.delete_wipe_data):
         close_popup()
         with popup(t("settings.delete_wipe_title"), closable=True) as scope:
@@ -349,7 +370,11 @@ def _confirm_delete_instance(name: str) -> None:
                     put_button(
                         t("settings.delete_wipe_yes"),
                         onclick=lambda: _delete_instance_now(
-                            name, wipe_data=True, error_scope="delete_wipe_error"
+                            name,
+                            wipe_data=True,
+                            error_scope="delete_wipe_error",
+                            delete_guard=delete_guard,
+                            delete_prepare=delete_prepare,
                         ),
                         color="danger",
                     ),
@@ -357,13 +382,34 @@ def _confirm_delete_instance(name: str) -> None:
                 size="auto .5rem auto",
             )
         return
-    _delete_instance_now(name)
+    _delete_instance_now(
+        name,
+        delete_guard=delete_guard,
+        delete_prepare=delete_prepare,
+    )
 
 
 def _delete_instance_now(
-    name: str, *, wipe_data: bool = False, error_scope: str = "delete_error"
+    name: str,
+    *,
+    wipe_data: bool = False,
+    error_scope: str = "delete_error",
+    delete_guard: Callable[[], str | None] | None = None,
+    delete_prepare: Callable[[], str | None] | None = None,
 ) -> None:
     label = _profile_label(name)
+    if delete_guard is not None:
+        error = delete_guard()
+        if error:
+            clear(error_scope)
+            put_warning(error, scope=error_scope)
+            return
+    if delete_prepare is not None:
+        error = delete_prepare()
+        if error:
+            clear(error_scope)
+            put_warning(error, scope=error_scope)
+            return
     try:
         delete_instance(name, wipe_data=wipe_data)
     except Exception as exc:

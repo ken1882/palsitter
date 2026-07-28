@@ -113,7 +113,7 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
   process managers, REST clients, SteamCMD, port allocation, or backup services.
 
 ## Commands
-- Run all tests (serial unit/timing-sensitive phases, then two parallel Playwright workers): `python test.py`
+- Run all tests (serial unit/timing-sensitive phases, then two parallel Playwright workers): `python run_tests.py`
 - Run all tests serially: `python -m pytest -q`
 - Run only parallel-safe Playwright GUI tests (two worker processes): `python -m pytest -q -n 2 --dist=load -m "playwright and not serial_playwright"`
 - Debug a timing/order-sensitive failure serially: `python -m pytest -q -n 0 <test-path>`

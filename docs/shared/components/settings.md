@@ -2,8 +2,8 @@
 
 The Home secondary menu contains `Home`, `Updater`, `Settings`, and `Utils`.
 
-- Settings uses the shared section layout in this order: `Network` and
-  `HTTP authentication`. The page title, validation messages, and one shared
+- Settings uses the shared section layout in this order: `Network`, `HTTP authentication`,
+  `Updates`, and `Diagnostics`. The page title, validation messages, and one shared
   Save/Reset bar remain outside those sibling cards.
 - Save and Reset lock immediately in the browser after either action is clicked. A
   validation failure or confirmation prompt unlocks them; successful Save and Reset
@@ -46,6 +46,11 @@ The Home secondary menu contains `Home`, `Updater`, `Settings`, and `Utils`.
 - Global web authentication events are stored under `config/webui/` and appear in
   instance Audit tabs when the selected game provides an Audit page. They are not
   copied into instance audit files.
+
+## Diagnostics
+
+- Settings includes an off-by-default `Debug mode` toggle. When enabled, external command
+  stdout/stderr is written to instance or global debug logs for troubleshooting.
 
 CLI host arguments take precedence over `PALSITTER_HOST`, which takes precedence over
 the saved Settings value. No proxy forwarding header is trusted for source-IP audit

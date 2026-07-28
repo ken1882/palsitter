@@ -51,22 +51,85 @@ function gitPath() {
   return process.platform === 'win32' ? 'git.exe' : 'git';
 }
 
+function debugLogDescriptor(component) {
+  const dataRoot = app.getPath('userData');
+  try {
+    const settings = JSON.parse(fs.readFileSync(
+      path.join(dataRoot, 'config', 'webui', 'settings.json'),
+      'utf8',
+    ));
+    if (!settings || settings.debug_mode !== true) return null;
+    const now = new Date();
+    const date = [now.getFullYear(), now.getMonth() + 1, now.getDate()]
+      .map((value) => String(value).padStart(2, '0')).join('');
+    const directory = path.join(dataRoot, 'config', 'webui', 'debug');
+    fs.mkdirSync(directory, { recursive: true });
+    return fs.openSync(path.join(directory, `${component}-${date}.log`), 'a');
+  } catch (_) {
+    return null;
+  }
+}
+
+function spawnWithDebug(component, executable, args, options = {}) {
+  const descriptor = debugLogDescriptor(component);
+  let child;
+  try {
+    child = spawn(executable, args, {
+      ...options,
+      stdio: descriptor === null ? 'ignore' : ['ignore', descriptor, descriptor],
+    });
+  } catch (error) {
+    if (descriptor !== null) fs.closeSync(descriptor);
+    throw error;
+  }
+  if (descriptor !== null) {
+    let closed = false;
+    const closeDescriptor = () => {
+      if (closed) return;
+      closed = true;
+      try {
+        fs.closeSync(descriptor);
+      } catch (_) {
+        // The child may have already released the inherited descriptor.
+      }
+    };
+    child.once('close', closeDescriptor);
+    child.once('error', closeDescriptor);
+  }
+  return child;
+}
+
+function spawnSyncWithDebug(component, executable, args, options = {}) {
+  const descriptor = debugLogDescriptor(component);
+  try {
+    return spawnSync(executable, args, {
+      ...options,
+      stdio: descriptor === null ? 'ignore' : ['ignore', descriptor, descriptor],
+    });
+  } finally {
+    if (descriptor !== null) {
+      try {
+        fs.closeSync(descriptor);
+      } catch (_) {
+        // The child may have already released the inherited descriptor.
+      }
+    }
+  }
+}
+
 function refreshPackagedRepository() {
   if (!app.isPackaged) return Promise.resolve();
   // Run git asynchronously so the splash window keeps painting instead of
   // freezing the main process while the packaged repository is refreshed.
   return new Promise((resolve) => {
-    const child = spawn(gitPath(), [
+    const child = spawnWithDebug('desktop-git', gitPath(), [
       '-c',
       `safe.directory=${path.resolve(backendRoot())}`,
       '-C',
       backendRoot(),
       'update-index',
       '--refresh',
-    ], {
-      windowsHide: true,
-      stdio: 'ignore',
-    });
+    ], { windowsHide: true });
     child.once('exit', () => resolve());
     child.once('error', () => resolve());
   });
@@ -143,10 +206,11 @@ function startupText(key, values = {}) {
 }
 
 function killPort(port) {
-  const result = spawnSync(
+  const result = spawnSyncWithDebug(
+    'desktop-kill-port',
     pythonPath(),
     [path.join(backendRoot(), 'gui.py'), '--kill-port', String(port)],
-    { cwd: backendRoot(), windowsHide: true, stdio: 'ignore' },
+    { cwd: backendRoot(), windowsHide: true },
   );
   return !result.error && result.status === 0;
 }
@@ -154,9 +218,8 @@ function killPort(port) {
 function forceKillBackend() {
   if (!backend || backendExited) return;
   if (process.platform === 'win32' && backend.pid) {
-    spawnSync('taskkill.exe', ['/PID', String(backend.pid), '/T', '/F'], {
+    spawnSyncWithDebug('desktop-taskkill', 'taskkill.exe', ['/PID', String(backend.pid), '/T', '/F'], {
       windowsHide: true,
-      stdio: 'ignore',
     });
     return;
   }
@@ -456,11 +519,10 @@ async function startBackend({ restarting = false } = {}) {
     '--port', String(webPort),
     '--control-port', String(controlPort),
   ];
-  backend = spawn(pythonPath(), args, {
+  backend = spawnWithDebug('desktop-backend', pythonPath(), args, {
     cwd: backendRoot(),
     env: buildEnvironment(dataRoot),
     windowsHide: true,
-    stdio: ['ignore', 'ignore', 'ignore'],
   });
   backendExited = false;
   backendReady = false;

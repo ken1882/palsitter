@@ -25,8 +25,8 @@
   restarts the GUI child, and adopts managed instances again. External instances are
   only detached and reattached; they are never stopped or killed.
 - Managed restore connects to an existing agent and requests only `ping`/`status`. It
-  never creates a missing restore agent and never sends `start`; an existing idle agent
-  remains idle until the user explicitly starts it after reconnect.
+  never creates a missing restore agent or sends `start`; an existing idle agent is
+  stopped and cleaned up during restore.
 - `Shutdown Palsitter` opens a confirmation popup with `Cancel`, `GUI only`, and `Stop
   all`. `GUI only` closes the GUI while leaving active agents and game servers running.
   `Stop all` uses a shared full-screen stopping overlay: it immediately exposes the

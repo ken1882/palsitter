@@ -148,6 +148,10 @@ def _set_auth_fields_disabled() -> None:
         )
 
 
+def _firewall_service() -> FirewallService:
+    return FirewallService(debug=load_web_settings().debug_mode)
+
+
 def _render_auth_toggle() -> None:
     enabled = bool(getattr(local, "web_auth_enabled", False))
     with use_scope("web_auth_toggle", clear=True):
@@ -168,10 +172,26 @@ def _render_auto_update_toggle() -> None:
         )
 
 
+def _render_debug_mode_toggle() -> None:
+    enabled = bool(getattr(local, "web_debug_mode", False))
+    with use_scope("web_debug_mode_toggle", clear=True):
+        put_button(
+            t("common.on") if enabled else t("common.off"),
+            onclick=_toggle_debug_mode,
+            color="success" if enabled else "secondary",
+        )
+
+
 def _toggle_auto_update() -> None:
     local.web_auto_update = not bool(getattr(local, "web_auto_update", False))
     _mark_dirty_form()
     _render_auto_update_toggle()
+
+
+def _toggle_debug_mode() -> None:
+    local.web_debug_mode = not bool(getattr(local, "web_debug_mode", False))
+    _mark_dirty_form()
+    _render_debug_mode_toggle()
 
 
 def _toggle_auth() -> None:
@@ -256,7 +276,7 @@ def _retry_firewall_with_password(
     if action == "check" and not _begin_firewall_check():
         return
     try:
-        service = FirewallService()
+        service = _firewall_service()
         if action == "fix":
             assert status is not None
             service.ensure_port(
@@ -317,7 +337,7 @@ def _confirm_firewall_fix(status: PortFirewallStatus, context) -> None:
 def _fix_firewall(status: PortFirewallStatus, context) -> None:
     close_popup()
     try:
-        FirewallService().ensure_port(status.port, status.protocol)
+        _firewall_service().ensure_port(status.port, status.protocol)
     except FirewallPermissionDenied as exc:
         _request_firewall_root_password("fix", status, context, exc.command)
         return
@@ -344,7 +364,7 @@ def _check_firewall(*, ask_to_fix: bool = True, context=None, root_password=None
 
     def check() -> None:
         try:
-            status = FirewallService().check_port(
+            status = _firewall_service().check_port(
                 _web_port(), protocol="tcp", root_password=root_password
             )
         except FirewallPermissionDenied as exc:
@@ -376,7 +396,7 @@ def _check_firewall(*, ask_to_fix: bool = True, context=None, root_password=None
     thread.start()
 
 
-def _form_values() -> tuple[str, bool, bool, str, str] | None:
+def _form_values() -> tuple[str, bool, bool, bool, str, str] | None:
     address = str(pin.webui_bind_address or "").strip()
     try:
         address = str(ipaddress.IPv4Address(address))
@@ -385,6 +405,7 @@ def _form_values() -> tuple[str, bool, bool, str, str] | None:
         return None
     enabled = bool(getattr(local, "web_auth_enabled", False))
     auto_update = bool(getattr(local, "web_auto_update", False))
+    debug_mode = bool(getattr(local, "web_debug_mode", False))
     username = str(pin.web_auth_username or "").strip()
     password = str(pin.web_auth_password or "")
     current = load_web_settings()
@@ -394,7 +415,7 @@ def _form_values() -> tuple[str, bool, bool, str, str] | None:
     if enabled and not password and not current.auth_enabled:
         put_warning(t("webui_settings.password_required"), scope="webui_settings_error")
         return None
-    return address, auto_update, enabled, username, password
+    return address, auto_update, debug_mode, enabled, username, password
 
 
 def _save_settings(*, save_anyway: bool = False) -> bool:
@@ -403,7 +424,7 @@ def _save_settings(*, save_anyway: bool = False) -> bool:
     if values is None:
         set_dirty_form_busy(False)
         return False
-    address, auto_update, enabled, username, password = values
+    address, auto_update, debug_mode, enabled, username, password = values
     current = load_web_settings()
     auth_changed = (
         enabled != current.auth_enabled
@@ -441,6 +462,7 @@ def _save_settings(*, save_anyway: bool = False) -> bool:
         WebUISettings(
             bind_address=address,
             auto_update=auto_update,
+            debug_mode=debug_mode,
             auth_enabled=enabled,
             auth_username=username if enabled else "",
             auth_salt=salt,
@@ -458,6 +480,7 @@ def _save_settings(*, save_anyway: bool = False) -> bool:
 def _reset_settings() -> None:
     settings = load_web_settings()
     local.web_auto_update = settings.auto_update
+    local.web_debug_mode = settings.debug_mode
     local.web_auth_enabled = settings.auth_enabled
     update_form_values(
         {
@@ -486,6 +509,7 @@ def _render_settings() -> None:
         _menu_button(t("nav.utils"), _utils)
     settings = load_web_settings()
     local.web_auto_update = settings.auto_update
+    local.web_debug_mode = settings.debug_mode
     local.web_auth_enabled = settings.auth_enabled
     clear("content")
     with use_scope("content"):
@@ -508,6 +532,12 @@ def _render_settings() -> None:
                     "updates",
                     t("webui_settings.updates_title"),
                     "webui_settings_updates",
+                    ("settings-view",),
+                ),
+                SectionSpec(
+                    "diagnostics",
+                    t("webui_settings.diagnostics_title"),
+                    "webui_settings_diagnostics",
                     ("settings-view",),
                 ),
             ],
@@ -553,6 +583,14 @@ def _render_settings() -> None:
             )
             put_text(t("webui_settings.automatic_update_help"))
             _render_auto_update_toggle()
+        with use_scope("webui_settings_diagnostics"):
+            put_asset_widget("shared.panel_title", {"title": t("webui_settings.diagnostics_title")})
+            _settings_field_row(
+                t("webui_settings.debug_mode"),
+                put_scope("web_debug_mode_toggle"),
+            )
+            put_text(t("webui_settings.debug_mode_help"))
+            _render_debug_mode_toggle()
         with use_scope("webui_settings_actions"):
             put_row(
                 [

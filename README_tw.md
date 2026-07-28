@@ -157,7 +157,7 @@ python -m pytest -q
 專案測試流程：
 
 ```bash
-python test.py
+python run_tests.py
 ```
 
 提交變更前，也請執行 `python -m compileall -q .`；修改 GUI 時，請同步更新對應的

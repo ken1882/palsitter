@@ -217,6 +217,31 @@ def test_check_accepts_matching_udp_port_rule(tmp_path):
     assert not result.executable_allowed
 
 
+def test_check_accepts_numeric_windows_rule_properties(tmp_path):
+    profile = _profile(tmp_path)
+    service = FirewallService(
+        backend="windows",
+        supported=True,
+        run_command=_runner(
+            [
+                {
+                    "Name": "Palsitter-UDP-8211",
+                    "Enabled": 1,
+                    "Direction": 1,
+                    "Action": 2,
+                    "Program": ["Any"],
+                    "Protocol": ["UDP"],
+                    "LocalPort": ["8211"],
+                }
+            ]
+        ),
+    )
+
+    result = service.check_port(profile.game_port, protocol="udp")
+
+    assert result.allowed
+
+
 def test_port_matching_ignores_rules_for_other_executables(tmp_path):
     profile = _profile(tmp_path)
     other_executable = r"C:\Program Files\Epic Games\Launcher\Portal\EpicGamesLauncher.exe"
@@ -479,6 +504,7 @@ def test_fix_includes_raw_stdout_stderr_and_exit_code(tmp_path):
         backend="windows",
         supported=True,
         logger=logs.append,
+        debug=True,
         run_command=_runner([]),
         elevated_runner=lambda payload: SimpleNamespace(
             returncode=1,
@@ -510,6 +536,7 @@ def test_fix_logs_successful_command_output_and_exit_code(tmp_path):
         backend="windows",
         supported=True,
         logger=logs.append,
+        debug=True,
         run_command=_runner([]),
         elevated_runner=lambda payload: SimpleNamespace(
             returncode=0,
@@ -523,6 +550,29 @@ def test_fix_logs_successful_command_output_and_exit_code(tmp_path):
     assert logs[-3:] == [
         "repair command: backend=windows protocol=udp port=8211 remove_rules=none",
         'stdout: {"Name":"Palsitter-UDP-8211","LocalPort":"8211"}',
+        "repair command exit code: 0",
+    ]
+
+
+def test_fix_suppresses_process_output_without_debug(tmp_path):
+    profile = _profile(tmp_path)
+    logs = []
+    service = FirewallService(
+        backend="windows",
+        supported=True,
+        logger=logs.append,
+        run_command=_runner([]),
+        elevated_runner=lambda payload: SimpleNamespace(
+            returncode=0,
+            stdout="verbose firewall output",
+            stderr="",
+        ),
+    )
+
+    service.fix(profile, service.check(profile))
+
+    assert logs == [
+        "repair command: backend=windows protocol=udp port=8211 remove_rules=none",
         "repair command exit code: 0",
     ]
 
@@ -722,6 +772,38 @@ def test_linux_fix_adds_only_the_configured_udp_port(tmp_path, monkeypatch):
 
     assert commands[0] == ["iptables", "-S", "INPUT"]
     assert commands[-1][-4:] == ["--comment", "Palsitter-UDP-8211", "-j", "ACCEPT"]
+
+
+def test_linux_repair_logs_each_command_when_debug_enabled(monkeypatch):
+    logs = []
+
+    def run(args, **kwargs):
+        return subprocess.CompletedProcess(args, 0, stdout=f"completed {args[-1]}\n", stderr="")
+
+    monkeypatch.setattr("module.firewall.os.geteuid", lambda: 0, raising=False)
+    service = FirewallService(
+        supported=True,
+        backend="firewalld",
+        run_command=run,
+        logger=logs.append,
+        debug=True,
+    )
+
+    service._run_linux_elevated(
+        {
+            "backend": "firewalld",
+            "port": 8211,
+            "protocol": "udp",
+            "remove_rich_rules": [],
+        }
+    )
+
+    assert logs == [
+        "repair command: firewall-cmd --permanent --add-port=8211/udp",
+        "stdout: completed --add-port=8211/udp",
+        "repair command: firewall-cmd --reload",
+        "stdout: completed --reload",
+    ]
 
 
 def test_linux_firewalld_fix_adds_permanent_port_and_reloads(tmp_path):

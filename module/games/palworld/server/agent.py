@@ -52,12 +52,15 @@ from module.instances import (
 )
 from module.pty_process import PtyProcessLike, spawn_pty_process
 from module.thread_watchdog import ThreadWatchdog
+from module.debug_log import open_debug_log
 
 
 PROTOCOL_MAJOR = 1
 PROTOCOL_MINOR = 0
 AGENT_IMPLEMENTATION = 2
 AGENT_CONNECT_TIMEOUT = 10.0
+AGENT_IDLE_TIMEOUT_SECONDS = 60 * 60
+AGENT_IDLE_CHECK_INTERVAL_SECONDS = 5.0
 AGENT_MODULE = "module.games.palworld.server.agent"
 AGENT_OUTPUT_RESTART_DELAY_SECONDS = 1.0
 _PIPE_PREFIX = r"\\.\pipe\palsitter-agent-v1-"
@@ -528,15 +531,20 @@ class AgentClient:
             ]
             flags = getattr(subprocess, "DETACHED_PROCESS", 0x00000008)
             flags |= getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
-            subprocess.Popen(
-                command,
-                cwd=str(Path(__file__).resolve().parents[4]),
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                close_fds=True,
-                creationflags=flags,
-            )
+            debug_output = open_debug_log(f"agent-{profile_name}")
+            try:
+                subprocess.Popen(
+                    command,
+                    cwd=str(Path(__file__).resolve().parents[4]),
+                    stdin=subprocess.DEVNULL,
+                    stdout=debug_output or subprocess.DEVNULL,
+                    stderr=subprocess.STDOUT if debug_output is not None else subprocess.DEVNULL,
+                    close_fds=True,
+                    creationflags=flags,
+                )
+            finally:
+                if debug_output is not None:
+                    debug_output.close()
             deadline = time.monotonic() + AGENT_CONNECT_TIMEOUT
             while load_agent_state(profile_name) is None and time.monotonic() < deadline:
                 time.sleep(0.05)
@@ -625,10 +633,16 @@ class AgentClient:
         return status
 
     def stop(self) -> dict[str, Any]:
-        return self.request("stop")
+        state = load_agent_state(self.profile_name)
+        result = self.request("stop")
+        _wait_for_agent_exit(self.profile_name, state)
+        return result
 
     def kill(self) -> dict[str, Any]:
-        return self.request("kill")
+        state = load_agent_state(self.profile_name)
+        result = self.request("kill")
+        _wait_for_agent_exit(self.profile_name, state)
+        return result
 
     def restart(self) -> dict[str, Any]:
         return self.request("restart")
@@ -649,6 +663,74 @@ def _agent_identity_alive(state: dict[str, Any]) -> bool:
 def agent_is_running(profile_name: str) -> bool:
     state = load_agent_state(profile_name)
     return state is not None and _agent_identity_alive(state)
+
+
+def _wait_for_agent_exit(profile_name: str, expected_state: dict[str, Any] | None) -> None:
+    if expected_state is None:
+        return
+    expected_identity = {
+        "agent_pid": expected_state.get("agent_pid"),
+        "agent_create_time": expected_state.get("agent_create_time"),
+    }
+    deadline = time.monotonic() + AGENT_CONNECT_TIMEOUT
+    while time.monotonic() < deadline:
+        current = load_agent_state(profile_name)
+        if current is None or not _agent_identity_matches(current, expected_identity):
+            return
+        if not _agent_identity_alive(current):
+            clear_agent_state(profile_name)
+            return
+        time.sleep(0.05)
+
+    current = load_agent_state(profile_name)
+    if current is None or not _agent_identity_matches(current, expected_identity):
+        return
+    try:
+        process = psutil.Process(int(current["agent_pid"]))
+        if abs(process.create_time() - float(current["agent_create_time"])) > 0.01:
+            return
+        process.terminate()
+        try:
+            process.wait(timeout=2)
+        except psutil.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=2)
+    except (KeyError, OSError, psutil.Error, TypeError, ValueError):
+        return
+    current = load_agent_state(profile_name)
+    if current is not None and _agent_identity_matches(current, expected_identity):
+        clear_agent_state(profile_name)
+
+
+def agent_server_is_running(profile_name: str) -> bool:
+    """Return whether a live detached agent owns an active PalServer."""
+    state = load_agent_state(profile_name)
+    if state is None or not _agent_identity_alive(state):
+        return False
+    server_state = str(state.get("server_state") or "")
+    if server_state == "starting":
+        return True
+    return server_state == "running" and _server_identity_alive(state)
+
+
+def stop_idle_agent(profile_name: str) -> None:
+    """Stop an idle detached agent before moving its profile directory."""
+    state = load_agent_state(profile_name)
+    if state is None:
+        return
+    if not _agent_identity_alive(state):
+        clear_agent_state(profile_name)
+        return
+    client = AgentClient.connect_existing(profile_name)
+    status = client.status()
+    if str(status.get("server_state") or "") in {"running", "starting"}:
+        raise RuntimeError("PalServer is running under the detached agent")
+    client.stop()
+    deadline = time.monotonic() + AGENT_CONNECT_TIMEOUT
+    while load_agent_state(profile_name) is not None and time.monotonic() < deadline:
+        time.sleep(0.05)
+    if load_agent_state(profile_name) is not None:
+        raise RuntimeError("Idle PalServer agent did not exit")
 
 
 def _agent_identity_matches(status: dict[str, Any], state: dict[str, Any]) -> bool:
@@ -719,6 +801,43 @@ class ServerAgent:
         self.server_executable: str | None = None
         self.output_offset = 0
         self.output_path = str(profile_server_output_path(profile.name))
+        self.last_touched_at = time.time()
+        self._last_touched_monotonic = time.monotonic()
+        self._idle_watchdog_stop = threading.Event()
+
+    def _touch(self) -> None:
+        with self.lock:
+            self.last_touched_at = time.time()
+            self._last_touched_monotonic = time.monotonic()
+
+    def _idle_timeout_elapsed(self) -> bool:
+        with self.lock:
+            return (
+                self.server_state not in {"running", "starting"}
+                and time.monotonic() - self._last_touched_monotonic
+                >= AGENT_IDLE_TIMEOUT_SECONDS
+            )
+
+    def _idle_watchdog(self) -> None:
+        while not self._idle_watchdog_stop.wait(AGENT_IDLE_CHECK_INTERVAL_SECONDS):
+            if not self._idle_timeout_elapsed():
+                continue
+            try:
+                connection = _connect_pipe(self.pipe, timeout=1)
+                try:
+                    connection.write_line(
+                        {
+                            "protocol": {"major": PROTOCOL_MAJOR, "minor": PROTOCOL_MINOR},
+                            "command": "__idle_timeout__",
+                            "arguments": {},
+                        }
+                    )
+                    connection.read_line()
+                finally:
+                    connection.close()
+            except (OSError, RuntimeError, TimeoutError):
+                pass
+            return
 
     def _write_state(self, **changes: Any) -> None:
         with self.lock:
@@ -741,6 +860,7 @@ class ServerAgent:
                 "output_offset": self.output_offset,
                 "exit_code": self.exit_code,
                 "exit_reason": self.exit_reason,
+                "last_touched": self.last_touched_at,
                 "heartbeat": time.time(),
             }
             data.update(changes)
@@ -984,6 +1104,7 @@ class ServerAgent:
                 "output_offset": self.output_offset,
                 "exit_code": self.exit_code,
                 "exit_reason": self.exit_reason,
+                "last_touched": self.last_touched_at,
             }
 
     def handle(self, request: dict[str, Any]) -> tuple[dict[str, Any], bool]:
@@ -992,7 +1113,11 @@ class ServerAgent:
             return {"ok": False, "error": "Unsupported agent protocol"}, False
         command = str(request.get("command") or "")
         if command == "ping" or command == "status":
+            self._touch()
             return {"ok": True, "result": self.status()}, False
+        if command == "__idle_timeout__":
+            return {"ok": True, "result": self.status()}, self._idle_timeout_elapsed()
+        self._touch()
         if command == "start":
             return {"ok": True, "result": self._start_server()}, False
         if command == "stop":
@@ -1022,8 +1147,15 @@ class ServerAgent:
     def run(self) -> int:
         with _agent_runtime_lock(self.name):
             self._write_state()
-            server = _NamedPipeServer(self.pipe, self.owner_sid, self.windows_session_id)
+            self._idle_watchdog_stop.clear()
+            watchdog = threading.Thread(
+                target=self._idle_watchdog,
+                name=f"{self.name} agent idle watchdog",
+                daemon=True,
+            )
+            watchdog.start()
             try:
+                server = _NamedPipeServer(self.pipe, self.owner_sid, self.windows_session_id)
                 while True:
                     connection = server.accept()
                     if connection is None:
@@ -1048,6 +1180,8 @@ class ServerAgent:
                         break
                 return 0
             finally:
+                self._idle_watchdog_stop.set()
+                watchdog.join(timeout=2)
                 if self.process is not None and self.process.poll() is None:
                     try:
                         self._stop_server(force=True)

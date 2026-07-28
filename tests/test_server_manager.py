@@ -2163,6 +2163,37 @@ def test_auto_update_logs_no_update_without_steamcmd_output(monkeypatch):
     assert not any("SteamCMD:" in message for message in logs)
 
 
+def test_auto_update_logs_steamcmd_output_in_debug_mode(monkeypatch):
+    logs = []
+
+    class FakeUpdateService:
+        def __init__(self, *args, **kwargs):
+            self.logger = kwargs["logger"]
+
+        def check_update(self, *, force):
+            self.logger("SteamCMD: debug update output")
+            return UpdateInfo("100", "100", status="up_to_date")
+
+    monkeypatch.setattr(
+        "module.games.palworld.server.manager.PalworldUpdateService",
+        FakeUpdateService,
+    )
+    monkeypatch.setattr("module.games.palworld.server.manager.debug_enabled", lambda: True)
+    monotonic = iter([0.0, 1800.0])
+    manager = PalServerManager(
+        Profile(name="test"),
+        monotonic=lambda: next(monotonic),
+        logger=logs.append,
+    )
+    manager.process = FakeProc()
+    manager.ps_process = SimpleNamespace(status=lambda: "running")
+
+    manager.monitor_once()
+    manager.monitor_once()
+
+    assert "SteamCMD (automatic): SteamCMD: debug update output" in logs
+
+
 def test_auto_update_idle_timer_resets_for_players_and_rest_failures(monkeypatch):
     rest = FakeRest()
     player_counts = iter([0, 1, 0, 0])

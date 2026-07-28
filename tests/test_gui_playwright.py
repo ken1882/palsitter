@@ -25,7 +25,13 @@ from module.config import (
     load_profile,
     save_profile,
 )
-from module.instances import create_instance, load_instance, profile_dir, profile_log_path
+from module.instances import (
+    create_instance,
+    load_instance,
+    profile_dir,
+    profile_log_path,
+    save_agent_state,
+)
 from module.games.palworld.server.history import (
     LifecycleEvent,
     RestartHistoryStore,
@@ -498,10 +504,20 @@ def test_home_and_utils_keep_specialized_layout_while_settings_uses_sections(
         settings.wait_for(timeout=5000)
         assert settings.locator(
             ".section-layout-navigation-button"
-        ).all_inner_texts() == ["Network", "HTTP authentication", "Updates"]
+        ).all_inner_texts() == [
+            "Network",
+            "HTTP authentication",
+            "Updates",
+            "Diagnostics",
+        ]
         updates = page.locator("#pywebio-scope-webui_settings_updates")
         updates.get_by_text("Automatic update", exact=True).wait_for(timeout=5000)
         assert updates.locator("#pywebio-scope-web_auto_update_toggle").get_by_role(
+            "button", name="Off", exact=True
+        ).count() == 1
+        diagnostics = page.locator("#pywebio-scope-webui_settings_diagnostics")
+        diagnostics.get_by_text("Debug mode", exact=True).wait_for(timeout=5000)
+        assert diagnostics.locator("#pywebio-scope-web_debug_mode_toggle").get_by_role(
             "button", name="Off", exact=True
         ).count() == 1
 
@@ -531,6 +547,10 @@ def test_home_settings_persist_automatic_update_toggle(tmp_path, monkeypatch):
         toggle = page.locator("#pywebio-scope-web_auto_update_toggle")
         toggle.get_by_role("button", name="Off", exact=True).click()
         toggle.get_by_role("button", name="On", exact=True).wait_for(timeout=2000)
+        debug_toggle = page.locator("#pywebio-scope-web_debug_mode_toggle")
+        debug_toggle.get_by_role("button", name="Off", exact=True).wait_for(timeout=2000)
+        debug_toggle.get_by_role("button", name="Off", exact=True).click()
+        debug_toggle.get_by_role("button", name="On", exact=True).wait_for(timeout=2000)
         page.locator("#pywebio-scope-webui_settings_actions").get_by_role(
             "button", name="Save", exact=True
         ).click()
@@ -545,6 +565,7 @@ def test_home_settings_persist_automatic_update_toggle(tmp_path, monkeypatch):
             (config_dir / "webui" / "settings.json").read_text(encoding="utf-8")
         )
         assert saved["auto_update"] is True
+        assert saved["debug_mode"] is True
 
 
 @pytest.mark.playwright
@@ -1746,6 +1767,8 @@ def test_backups_tab_saves_browses_creates_deletes_and_rolls_back(tmp_path, monk
         assert builtin_table.get_by_text("2026.01.04-040506", exact=True).count() == 1
         assert builtin_table.get_by_role("columnheader", name="World", exact=True).count() == 0
         assert builtin_table.get_by_role("columnheader", name="Type", exact=True).count() == 0
+        assert builtin_table.get_by_role("columnheader", name="Built-in backup", exact=True).count() == 1
+        assert builtin_table.get_by_role("columnheader", name="Rollback", exact=True).count() == 1
         assert builtin_table.get_by_role("button", name="Rollback", exact=True).count() == 1
         builtin_folder = panel.get_by_role(
             "button", name="Open built-in backup folder", exact=True
@@ -1754,6 +1777,9 @@ def test_backups_tab_saves_browses_creates_deletes_and_rolls_back(tmp_path, monk
         assert panel.get_by_role("button", name="Open backup folder", exact=True).is_visible()
         table = page.locator("#pywebio-scope-backup_files table")
         assert table.is_visible()
+        assert table.get_by_role("columnheader", name="Managed backup file", exact=True).count() == 1
+        assert table.get_by_role("columnheader", name="Rollback", exact=True).count() == 1
+        assert table.get_by_role("columnheader", name="Delete", exact=True).count() == 1
         assert page.locator('input[name="settings_backup_interval_minutes"]').input_value() == "30"
         skip_toggle = page.locator("#pywebio-scope-backup_skip_no_players_toggle")
         skip_toggle.get_by_role("button", name="On", exact=True).click()
@@ -2406,15 +2432,39 @@ def test_palworld_tools_disables_player_migration_while_server_runs(
             ).wait_for(timeout=5000)
             instance_tools = page.locator("#pywebio-scope-tools_instance")
             instance_tools.get_by_text(
-                "Rename is available only while PalServer and its detached agent are stopped.",
+                "Rename is available when PalServer is stopped and no lifecycle operation is active.",
                 exact=True,
             ).wait_for(timeout=5000)
             assert instance_tools.get_by_role(
                 "button", name="Rename profile", exact=True
             ).is_disabled()
+            assert instance_tools.get_by_role(
+                "button", name="Delete instance", exact=True
+            ).is_disabled()
             assert migration.get_by_role(
                 "button", name="Migrate player ID", exact=True
             ).is_disabled()
+
+
+@pytest.mark.playwright
+def test_palworld_tools_allows_rename_with_idle_detached_agent(tmp_path, monkeypatch):
+    with _gui_page(tmp_path, monkeypatch) as (page, _):
+        save_agent_state(
+            "default",
+            {
+                "agent_pid": os.getpid(),
+                "agent_create_time": psutil.Process(os.getpid()).create_time(),
+                "server_state": "stopped",
+            },
+        )
+        page.locator("#pywebio-scope-aside").get_by_text("default", exact=True).click()
+        page.locator("#pywebio-scope-menu").get_by_text("Tools", exact=True).click()
+
+        rename = page.locator("#pywebio-scope-tools_instance").get_by_role(
+            "button", name="Rename profile", exact=True
+        )
+        rename.wait_for(timeout=5000)
+        assert not rename.is_disabled()
 
 
 @pytest.mark.playwright
@@ -4107,7 +4157,7 @@ def test_server_settings_reset_and_tools_manage_instance(tmp_path, monkeypatch):
         instance_tools = page.locator("#pywebio-scope-tools_instance")
         instance_tools.get_by_text("Instance", exact=True).wait_for(timeout=5000)
         instance_tools.get_by_text(
-            "Rename is available only while PalServer and its detached agent are stopped.",
+            "Rename is available when PalServer is stopped and no lifecycle operation is active.",
             exact=True,
         ).wait_for(timeout=5000)
         instance_tools.get_by_role("button", name="Rename profile", exact=True).click()

@@ -381,7 +381,7 @@ def _render_builtin_backup_files(name: str) -> None:
         rows,
         header=[
             t("backups.builtin_file"),
-            "",
+            t("backups.rollback_header"),
         ],
     )
 
@@ -422,7 +422,14 @@ def _render_backup_files(name: str) -> None:
                 _icon_button(t("backups.delete"), "×", lambda p=path: _confirm_backup_delete(name, p), danger=True),
             ]
         )
-    put_table(rows, header=[t("backups.file"), "", ""])
+    put_table(
+        rows,
+        header=[
+            t("backups.file"),
+            t("backups.rollback_header"),
+            t("backups.delete_header"),
+        ],
+    )
 
 def _open_backup_folder(name: str) -> None:
     try:

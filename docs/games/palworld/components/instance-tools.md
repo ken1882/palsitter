@@ -15,12 +15,14 @@ The page also owns Palworld instance management:
 - `Rename profile` moves the managed instance directory and updates the profile name and
   derived Palworld paths. Existing save games, backups, logs, and configuration remain
   with the renamed instance.
-- Rename is disabled while PalServer, a lifecycle supervisor, an externally detected
-  server, or the detached Windows agent is running. The confirmation rechecks that state
-  before moving files.
+- Rename is disabled while PalServer, a lifecycle supervisor, or an externally detected
+  server is running. An idle detached Windows agent is stopped as part of confirmation
+  before the profile directory is moved.
 - `Delete instance` uses the shared exact-name confirmation flow. Without `Wipe data`,
   it removes only the profile reference; selecting `Wipe data` requires a second
   confirmation before permanently deleting the managed instance directory.
+- Delete is disabled while PalServer, a lifecycle supervisor, or an externally detected
+  server is running. The confirmation rechecks that state before removing the profile.
 
 The page also exposes Palworld player-ID migration for imported local worlds:
 

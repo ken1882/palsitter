@@ -173,7 +173,7 @@ python -m pytest -q
 プロジェクトのテストワークフロー：
 
 ```bash
-python test.py
+python run_tests.py
 ```
 
 変更を提出する前に `python -m compileall -q .` も実行してください。GUI を変更する場合は、

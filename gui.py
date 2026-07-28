@@ -21,6 +21,7 @@ from module.webui.shutdown_workflow import (
     start_workflow as start_shutdown_workflow,
 )
 from module.process import kill_by_port
+from module.debug_log import open_debug_log
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -123,7 +124,17 @@ def main() -> int:
     if args.host is not None:
         command[2:2] = ["--host", args.host]
     while True:
-        child = subprocess.Popen(command, cwd=str(Path(__file__).resolve().parent))
+        debug_output = open_debug_log("gui-child")
+        try:
+            child = subprocess.Popen(
+                command,
+                cwd=str(Path(__file__).resolve().parent),
+                stdout=debug_output or None,
+                stderr=subprocess.STDOUT if debug_output is not None else None,
+            )
+        finally:
+            if debug_output is not None:
+                debug_output.close()
         try:
             returncode = child.wait()
         except KeyboardInterrupt:

@@ -39,11 +39,12 @@ from module.games.palworld.saves import (
     load_player_name_cache,
     migrate_player_ids,
 )
-from module.games.palworld.server.agent import agent_is_running
+from module.games.palworld.server.agent import agent_server_is_running, stop_idle_agent
 from module.webui.assets import client_call, put_asset_widget
 from module.webui.i18n import t
 from module.webui.section_layout import SectionSpec, put_section_layout
 from module.webui.session import page_context, run_if_current
+from module.webui.settings import load_web_settings
 
 
 def _manager(name: str):
@@ -55,7 +56,11 @@ def _manager(name: str):
 def _delete_instance(name: str) -> None:
     from module.webui.instance import confirm_delete_instance
 
-    confirm_delete_instance(name)
+    confirm_delete_instance(
+        name,
+        delete_guard=lambda: _delete_guard(name),
+        delete_prepare=lambda: _prepare_delete(name),
+    )
 
 
 def _open_instance(name: str, page_id: str = "overview") -> None:
@@ -66,7 +71,7 @@ def _open_instance(name: str, page_id: str = "overview") -> None:
 
 def _service(name: str | None = None) -> FirewallService:
     logger = (lambda message: _log(name, message)) if name is not None else None
-    return FirewallService(logger=logger)
+    return FirewallService(logger=logger, debug=load_web_settings().debug_mode)
 
 
 def _log(name: str, message: str) -> None:
@@ -75,7 +80,19 @@ def _log(name: str, message: str) -> None:
 
 def _instance_runtime_active(name: str) -> bool:
     manager = _manager(name)
-    return manager.active or manager.display_state == "running" or agent_is_running(name)
+    return manager.active or manager.display_state == "running" or agent_server_is_running(name)
+
+
+def _delete_guard(name: str) -> str | None:
+    return t("tools.delete_running") if _instance_runtime_active(name) else None
+
+
+def _prepare_delete(name: str) -> str | None:
+    try:
+        stop_idle_agent(name)
+    except (OSError, RuntimeError, TimeoutError) as exc:
+        return t("settings.delete_failed", error=exc)
+    return None
 
 
 def _render_instance_management(name: str) -> None:
@@ -96,6 +113,7 @@ def _render_instance_management(name: str) -> None:
                     t("settings.delete"),
                     onclick=lambda: _delete_instance(name),
                     color="danger",
+                    disabled=running,
                 ),
             ],
             size="auto auto",
@@ -135,8 +153,9 @@ def _rename(name: str) -> None:
             put_warning(t("tools.rename_running"))
         return
     try:
+        stop_idle_agent(name)
         profile = rename_profile(name, replacement)
-    except (FileExistsError, OSError, ValueError) as exc:
+    except (FileExistsError, OSError, RuntimeError, ValueError) as exc:
         with use_scope("tools_rename_error", clear=True):
             put_warning(t("tools.rename_failed", error=exc))
         return

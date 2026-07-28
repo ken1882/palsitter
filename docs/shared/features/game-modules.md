@@ -48,7 +48,9 @@ output log, and kill-on-job-close Job Object containing its descendants. The age
 starts PalServer merely because Palsitter reconnects: an explicit user Start launches or
 connects to the agent and sends `start`. Stop/KILL send commands to the agent, while
 Palsitter continues to own backups, SteamCMD, memory restart, planned restart, crash
-self-heal, and Overview tailing. The stable version-1 named pipe is restricted to the
+self-heal, and Overview tailing. An idle agent refreshes a one-hour pipe-activity lease
+on every valid command and exits after the lease expires, so a GUI or supervisor hard
+failure cannot leave an idle agent indefinitely. The stable version-1 named pipe is restricted to the
 owning user and validated against the WTS session; its UUID `session_id` is an application
 session identifier stored separately from that WTS session ID. A Windows named mutex
 serializes launches and enforces one live agent per instance before `agent-state.json` is
@@ -66,7 +68,7 @@ are handed off without stopping PalServer, external ownership is detached, and t
 child is replaced. The new child validates persisted agent/server identity, adopts managed
 servers with `update=False` and status-only restore, and resumes the raw log from its
 persisted cursor with at most a 300-line replay. It does not launch a second server; an
-idle existing agent stays idle. The browser connection may
+idle existing agent is stopped and cleaned up. The browser connection may
 drop during replacement; refresh or reconnect reconstructs the persisted progress or
 terminal overlay. Live multi-tab synchronization is intentionally unsupported.
 
