@@ -18,7 +18,7 @@ _INITIALIZE_LOCK = threading.RLock()
 _RUNTIME_LOCK = threading.RLock()
 _AGENT_LOCK = threading.RLock()
 LOG_RETENTION_DAYS = 30
-_DATED_LOG_RE = re.compile(r"^(?:overview|palserver)-(?P<date>\d{8})\.log$")
+_DATED_LOG_RE = re.compile(r"^[A-Za-z0-9_-]+-(?P<date>\d{8})\.log$")
 
 
 @dataclass(frozen=True)
@@ -100,8 +100,14 @@ def _log_date(value: dt.date | dt.datetime | None = None) -> dt.date:
     return value.date() if isinstance(value, dt.datetime) else value
 
 
+def profile_dated_log_path(
+    name: str, prefix: str, when: dt.date | dt.datetime | None = None
+) -> Path:
+    return profile_dir(name) / "logs" / f"{prefix}-{_log_date(when):%Y%m%d}.log"
+
+
 def profile_log_path(name: str, when: dt.date | dt.datetime | None = None) -> Path:
-    return profile_dir(name) / "logs" / f"overview-{_log_date(when):%Y%m%d}.log"
+    return profile_dated_log_path(name, "overview", when)
 
 
 def profile_runtime_path(name: str) -> Path:
@@ -110,10 +116,6 @@ def profile_runtime_path(name: str) -> Path:
 
 def profile_agent_state_path(name: str) -> Path:
     return profile_dir(name) / "agent-state.json"
-
-
-def profile_server_output_path(name: str, when: dt.date | dt.datetime | None = None) -> Path:
-    return profile_dir(name) / "logs" / f"palserver-{_log_date(when):%Y%m%d}.log"
 
 
 def prune_dated_log_files(

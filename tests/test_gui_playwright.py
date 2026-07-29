@@ -459,7 +459,7 @@ def _gui_page(
         except subprocess.TimeoutExpired:
             proc.kill()
             output, _ = proc.communicate()
-            assert "Unhandled error in pywebio app" not in output
+        assert "Unhandled error in pywebio app" not in output
         assert "Traceback" not in output
 
 
@@ -1706,6 +1706,44 @@ def test_scheduler_backup_disables_only_button_without_refreshing_overview(tmp_p
         scheduler.get_by_role("button", name="Backup", exact=True).wait_for(timeout=5000)
 
         assert not scheduler.get_by_role("button", name="Backup", exact=True).is_disabled()
+
+
+@pytest.mark.playwright
+def test_delayed_scheduler_backup_does_not_update_after_navigation(
+    tmp_path, monkeypatch
+):
+    save_dir = _fixed_backup_source(tmp_path) / "ABC123"
+    save_dir.mkdir(parents=True)
+    (save_dir / "Level.sav").write_bytes(b"level")
+    post_started = threading.Event()
+    post_completed = threading.Event()
+
+    with _running_palserver_process(tmp_path), _mock_metrics_server(
+        post_delay=1,
+        post_started=post_started,
+        post_completed=post_completed,
+    ) as (rest_port, _):
+        with _gui_page(tmp_path, monkeypatch, rest_port=rest_port) as (page, _):
+            page.locator("#pywebio-scope-aside").get_by_text(
+                "default", exact=True
+            ).click()
+            page.locator("#pywebio-scope-scheduler_panel").get_by_role(
+                "button", name="Backup", exact=True
+            ).click()
+            assert post_started.wait(timeout=5)
+
+            page.locator("#pywebio-scope-aside").get_by_text(
+                "Home", exact=True
+            ).click()
+            page.locator("#pywebio-scope-home_page").wait_for(timeout=5000)
+            assert post_completed.wait(timeout=5)
+            page.wait_for_timeout(300)
+
+            assert page.locator("#pywebio-scope-scheduler_panel").count() == 0
+            assert page.locator(".toastify").get_by_text(
+                re.compile(r"Backup (?:created|failed|skipped):?"),
+                exact=False,
+            ).count() == 0
 
 
 @pytest.mark.playwright

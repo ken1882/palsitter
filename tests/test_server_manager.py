@@ -972,18 +972,26 @@ def test_ue4ss_stream_skips_historical_bytes_after_log_replacement(tmp_path):
     path = tmp_path / "UE4SS.log"
     path.write_bytes(b"stale line\n")
     stat = path.stat()
+    initial_file_id = (stat.st_dev, stat.st_ino)
     logs = []
     active = threading.Event()
     active.set()
     stop_event = threading.Event()
+    replacement_seen = threading.Event()
     manager = PalServerManager(Profile(name="test"), logger=logs.append)
+
+    def cursor_updated(offset, file_id, prefix):
+        if file_id != initial_file_id:
+            replacement_seen.set()
+
     thread = threading.Thread(
         target=manager._stream_ue4ss_output,
         args=(path, stop_event),
         kwargs={
             "initial_offset": stat.st_size,
-            "initial_file_id": (stat.st_dev, stat.st_ino),
+            "initial_file_id": initial_file_id,
             "active": active.is_set,
+            "cursor_callback": cursor_updated,
         },
         daemon=True,
     )
@@ -993,7 +1001,7 @@ def test_ue4ss_stream_skips_historical_bytes_after_log_replacement(tmp_path):
     replacement = tmp_path / "UE4SS.replacement"
     replacement.write_bytes(b"stale line\n")
     replacement.replace(path)
-    time.sleep(0.1)
+    assert replacement_seen.wait(timeout=2)
     with path.open("ab") as handle:
         handle.write(b"fresh line\n")
 

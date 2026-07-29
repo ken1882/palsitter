@@ -153,11 +153,11 @@ class PalRestCache:
                 game_data_error=self._game_data_error,
             )
 
-    def poll_once(self, now: float | None = None) -> None:
+    def poll_once(self, now: float | None = None, *, timeout: float | None = None) -> None:
         with self._poll_lock:
-            self._poll_once(now)
+            self._poll_once(now, timeout=timeout)
 
-    def _poll_once(self, now: float | None = None) -> None:
+    def _poll_once(self, now: float | None = None, timeout: float | None = None) -> None:
         supplied_now = now is not None
         now = time.monotonic() if now is None else float(now)
         profile = self.profile_loader(self.name)
@@ -186,9 +186,15 @@ class PalRestCache:
             if fetch_polling_data:
                 self._next_poll_at = float("inf")
 
+        def make_client() -> PalRestClient:
+            client = self.client_factory(profile)
+            if timeout is not None:
+                client.timeout = float(timeout)
+            return client
+
         def fetch_info_result() -> None:
             try:
-                result = self.client_factory(profile).info()
+                result = make_client().info()
                 with self._lock:
                     self._info = result if isinstance(result, dict) else {}
                     self._info_error = None
@@ -198,10 +204,11 @@ class PalRestCache:
             except Exception as exc:
                 with self._lock:
                     self._info_error = str(exc)
+                    self._info_attempted = False
 
         def fetch_players_result() -> None:
             try:
-                result = self.client_factory(profile).players()
+                result = make_client().players()
                 players = result if isinstance(result, dict) else {"players": []}
                 rows = players.get("players", [])
                 rows = rows if isinstance(rows, list) else []
@@ -220,7 +227,7 @@ class PalRestCache:
 
         def fetch_metrics_result() -> None:
             try:
-                result = self.client_factory(profile).metrics()
+                result = make_client().metrics()
                 with self._lock:
                     self._metrics = result if isinstance(result, dict) else {}
                     self._metrics_error = None
@@ -230,7 +237,7 @@ class PalRestCache:
 
         def fetch_game_data_result() -> None:
             try:
-                result = self.client_factory(profile).game_data()
+                result = make_client().game_data()
                 with self._lock:
                     self._game_data = result if isinstance(result, dict) else {}
                     self._game_data_error = None

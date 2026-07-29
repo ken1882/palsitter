@@ -9,10 +9,10 @@ import pytest
 
 from module.config import Profile, fixed_executable_path, profile_log_path, save_profile
 from module.games import OperationProgress, UpdateInfo
+from module.games.palworld.config import profile_server_output_path
 from module.instances import (
     DailyLogWriter,
     profile_log_path as instance_profile_log_path,
-    profile_server_output_path,
     prune_dated_log_files,
 )
 from module.webui.process_manager import ProcessManager, _PROCESS_CONTEXT, _run_profile

@@ -81,18 +81,21 @@ def _save_world_now(name: str) -> None:
         return
     local.scheduler_save_busy = True
     _update_scheduler_save(name)
+    context = page_context()
 
     def save() -> None:
         try:
-            toast(t("actions.save_sent"))
+            run_if_current(context, lambda: toast(t("actions.save_sent")))
             PalRestClient(load_profile(name)).save()
         except Exception as exc:
-            toast(t("action.failed", action=t("actions.save_world"), error=exc), color="error")
+            run_if_current(
+                context,
+                lambda exc=exc: toast(t("action.failed", action=t("actions.save_world"), error=exc), color="error"),
+            )
         finally:
             local.scheduler_save_busy = False
             try:
-                if client_query("dom.scopeExists", scope="scheduler_save"):
-                    _update_scheduler_save(name)
+                run_if_current(context, lambda: _update_scheduler_save(name))
             except SessionException:
                 return
 
@@ -853,11 +856,12 @@ def _backup_now(name: str) -> None:
         _update_scheduler_backup(name, disabled=True)
     if client_query("dom.scopeExists", scope="backup_now_button"):
         _render_backup_now_button(name, disabled=True)
-    task = threading.Thread(target=lambda: _run_backup_now(name), daemon=True)
+    context = page_context()
+    task = threading.Thread(target=lambda: _run_backup_now(name, context), daemon=True)
     register_thread(task)
     task.start()
 
-def _run_backup_now(name: str) -> None:
+def _run_backup_now(name: str, context=None) -> None:
     from module.webui.shutdown import is_shutting_down
 
     if is_shutting_down():
@@ -871,25 +875,30 @@ def _run_backup_now(name: str) -> None:
         ).create_backup_with_flush()
         backup = result.backup
         if result.status == "skipped" or backup is None or backup.path is None:
-            toast(t("action.backup_skipped"))
+            run_if_current(context, lambda: toast(t("action.backup_skipped")))
         elif result.may_be_stale:
-            toast(
-                t(
-                    "action.backup_created_stale",
-                    name=backup.path.name,
-                    error=result.flush_error or "unknown",
+            run_if_current(
+                context,
+                lambda: toast(
+                    t(
+                        "action.backup_created_stale",
+                        name=backup.path.name,
+                        error=result.flush_error or "unknown",
+                    ),
+                    color="warning",
                 ),
-                color="warning",
             )
         else:
-            toast(t("action.backup_created", name=backup.path.name))
+            run_if_current(context, lambda: toast(t("action.backup_created", name=backup.path.name)))
     except Exception as exc:
-        toast(t("action.backup_failed", error=exc), color="error")
-    if client_query("dom.scopeExists", scope="scheduler_panel"):
-        _update_scheduler_backup(name)
-    if client_query("dom.scopeExists", scope="backup_settings_panel"):
-        _render_backup_now_button(name)
-        _render_backup_files(name)
+        run_if_current(context, lambda exc=exc: toast(t("action.backup_failed", error=exc), color="error"))
+    def finish() -> None:
+        if client_query("dom.scopeExists", scope="scheduler_panel"):
+            _update_scheduler_backup(name)
+        if client_query("dom.scopeExists", scope="backup_settings_panel"):
+            _render_backup_now_button(name)
+            _render_backup_files(name)
+    run_if_current(context, finish)
 
 def _rest_action(name: str, action: str) -> None:
     profile = load_profile(name)

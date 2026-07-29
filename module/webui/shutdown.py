@@ -108,11 +108,14 @@ def _wait_for_operations(records: list[Any], deadline: float) -> dict[str, dict[
 
 def _save_one(record: Any) -> tuple[str, str | None, bool]:
     adapter = get_game(record.game)
+    manager = ProcessManager.get(record.name)
     try:
-        manager = ProcessManager.get(record.name)
         if manager.active or adapter.is_running(record):
+            manager.append_log("Saving state before shutdown")
             adapter.save_before_shutdown(record)
+            manager.append_log("State saved")
     except Exception as exc:
+        manager.append_log(f"Save before shutdown failed: {exc}")
         is_api_unavailable = getattr(adapter, "is_api_unavailable_error", lambda _: False)
         return record.name, str(exc), bool(is_api_unavailable(exc))
     return record.name, None, False
@@ -126,8 +129,10 @@ def _force_stop_one(record: Any) -> tuple[str, str | None]:
             if not manager.kill(shutdown=True):
                 return record.name, "Could not force-stop the instance"
         else:
+            manager.append_log("REST API unavailable; force-stopping the server")
             adapter.force_stop(record)
     except Exception as exc:
+        manager.append_log(f"Force-stop failed: {exc}")
         return record.name, str(exc)
     return record.name, None
 
@@ -146,10 +151,11 @@ def _stop_one(record: Any) -> tuple[str, str | None]:
             if not manager.stop(shutdown=True):
                 return record.name, "Could not request graceful shutdown"
         elif _agent_running(record):
-            from module.games.palworld.server.agent import AgentClient
-
-            AgentClient.connect_existing(record.name).stop()
+            manager.append_log("Stopping detached managed agent")
+            get_game(record.game).stop_detached_agent(record)
+            manager.append_log("Detached managed agent stopped")
     except Exception as exc:
+        manager.append_log(f"Stop failed: {exc}")
         return record.name, str(exc)
     return record.name, None
 
@@ -159,7 +165,7 @@ def _verify_stopped(record: Any) -> tuple[str, str | None]:
     if manager.active or manager.alive:
         return record.name, "Supervisor did not stop"
     if _agent_running(record):
-        return record.name, "PalServer agent is still running"
+        return record.name, "Managed agent is still running"
     try:
         if get_game(record.game).is_running(record):
             return record.name, "Game server is still running"

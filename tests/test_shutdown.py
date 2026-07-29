@@ -18,6 +18,10 @@ class FakeManager:
         self.kill_calls = 0
         self.prepare_calls = 0
         self.operation_busy = False
+        self.logs = []
+
+    def append_log(self, message):
+        self.logs.append(message)
 
     @property
     def active(self):
@@ -142,6 +146,29 @@ def test_force_shutdown_uses_adapter_fallback_when_manager_is_inactive(monkeypat
     assert result.ok is True
     assert force_stop_calls == ["alpha"]
     assert result.instances["alpha"]["status"] == "force_stopped"
+
+
+def test_stop_detached_agent_dispatches_through_adapter_and_logs(monkeypatch):
+    record = SimpleNamespace(name="alpha", game="palworld")
+    manager = FakeManager()
+    manager._active = False
+    stop_calls = []
+    adapter = SimpleNamespace(
+        stop_detached_agent=lambda current: stop_calls.append(current.name),
+    )
+
+    monkeypatch.setattr(shutdown, "_agent_running", lambda current: True)
+    monkeypatch.setattr(shutdown.ProcessManager, "get", lambda name: manager)
+    monkeypatch.setattr(shutdown, "get_game", lambda game: adapter)
+
+    name, error = shutdown._stop_one(record)
+
+    assert (name, error) == ("alpha", None)
+    assert stop_calls == ["alpha"]
+    assert manager.logs == [
+        "Stopping detached managed agent",
+        "Detached managed agent stopped",
+    ]
 
 
 def test_desktop_control_requires_token_and_runs_shutdown():

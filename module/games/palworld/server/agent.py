@@ -33,6 +33,7 @@ from module.games.palworld.config import (
     PalworldProfile,
     executable_workdir,
     load_profile,
+    profile_server_output_path,
     windows_console_executable_path,
 )
 from module.games.palworld.server.output import (
@@ -45,7 +46,6 @@ from module.instances import (
     load_agent_state,
     load_runtime,
     profile_agent_state_path,
-    profile_server_output_path,
     safe_profile_name,
     save_agent_state,
     update_agent_state,

@@ -20,6 +20,10 @@ class FakeManager:
         self.start_calls = 0
         self.detach_calls = 0
         self.stop_started = threading.Event()
+        self.logs = []
+
+    def append_log(self, message):
+        self.logs.append(message)
 
     @property
     def active(self):

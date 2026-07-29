@@ -186,7 +186,7 @@ def _start_install(name: str) -> None:
                 lambda: toast(t("mods.install_complete", version=release.tag), color="success"),
             )
         except Exception as exc:
-            run_if_current(context, lambda: toast(t("mods.install_failed", error=exc), color="error"))
+            run_if_current(context, lambda exc=exc: toast(t("mods.install_failed", error=exc), color="error"))
         finally:
             try:
                 def finish() -> None:
@@ -233,7 +233,7 @@ def _start_remove(name: str) -> None:
             _service(name).uninstall()
             run_if_current(context, lambda: toast(t("mods.remove_complete"), color="success"))
         except Exception as exc:
-            run_if_current(context, lambda: toast(t("mods.remove_failed", error=exc), color="error"))
+            run_if_current(context, lambda exc=exc: toast(t("mods.remove_failed", error=exc), color="error"))
         finally:
             try:
                 def finish() -> None:
@@ -289,7 +289,7 @@ def _render_mod_table(name: str, kind: str) -> None:
             folder = _icon_button(
                 label,
                 "📁",
-                lambda path=directory, pak=not is_lua: _open_mod_folder(path, pak=pak),
+                lambda path=directory, pak=not is_lua: _open_mod_folder(name, path, pak=pak),
                 disabled=directory is None,
             )
         put_scope(
@@ -362,7 +362,7 @@ def _render_mod_table(name: str, kind: str) -> None:
         put_table(rows, header=[t("mods.mod_name"), t("mods.enabled"), t("mods.delete")])
 
 
-def _open_mod_folder(path: Path | None, *, pak: bool = False) -> None:
+def _open_mod_folder(name: str, path: Path | None, *, pak: bool = False) -> None:
     if path is None:
         return
     try:
@@ -370,7 +370,7 @@ def _open_mod_folder(path: Path | None, *, pak: bool = False) -> None:
         if pak:
             (path / "~mods").mkdir(exist_ok=True)
             (path / "LogicMods").mkdir(exist_ok=True)
-        print(f"Opening folder: {path}")
+        _manager(name).append_log(f"Opening folder: {path}")
         _open_folder(path)
     except Exception as exc:
         toast(t("mods.open_failed", error=exc), color="error")

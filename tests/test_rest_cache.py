@@ -17,10 +17,13 @@ class FakeRestClient:
         self.players_calls = 0
         self.metrics_calls = 0
         self.game_data_calls = 0
+        self.fail_info = False
         self.fail_players = False
 
     def info(self):
         self.info_calls += 1
+        if self.fail_info:
+            raise RuntimeError("info unavailable")
         return {"version": f"v{self.info_calls}"}
 
     def players(self):
@@ -102,6 +105,19 @@ def test_cache_waits_for_rest_and_retains_successful_dynamic_data_after_failure(
     assert snapshot.game_data == {"ActorData": [{"Type": "Palbox", "GuildName": "Guild"}]}
 
 
+def test_cache_retries_session_info_after_a_one_off_timeout():
+    client = FakeRestClient()
+    client.fail_info = True
+    cache = _cache(client, [(42, 100.0)], [True], [])
+
+    cache.poll_once(now=0, timeout=0.25)
+    client.fail_info = False
+    cache.poll_once(now=1)
+
+    assert client.info_calls == 2
+    assert cache.snapshot().info == {"version": "v2"}
+
+
 def test_cache_clears_session_data_when_server_stops():
     client = FakeRestClient()
     identity = [(42, 100.0)]
@@ -133,6 +149,30 @@ def test_cache_skips_game_data_when_launch_option_is_disabled():
 
     assert client.game_data_calls == 0
     assert cache.snapshot().game_data is None
+
+
+def test_one_off_poll_applies_the_requested_timeout_to_every_rest_client():
+    profile = Profile(name="test")
+    clients = []
+
+    def make_client(_):
+        client = FakeRestClient()
+        client.timeout = 5
+        clients.append(client)
+        return client
+
+    cache = PalRestCache(
+        "test",
+        profile_loader=lambda _: profile,
+        session_probe=lambda _: (42, 100.0),
+        rest_probe=lambda _: True,
+        client_factory=make_client,
+    )
+
+    cache.poll_once(now=0, timeout=0.25)
+
+    assert len(clients) == 4
+    assert all(client.timeout == 0.25 for client in clients)
 
 
 def test_cache_default_player_persistence_tracks_poll_interval(tmp_path, monkeypatch):

@@ -137,6 +137,39 @@ def test_palworld_status_summary_uses_cached_game_version_when_server_is_stopped
     assert summary.game_version == "v1.2.3"
 
 
+def test_palworld_status_summary_passes_timeout_to_initial_rest_poll(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setenv("PALSITTER_CONFIG_DIR", str(tmp_path / "config"))
+    record = create_instance("default", "palworld")
+    snapshots = [
+        SimpleNamespace(metrics=None, info=None),
+        SimpleNamespace(metrics={}, info={}),
+    ]
+    poll_timeouts = []
+
+    monkeypatch.setattr(
+        "module.games.palworld.server.get_pal_rest_cache",
+        lambda name: SimpleNamespace(
+            snapshot=lambda: snapshots.pop(0),
+            poll_once=lambda *, timeout=None: poll_timeouts.append(timeout),
+            ensure_started=lambda: None,
+        ),
+    )
+    monkeypatch.setattr(
+        "module.games.palworld.server.status.instance_is_running",
+        lambda profile: True,
+    )
+    monkeypatch.setattr(
+        "module.games.palworld.server.status.endpoint_status",
+        lambda profile, **kwargs: {"rest": "open"},
+    )
+
+    get_game("palworld").status_summary(record, rest_timeout=0.25)
+
+    assert poll_timeouts == [0.25]
+
+
 def test_registry_lookup_works_in_spawned_child():
     context = mp.get_context("spawn")
     output = context.Queue()

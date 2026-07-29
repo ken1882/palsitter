@@ -84,6 +84,9 @@ def _update_instance(name: str, **changes: Any) -> None:
         item.update(changes)
         state["updated_at"] = dt.datetime.now(dt.timezone.utc).isoformat()
         _write_state(state)
+    message = changes.get("message")
+    if message:
+        ProcessManager.get(name).append_log(f"GUI restart: {message}")
 
 
 def _snapshot() -> dict[str, dict[str, str]]:
@@ -179,7 +182,7 @@ def _verify_managed(state: dict[str, Any]) -> list[tuple[str, str]]:
             adapter = get_game(record.game)
             verifier = getattr(adapter, "verify_managed", adapter.is_running)
             if not verifier(record):
-                return name, "Managed agent or PalServer is not alive"
+                return name, "Managed agent or game server is not alive"
             _update_instance(name, status="verified", message=t("utils.restart_verified"))
             return name, None
         except Exception as exc:

@@ -16,6 +16,7 @@ from module.instances import (
     load_profile_template,
     list_instances,
     load_instance,
+    profile_dated_log_path,
     profile_dir,
     rename_instance,
     safe_profile_name,
@@ -149,6 +150,10 @@ def fixed_executable_path(name: str) -> Path:
 
 def fixed_server_launcher_path(name: str) -> Path:
     return fixed_palserver_dir(name) / "PalServer.sh"
+
+
+def profile_server_output_path(name: str, when=None) -> Path:
+    return profile_dated_log_path(name, "palserver", when)
 
 
 def fixed_backup_source(name: str) -> Path:

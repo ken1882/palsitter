@@ -144,6 +144,11 @@ class GameAdapter:
     runnable: bool
     webui_module: str
     capabilities: GameCapabilities = field(default_factory=GameCapabilities)
+    detached_agent_stopper: Callable[[InstanceRecord], None] | None = field(
+        default=None,
+        repr=False,
+        compare=False,
+    )
 
     def default_config(self, name: str) -> dict[str, Any]:
         from module.instances import load_profile_template
@@ -289,6 +294,10 @@ class GameAdapter:
 
         force_stop_process(self.load_typed_profile(record.name, record.game_config))
 
+    def stop_detached_agent(self, record: InstanceRecord) -> None:
+        if self.detached_agent_stopper is not None:
+            self.detached_agent_stopper(record)
+
     def verify_managed(self, record: InstanceRecord) -> bool:
         if self.id != "palworld":
             return self.is_running(record)
@@ -395,7 +404,7 @@ class GameAdapter:
         rest_snapshot = rest_cache.snapshot()
         if running and endpoints.get("rest") == "open":
             if rest_snapshot.metrics is None or rest_snapshot.info is None:
-                rest_cache.poll_once()
+                rest_cache.poll_once(timeout=rest_timeout)
                 rest_snapshot = rest_cache.snapshot()
             metrics = rest_snapshot.metrics
             if metrics is not None:
@@ -482,6 +491,12 @@ class GameAdapter:
         ensure_world_settings(profile)
 
 
+def _stop_palworld_detached_agent(record: InstanceRecord) -> None:
+    from module.games.palworld.server.agent import AgentClient
+
+    AgentClient.connect_existing(record.name).stop()
+
+
 _GAMES = {
     "palworld": GameAdapter(
         "palworld",
@@ -496,6 +511,7 @@ _GAMES = {
             world_settings=True,
             save_import=True,
         ),
+        detached_agent_stopper=_stop_palworld_detached_agent,
     ),
     "satisfactory": GameAdapter(
         "satisfactory",

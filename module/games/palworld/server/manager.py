@@ -25,6 +25,7 @@ from module.games.palworld.config import (
     fixed_executable_path,
     fixed_server_launcher_path,
     legacy_memory_restart_mb,
+    profile_server_output_path,
     sync_game_user_settings,
     windows_console_executable_path,
 )
@@ -56,7 +57,6 @@ from module.instances import (
     DailyLogWriter,
     clear_runtime,
     load_runtime,
-    profile_server_output_path,
     save_runtime,
     update_runtime,
 )
@@ -823,6 +823,7 @@ class PalServerManager:
             try:
                 stat = path.stat()
                 current_id = (stat.st_dev, stat.st_ino)
+                cursor_reset = False
                 if file_id is not None and current_id != file_id:
                     # UE4SS may replace its log while the server is starting
                     # (for example after SteamCMD replaces the executable).
@@ -831,10 +832,12 @@ class PalServerManager:
                     offset = stat.st_size
                     pending = b""
                     prefix = b""
+                    cursor_reset = True
                 elif stat.st_size < offset:
                     offset = 0
                     pending = b""
                     prefix = b""
+                    cursor_reset = True
                 file_id = current_id
 
                 if prefix and offset >= len(prefix) and stat.st_size >= len(prefix):
@@ -847,6 +850,10 @@ class PalServerManager:
                         offset = stat.st_size
                         pending = b""
                         prefix = b""
+                        cursor_reset = True
+
+                if cursor_reset and cursor_callback is not None:
+                    cursor_callback(offset, file_id, prefix)
 
                 with path.open("rb") as handle:
                     handle.seek(offset)

@@ -611,7 +611,7 @@ class ProcessManager:
                 if self._ownership == "external":
                     self._ownership = "none"
             if kind == "check_update":
-                self.append_log("Checking for Palworld updates")
+                self.append_log(f"Checking for {adapter.display_name} updates")
                 info = adapter.check_update(
                     record,
                     self._set_progress,
@@ -620,17 +620,23 @@ class ProcessManager:
                 )
                 if info.status == "update_available":
                     self.append_log(
-                        "Palworld update available: "
+                        f"{adapter.display_name} update available: "
                         f"{info.installed_build_id} -> {info.available_build_id}"
                     )
                 elif info.status == "up_to_date":
                     self.append_log(
-                        f"Palworld is up to date at build {info.installed_build_id}"
+                        f"{adapter.display_name} is up to date at build {info.installed_build_id}"
                     )
                 elif info.status == "not_installed":
-                    self.append_log("Palworld update check skipped because the server is not installed")
+                    self.append_log(
+                        f"{adapter.display_name} update check skipped because "
+                        "the server is not installed"
+                    )
                 else:
-                    self.append_log("Palworld update status is unknown; retry the check later")
+                    self.append_log(
+                        f"{adapter.display_name} update status is unknown; "
+                        "retry the check later"
+                    )
             else:
                 info = adapter.install_or_update(
                     record,

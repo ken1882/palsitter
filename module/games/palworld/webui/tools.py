@@ -333,14 +333,14 @@ def _fix(name: str, status: FirewallStatus, context=None) -> None:
         _log(name, f"repair unavailable: {exc}")
         run_if_current(
             context,
-            lambda: _render_fix_error("tools.fix_unavailable", exc),
+            lambda exc=exc: _render_fix_error("tools.fix_unavailable", exc),
         )
         return
     except (FirewallError, OSError) as exc:
         _log(name, f"repair failed: {exc}")
         run_if_current(
             context,
-            lambda: _render_fix_error("tools.fix_failed", exc),
+            lambda exc=exc: _render_fix_error("tools.fix_failed", exc),
         )
         return
     _log(name, "repair command completed; rechecking firewall")
@@ -432,7 +432,7 @@ def _retry_check_with_password(name: str, ask_to_fix: bool, context) -> None:
     except (FirewallError, OSError) as exc:
         _log(name, f"check failed: {exc}")
         _end_tools_firewall_check()
-        run_if_current(context, lambda: _render_fix_error("tools.check_failed", exc))
+        run_if_current(context, lambda exc=exc: _render_fix_error("tools.check_failed", exc))
         return
     finally:
         password = ""
@@ -468,7 +468,7 @@ def _retry_fix_with_password(name: str, status: FirewallStatus, context) -> None
         return
     except (FirewallError, OSError) as exc:
         _log(name, f"repair failed: {exc}")
-        run_if_current(context, lambda: _render_fix_error("tools.fix_failed", exc))
+        run_if_current(context, lambda exc=exc: _render_fix_error("tools.fix_failed", exc))
         return
     finally:
         password = ""
@@ -765,21 +765,21 @@ def _run_migration(
         _manager(name).append_log(f"Player migration unavailable: {exc}")
         run_if_current(
             context,
-            lambda: _render_migration_error("tools.migration_unavailable", exc),
+            lambda exc=exc: _render_migration_error("tools.migration_unavailable", exc),
         )
         return
     except (PlayerMigrationError, OSError) as exc:
         _manager(name).append_log(f"Player migration failed: {exc}")
         run_if_current(
             context,
-            lambda: _render_migration_error("tools.migration_failed", exc),
+            lambda exc=exc: _render_migration_error("tools.migration_failed", exc),
         )
         return
     except Exception as exc:
         _manager(name).append_log(f"Player migration failed: {exc}")
         run_if_current(
             context,
-            lambda: _render_migration_error("tools.migration_failed", exc),
+            lambda exc=exc: _render_migration_error("tools.migration_failed", exc),
         )
         return
     _manager(name).append_log(
@@ -844,21 +844,21 @@ def _run_name_cache(name: str, context, progress) -> None:
         _manager(name).append_log(f"Player name cache unavailable: {exc}")
         run_if_current(
             context,
-            lambda: _render_name_cache_error("tools.name_cache_unavailable", exc),
+            lambda exc=exc: _render_name_cache_error("tools.name_cache_unavailable", exc),
         )
         return
     except (PlayerNameCacheError, OSError) as exc:
         _manager(name).append_log(f"Player name cache failed: {exc}")
         run_if_current(
             context,
-            lambda: _render_name_cache_error("tools.name_cache_failed", exc),
+            lambda exc=exc: _render_name_cache_error("tools.name_cache_failed", exc),
         )
         return
     except Exception as exc:
         _manager(name).append_log(f"Player name cache failed: {exc}")
         run_if_current(
             context,
-            lambda: _render_name_cache_error("tools.name_cache_failed", exc),
+            lambda exc=exc: _render_name_cache_error("tools.name_cache_failed", exc),
         )
         return
     _manager(name).append_log(
