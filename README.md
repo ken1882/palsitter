@@ -4,6 +4,10 @@
 
 #### [![GitHub release](https://img.shields.io/github/v/release/ken1882/palsitter?color=4e4c97)](https://github.com/ken1882/palsitter/releases) [![GitHub commit activity](https://img.shields.io/github/commit-activity/m/ken1882/palsitter?color=4e4c97)](https://github.com/ken1882/palsitter/commits) [![GitHub issues](https://img.shields.io/github/issues/ken1882/palsitter?color=4e4c97)](https://github.com/ken1882/palsitter/issues)
 
+<p align="center"><img src="assets/gui/brand/palsitter.png" alt="Palsitter logo" width="256"></p>
+
+**Palworld Server Babysitter** · [GitHub](https://github.com/ken1882/palsitter) · [Windows x64 portable release](https://github.com/ken1882/palsitter/releases)
+
 Palsitter is a cross-platform game server manager with a web GUI. It is designed for
 running dedicated servers continuously while keeping installation, updates, lifecycle
 operations, backups, players, settings, and logs in one place.
@@ -11,21 +15,73 @@ operations, backups, players, settings, and logs in one place.
 Palsitter currently fully supports Palworld. Satisfactory is currently only a
 featureless placeholder and should not be used.
 
+After a server is created and started, routine installation, updates, recovery, and
+backups can run from the web GUI without opening another console window. Palsitter is
+intended to keep a small group server running while putting its status and output in one
+place.
+
 ## Features
 
 - **Multiple server management**: create, clone, rename, delete, and manage separate
   game server profiles from one interface.
 - **Hands-off after startup**: install and download the server through SteamCMD
   according to the profile, start it automatically, restart it after crashes, and
-  automatically restart for an update when no players are connected.
+  automatically restart for an update when no players are connected. Scheduled and
+  memory-based restarts, crash history, and repeated-crash self-healing are included;
+  self-healing creates a safety backup before rolling back save data.
 - **Server and world settings**: edit server and game options directly in the interface,
   with descriptions explaining the effect of each setting.
-- **Saves and backups**: create and restore backups, schedule recurring backups, and
-  retain the save data needed for migration or recovery.
-- **Tools and audit**: inspect server output, execute supported operations, review audit
-  history, and use game-specific utilities from one interface.
+- **Saves and backups**: create and restore backups, schedule recurring backups, switch
+  worlds, and migrate player data from a single-player or co-op save. Destructive save
+  operations create a safety backup first.
+- **Players and map**: view online, offline, and banned players; kick or ban players;
+  and view fast-travel points, players, and bases on the built-in Palworld map.
+- **Mods and tools**: manage installed Pak mods. Windows also exposes UE4SS and Lua mod
+  locations; Palsitter does not download mods for you. Firewall checks and fixes help
+  verify the server executable and UDP port, but router port forwarding remains your
+  responsibility.
+- **Logs and audit**: inspect live server output, status, metrics, supported operations,
+  and operation history from the web GUI.
 - **Multi-platform support**: use the portable Windows desktop release, native Linux
   deployment, Docker Compose, or systemd.
+
+## Quick start (Palworld)
+
+### Windows portable release
+
+1. Download `Palsitter-win-x64.7z` from [Releases](https://github.com/ken1882/palsitter/releases),
+   extract it to a writable directory, and start `Palsitter.exe`.
+2. Select **Add instance** in the upper-left corner. To import an existing world, choose
+   **Browse** and select its `Level.sav`; otherwise confirm without importing a save.
+3. Start the instance and wait for SteamCMD and the Palworld dedicated server to finish
+   installing and launching. A new server gets an admin password when needed, and the
+   REST API used by the GUI is enabled automatically.
+4. When the status shows the server as running and the Overview panels contain metrics,
+   the server is ready. Server output and Palsitter operations are shown in the web GUI.
+
+### From source
+
+Clone the repository, install the packages in `requirements.txt`, then run:
+
+```bash
+git clone https://github.com/ken1882/palsitter.git
+cd palsitter
+python -m pip install -r requirements.txt
+python gui.py
+```
+
+Open [http://127.0.0.1:22368/](http://127.0.0.1:22368/) and follow the same instance
+creation flow. Linux deployments can use the installer described below.
+
+### Importing a single-player or co-op save
+
+After importing the save, let the player create a character on the dedicated server,
+then stop the server before using **Home → Utils → Player ID migration**. If the imported
+save does not provide usable names, create the player-name cache first so the source and
+destination player files are not confused. The migration tool creates a safety backup.
+
+On Windows, closing the desktop window with **X** minimizes Palsitter to the system tray.
+Use the tray icon's **Exit**, or **Home → Utils → Shut down Palsitter**, to close it.
 
 ## Installation
 

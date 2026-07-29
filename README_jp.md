@@ -4,6 +4,10 @@
 
 #### [![GitHub release](https://img.shields.io/github/v/release/ken1882/palsitter?color=4e4c97)](https://github.com/ken1882/palsitter/releases) [![GitHub commit activity](https://img.shields.io/github/commit-activity/m/ken1882/palsitter?color=4e4c97)](https://github.com/ken1882/palsitter/commits) [![GitHub issues](https://img.shields.io/github/issues/ken1882/palsitter?color=4e4c97)](https://github.com/ken1882/palsitter/issues)
 
+<p align="center"><img src="assets/gui/brand/palsitter.png" alt="Palsitter logo" width="256"></p>
+
+**Palworld Server Babysitter** · [GitHub](https://github.com/ken1882/palsitter) · [Windows x64 ポータブル版](https://github.com/ken1882/palsitter/releases)
+
 Palsitter は Web GUI を備えたクロスプラットフォームのゲームサーバー管理ツールです。
 専用サーバーを継続的に運用しながら、インストール、更新、ライフサイクル操作、バックアップ、
 プレイヤー、設定、ログを一つの画面で管理できます。
@@ -11,21 +15,59 @@ Palsitter は Web GUI を備えたクロスプラットフォームのゲーム�
 Palsitter は現在、Palworld に完全対応しています。Satisfactory は機能のないプレースホルダー
 にすぎないため、使用しないでください。
 
+サーバーを作成して起動した後は、日常的なインストール、更新、復旧、バックアップを Web GUI
+から任せることができ、別の黒いコンソールウィンドウを開く必要はありません。Palsitter は
+小規模なサーバーを長時間運用しながら、状態と出力を一つの画面にまとめるためのツールです。
+
 ## 機能
 
 - **複数サーバー管理**：一つのインターフェースから、ゲームサーバーのプロファイルを作成、
   複製、名前変更、削除、管理できます。
 - **起動後はおまかせ**：プロファイルの設定に従って SteamCMD でサーバーをインストール・
   ダウンロードして起動し、クラッシュ後の自動再起動、プレイヤーが接続していないときの
-  更新に伴う自動再起動を行います。手動での再起動や更新は不要です。
+  更新に伴う自動再起動を行います。スケジュール再起動、メモリ使用量による再起動、再起動履歴、
+  短時間の連続クラッシュに対する自己修復にも対応し、ロールバック前には安全バックアップを作成します。
 - **サーバーとワールド設定**：インターフェースからサーバーとゲームの設定を直接編集でき、
   各設定の効果を説明する項目も表示します。
-- **セーブデータとバックアップ**：バックアップの作成・復元、定期バックアップのスケジュール、
-  移行や復旧に必要なセーブデータの保持を行います。
-- **ツールと監査**：サーバー出力の確認、対応操作の実行、監査履歴の確認、ゲーム固有の
-  ユーティリティを一つのインターフェースから利用できます。
+- **セーブデータとバックアップ**：バックアップの作成・復元、定期バックアップ、ワールド切り替え、
+  シングルプレイまたは協力プレイのセーブデータから専用サーバーへのプレイヤーデータ移行に対応します。
+  セーブデータを上書きする可能性がある操作の前には安全バックアップを作成します。
+- **プレイヤーとマップ**：オンライン、オフライン、BAN 済みプレイヤーの確認、キック・BAN を行えます。
+  内蔵マップにはファストトラベル地点、プレイヤー、拠点を表示できます。
+- **MOD とツール**：インストール済み Pak MOD を管理できます。Windows では UE4SS と Lua MOD の場所も
+  扱えますが、MOD 自体のダウンロードは行いません。ファイアウォールの確認・修復ツールでサーバー実行ファイルと
+  UDP ポートを確認できますが、ルーターのポート転送は自分で設定してください。
+- **ログと監査**：Web GUI からリアルタイムのサーバー出力、状態、メトリクス、対応操作、操作履歴を確認できます。
 - **マルチプラットフォーム対応**：Windows ポータブル版、ネイティブ Linux、Docker Compose、
   systemd を利用できます。
+
+## クイックスタート（Palworld）
+
+### Windows ポータブル版
+
+1. [Releases](https://github.com/ken1882/palsitter/releases) から `Palsitter-win-x64.7z` をダウンロードし、書き込み可能なディレクトリに展開して `Palsitter.exe` を起動します。
+2. 左上の **インスタンスを追加** を選択します。既存のワールドをインポートする場合は **参照** を選び、対応する `Level.sav` を指定します。セーブデータがない場合はそのまま確定します。
+3. インスタンスを起動し、SteamCMD と Palworld 専用サーバーのインストール・起動が完了するまで待ちます。新しいサーバーでは必要に応じて admin password が自動生成され、GUI が使用する REST API も自動的に有効になります。
+4. 状態が起動中になり、Overview パネルにメトリクスが表示されたら準備完了です。サーバー出力と Palsitter の操作履歴は Web GUI に表示されます。
+
+### ソースから実行
+
+リポジトリを clone して `requirements.txt` のパッケージをインストールした後、次を実行します：
+
+```bash
+git clone https://github.com/ken1882/palsitter.git
+cd palsitter
+python -m pip install -r requirements.txt
+python gui.py
+```
+
+[http://127.0.0.1:22368/](http://127.0.0.1:22368/) を開き、同じインスタンス追加手順に進みます。Linux 環境では下記のインストーラーも使用できます。
+
+### シングルプレイまたは協力プレイのセーブデータを移行する場合
+
+セーブデータをインポートした後、まずプレイヤーが専用サーバーでキャラクターを作成します。その後サーバーを停止し、**Home → Utils → Player ID migration** を実行してください。インポートしたセーブデータに利用できる名前がない場合は、先にプレイヤー名キャッシュを作成して、移行元と移行先を間違えないようにします。移行ツールは安全バックアップを先に作成します。
+
+Windows 版で右上の **X** を押すと Palsitter はシステムトレイに最小化されます。完全に終了するには、トレイアイコンの **Exit**、または **Home → Utils → Shut down Palsitter** を使用してください。
 
 ## インストール
 
