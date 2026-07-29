@@ -17,7 +17,7 @@ class InstancePage:
 
 @dataclass(frozen=True)
 class InstanceCreationUI:
-    render_fields: Callable[[], None]
+    render_fields: Callable[[str], None]
     create: Callable[[str, str], None | bool]
 
 

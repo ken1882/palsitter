@@ -39,4 +39,4 @@
   padding: .05rem;
   font-size: 1rem;
 }
-#pywebio-scope-add_import_panel > div { align-items: end; }
+.add-import-panel > div { align-items: end; }

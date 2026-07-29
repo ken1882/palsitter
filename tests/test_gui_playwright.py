@@ -1039,6 +1039,24 @@ def test_side_add_server_is_overlay_modal(tmp_path, monkeypatch):
         assert "server" not in source_options
 
         confirm = page.get_by_role("button", name="Confirm", exact=True)
+        profile_input.fill("")
+        confirm.click()
+        modal = page.locator(
+            ".modal.show",
+            has=page.get_by_role("heading", name="Add server", exact=True),
+        )
+        modal.get_by_text(
+            "Use letters, numbers, hyphens, or underscores, and do not start the name with template.",
+            exact=True,
+        ).wait_for(timeout=5000)
+        assert modal.get_by_text(
+            "Error: The name of this scope is duplicated with the previous one!",
+            exact=True,
+        ).count() == 0
+        assert modal.get_by_label("Copy from", exact=True).count() == 1
+        assert modal.get_by_label("Import Level.sav file", exact=True).count() == 1
+        assert modal.get_by_role("button", name="Confirm", exact=True).count() == 1
+
         cancel = modal.get_by_role("button", name="Cancel", exact=True)
         assert cancel.count() == 1
         cancel.click()
@@ -1115,8 +1133,8 @@ def test_add_server_shows_locked_creation_progress(tmp_path, monkeypatch):
     with _gui_page(tmp_path, monkeypatch) as (page, _):
         page.locator("#pywebio-scope-aside").get_by_text("Add", exact=True).click()
         page.get_by_label("Profile name", exact=True).fill("slow-import")
-        page.get_by_label("Level.sav file", exact=True).fill(str(world / "Level.sav"))
-        page.locator("#pywebio-scope-add_import_panel").get_by_role(
+        page.get_by_label("Import Level.sav file", exact=True).fill(str(world / "Level.sav"))
+        page.locator(".add-import-panel").get_by_role(
             "button", name="Browse", exact=True
         ).click()
         browser = page.locator(".modal.show")
@@ -5018,8 +5036,8 @@ def test_dedicated_save_import_preview_and_managed_world_switch(tmp_path, monkey
         page.locator("#pywebio-scope-aside").get_by_text("Add", exact=True).click()
         page.get_by_label("Profile name", exact=True).fill("imported")
         import_path = first / "Level.sav"
-        page.get_by_label("Level.sav file", exact=True).fill(str(import_path))
-        page.locator("#pywebio-scope-add_import_panel").get_by_role(
+        page.get_by_label("Import Level.sav file", exact=True).fill(str(import_path))
+        page.locator(".add-import-panel").get_by_role(
             "button", name="Browse", exact=True
         ).click()
         browser = page.locator(".modal.show")
@@ -5095,8 +5113,8 @@ def test_single_player_save_import_starts_migration_workflow(tmp_path, monkeypat
         page.locator("#pywebio-scope-aside").get_by_text("Add", exact=True).click()
         page.get_by_label("Profile name", exact=True).fill("singleplayer-import")
         level_path = world / "Level.sav"
-        page.get_by_label("Level.sav file", exact=True).fill(str(level_path))
-        page.locator("#pywebio-scope-add_import_panel").get_by_role(
+        page.get_by_label("Import Level.sav file", exact=True).fill(str(level_path))
+        page.locator(".add-import-panel").get_by_role(
             "button", name="Browse", exact=True
         ).click()
         browser = page.locator(".modal.show")

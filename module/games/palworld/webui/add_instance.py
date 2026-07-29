@@ -23,7 +23,8 @@ from module.webui.assets import client_call
 from module.webui.file_browser import _browse_normalize_path
 
 
-def render_fields() -> None:
+def render_fields(scope: str) -> None:
+    panel_scope = f"{scope}_panel"
     import_path = str(
         getattr(
             local,
@@ -32,9 +33,9 @@ def render_fields() -> None:
         )
         or ""
     )
-    with use_scope("add_server_import"):
+    with use_scope(scope):
         put_scope(
-            "add_import_panel",
+            panel_scope,
             [
                 put_row(
                     [
@@ -55,7 +56,7 @@ def render_fields() -> None:
                 ),
             ],
         )
-        client_call("dom.addClasses", scope="add_import_panel", classes=["add-import-panel"])
+        client_call("dom.addClasses", scope=panel_scope, classes=["add-import-panel"])
 
 
 def _open_import_browser() -> None:
