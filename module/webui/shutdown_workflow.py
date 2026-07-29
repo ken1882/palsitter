@@ -209,6 +209,11 @@ def _render_overlay() -> None:
         forceAt=float(state.get("force_available_at", 0)),
         selector="#pywebio-scope-shutdown_force_button button",
         enabled=force_allowed,
+        forceLabel=t("utils.force_shutdown"),
+        forceCountdownLabel=t(
+            "utils.force_shutdown_countdown",
+            seconds="{seconds}",
+        ),
     )
 
 

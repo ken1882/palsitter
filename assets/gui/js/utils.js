@@ -19,15 +19,21 @@
         },
     };
     let shutdownTimer = null;
-    const mountShutdown = ({forceAt, selector, enabled}) => {
+    const mountShutdown = ({
+        forceAt,
+        selector,
+        enabled,
+        forceLabel = "Force Shutdown",
+        forceCountdownLabel = "Force Shutdown ({seconds})",
+    }) => {
         if (shutdownTimer !== null) clearInterval(shutdownTimer);
         const update = () => {
             const button = document.querySelector(selector);
             if (!button) return;
             const remaining = Math.max(0, Math.ceil(Number(forceAt) - Date.now() / 1000));
             button.textContent = remaining > 0
-                ? `${t("utils.force_shutdown")} (${remaining})`
-                : t("utils.force_shutdown");
+                ? String(forceCountdownLabel).replace("{seconds}", remaining)
+                : forceLabel;
             button.disabled = !enabled || remaining > 0;
             if (remaining === 0) {
                 clearInterval(shutdownTimer);
