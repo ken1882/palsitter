@@ -1121,6 +1121,25 @@ def test_side_add_server_is_overlay_modal(tmp_path, monkeypatch):
 
 
 @pytest.mark.playwright
+def test_empty_startup_adds_default_palworld_instance(tmp_path, monkeypatch):
+    with _gui_page(tmp_path, monkeypatch, seed_profile=False) as (page, config_dir):
+        page.locator("#pywebio-scope-aside").get_by_text("Add", exact=True).click()
+        modal = page.locator(".modal.show")
+        modal.get_by_label("Profile name", exact=True).wait_for(timeout=5000)
+        assert modal.get_by_label("Copy from", exact=True).locator(
+            "option:checked"
+        ).inner_text() == "template"
+
+        modal.get_by_role("button", name="Confirm", exact=True).click()
+        page.locator("#pywebio-scope-aside").get_by_text(
+            "palworld", exact=True
+        ).wait_for(timeout=5000)
+
+        monkeypatch.setenv("PALSITTER_CONFIG_DIR", str(config_dir))
+        assert load_instance("palworld").game == "palworld"
+
+
+@pytest.mark.playwright
 def test_add_server_shows_locked_creation_progress(tmp_path, monkeypatch):
     world_id = "D" * 32
     world = tmp_path / "source" / world_id

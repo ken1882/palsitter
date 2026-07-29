@@ -30,3 +30,9 @@ def test_desktop_source_and_release_icon_exist():
     assert (DESKTOP / "main.js").is_file()
     assert (DESKTOP / "assets" / "palsitter.png").is_file()
     assert (DESKTOP / "build-resources" / "palsitter.ico").is_file()
+    assert (ROOT / "profile" / "template" / "palworld.json").is_file()
+    assert (ROOT / "profile" / "template" / "satisfactory.json").is_file()
+    prepare_source = (DESKTOP / "scripts" / "prepare-source.ps1").read_text(
+        encoding="utf-8"
+    )
+    assert '"/profile/template/"' in prepare_source

@@ -28,7 +28,8 @@ if ($LASTEXITCODE -ne 0) {
     "/.gitignore",
     "/gui.py",
     "/module/",
-    "/assets/"
+    "/assets/",
+    "/profile/template/"
 ) | & git -c safe.directory=* --git-dir $metadataPath --work-tree $outputPath sparse-checkout set --no-cone --stdin
 if ($LASTEXITCODE -ne 0) {
     throw "Could not configure the packaged source checkout"
