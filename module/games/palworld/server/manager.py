@@ -1191,7 +1191,8 @@ class PalServerManager:
             self.next_planned_restart = None
         if self.agent_client_factory is not None and WINDOWS:
             if self.adopt_managed and not self._crash_recovery:
-                self._adopt_agent_server()
+                if self._adopt_agent_server():
+                    self.adopt_managed = False
                 return
             if self.running_probe(self.profile):
                 self.external_attached = True
@@ -1207,6 +1208,7 @@ class PalServerManager:
                 raise RuntimeError("Managed server is no longer running; adoption aborted")
             self.log("Existing managed server detected; adopting without launching")
             self._adopt_existing_process()
+            self.adopt_managed = False
             return
         if self.running_probe(self.profile):
             self.external_attached = True

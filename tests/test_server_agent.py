@@ -310,6 +310,44 @@ def test_managed_restore_connects_to_idle_agent_without_starting_server(monkeypa
 
     assert calls == [("connect", "test"), ("status",), ("stop",)]
     assert manager.process is None
+    assert manager.adopt_managed is True
+
+
+def test_restart_after_managed_restore_launches_new_agent(monkeypatch):
+    calls = []
+    monkeypatch.setattr("module.games.palworld.server.manager.WINDOWS", True)
+    manager = PalServerManager(
+        Profile(name="test"),
+        agent_client_factory=object(),
+        running_probe=lambda profile: False,
+        adopt_managed=True,
+        sleep=lambda seconds: None,
+    )
+    monkeypatch.setattr(
+        manager,
+        "_adopt_agent_server",
+        lambda: calls.append(("adopt",)) or True,
+    )
+    monkeypatch.setattr(
+        manager,
+        "_start_agent_server",
+        lambda update: calls.append(("start", update)) or True,
+    )
+    monkeypatch.setattr(
+        manager,
+        "stop",
+        lambda graceful: calls.append(("stop", graceful)),
+    )
+
+    manager.start(update=False, manual=False)
+    manager.restart(reason="automatic update", update=True)
+
+    assert calls == [
+        ("adopt",),
+        ("stop", True),
+        ("start", True),
+    ]
+    assert manager.adopt_managed is False
 
 
 def test_agent_managed_stop_sends_stop_before_waiting_for_server_exit():

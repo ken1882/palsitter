@@ -785,6 +785,7 @@ def test_adopt_managed_server_validates_runtime_and_replays_output(tmp_path, mon
 
     assert manager.external_attached is False
     assert manager.process.pid == 4321
+    assert manager.adopt_managed is False
     manager.stop(graceful=False)
 
 
