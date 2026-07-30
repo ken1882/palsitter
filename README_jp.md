@@ -19,6 +19,9 @@ Palsitter は現在、Palworld に完全対応しています。Satisfactory は
 から任せることができ、別の黒いコンソールウィンドウを開く必要はありません。Palsitter は
 小規模なサーバーを長時間運用しながら、状態と出力を一つの画面にまとめるためのツールです。
 
+GUI の画像です：
+<p align="center"><img src="assets/overview_jp.png" alt="Palsitter gui"></p>
+
 ## 機能
 
 - **複数サーバー管理**：一つのインターフェースから、ゲームサーバーのプロファイルを作成、

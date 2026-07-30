@@ -20,6 +20,9 @@ backups can run from the web GUI without opening another console window. Palsitt
 intended to keep a small group server running while putting its status and output in one
 place.
 
+Here's a picture of the GUI:
+<p align="center"><img src="assets/overview_en.png" alt="Palsitter gui"></p>
+
 ## Features
 
 - **Multiple server management**: create, clone, rename, delete, and manage separate
