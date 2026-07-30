@@ -35,8 +35,9 @@ according to Server Settings.
   its managed session. Force Restart and a successful GUI updater pull hand off the
   supervisor, verify the agent/server identity, and replace only the GUI. The replacement
   reconnects with status-only adoption and resumes the persistent ConPTY log; it never
-  runs SteamCMD or launches a second PalServer during restore. If verification fails,
-  replacement is aborted and the current GUI remains alive.
+  runs SteamCMD or launches a second PalServer during restore. The agent runs without
+  opening an operator-visible console window. If verification fails, replacement is
+  aborted and the current GUI remains alive.
 - On native Linux, Palsitter supervises PalServer directly with `Popen` and `psutil`.
   The detached agent and Windows Job Object ownership model are Windows-only.
 - Overview has no separate Check update, Update, Validate/Repair, Retry, or scheduler

@@ -5,6 +5,7 @@ import subprocess
 import sys
 import threading
 import time
+from contextlib import nullcontext
 from pathlib import Path
 
 import pytest
@@ -255,6 +256,44 @@ def test_agent_client_sends_versioned_json_request(monkeypatch):
     assert writes[0]["command"] == "status"
 
 
+def test_agent_launch_uses_no_window_process_flag(monkeypatch):
+    state = None
+    captured = {}
+    connected = object()
+
+    def popen(command, **kwargs):
+        nonlocal state
+        captured["command"] = command
+        captured["kwargs"] = kwargs
+        state = {"agent_pid": 123}
+
+    monkeypatch.setattr(agent, "_require_windows", lambda: None)
+    monkeypatch.setattr(agent, "_agent_launch_lock", lambda name: nullcontext())
+    monkeypatch.setattr(agent, "load_agent_state", lambda name: state)
+    monkeypatch.setattr(agent, "open_debug_log", lambda name: None)
+    monkeypatch.setattr(agent.subprocess, "Popen", popen)
+    monkeypatch.setattr(
+        agent.AgentClient,
+        "connect_existing",
+        classmethod(lambda cls, name: connected),
+    )
+
+    result = agent.AgentClient.launch_idle("test")
+
+    assert result is connected
+    assert captured["command"] == [
+        sys.executable,
+        "-m",
+        agent.AGENT_MODULE,
+        "--profile",
+        "test",
+    ]
+    assert captured["kwargs"]["creationflags"] == 0x08000000 | 0x00000200
+    assert captured["kwargs"]["stdin"] == subprocess.DEVNULL
+    assert captured["kwargs"]["stdout"] == subprocess.DEVNULL
+    assert captured["kwargs"]["stderr"] == subprocess.DEVNULL
+
+
 @pytest.mark.parametrize(("method", "command"), [("stop", "stop"), ("kill", "kill")])
 def test_agent_shutdown_waits_for_agent_cleanup(monkeypatch, method, command):
     state = {"agent_pid": 123, "agent_create_time": 4.5}
@@ -465,39 +504,52 @@ def test_restart_after_managed_restore_launches_new_agent(monkeypatch):
     assert manager.adopt_managed is False
 
 
-def test_agent_managed_stop_sends_stop_before_waiting_for_server_exit():
+def test_agent_managed_stop_caches_acknowledged_exit_without_reconnecting():
     class Client:
         def __init__(self):
-            self.server_state = "running"
             self.stop_calls = 0
+            self.status_calls = 0
 
         def status(self):
-            return {
-                "server_state": self.server_state,
-                "server_pid": 123,
-                "exit_code": 0,
-            }
+            self.status_calls += 1
+            raise AssertionError("acknowledged agent stop must not reconnect")
 
         def stop(self):
             self.stop_calls += 1
-            self.server_state = "stopped"
-            return self.status()
+            return {
+                "server_state": "stopped",
+                "server_pid": 123,
+                "exit_code": 7,
+                "exit_reason": "stopped",
+            }
 
     client = Client()
+    states = []
+
     class Rest:
         def shutdown(self):
             pass
 
-    manager = PalServerManager(Profile(name="test"), rest_client=Rest())
+    manager = PalServerManager(
+        Profile(name="test"),
+        rest_client=Rest(),
+        state_callback=states.append,
+    )
     manager.agent_client = client
-    manager.process = AgentServerProcess(
+    process = AgentServerProcess(
         client,
         {"server_pid": 123, "server_create_time": 1.0},
     )
+    manager.process = process
 
     manager.stop(graceful=True)
 
     assert client.stop_calls == 1
+    assert client.status_calls == 0
+    assert process.poll() == 7
+    assert process.wait(timeout=0) == 7
+    assert manager.alive is False
+    assert states == ["stopping", "inactive"]
 
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows named pipes are Windows-only")

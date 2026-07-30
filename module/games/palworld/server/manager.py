@@ -122,7 +122,16 @@ class AgentServerProcess:
         self.create_time = status.get("server_create_time")
         self.returncode: int | None = None
 
+    def mark_exited(self, status: dict[str, object]) -> None:
+        value = status.get("exit_code")
+        try:
+            self.returncode = int(value) if value is not None else 0
+        except (TypeError, ValueError):
+            self.returncode = 0
+
     def poll(self) -> int | None:
+        if self.returncode is not None:
+            return self.returncode
         try:
             status = self.client.status()
         except (OSError, RuntimeError, TimeoutError):
@@ -1454,13 +1463,13 @@ class PalServerManager:
                     self.log(f"Force stop request failed: {exc}")
         agent_managed = self.agent_client is not None
         agent_status: dict[str, object] | None = None
-        if self.process is not None and self.alive and graceful and not agent_managed:
+        if self.process is not None and graceful and not agent_managed and self.alive:
             try:
                 self.process.wait(timeout=max(3, self.profile.shutdown_wait_seconds + 5))
             except subprocess.TimeoutExpired:
                 self.log("PalServer is still running; use KILL to force stop")
                 return
-        elif self.process is not None and self.alive and not agent_managed:
+        elif self.process is not None and not agent_managed and self.alive:
             self.process.terminate()
             self.process.wait(timeout=5)
         if agent_managed:
@@ -1470,6 +1479,12 @@ class PalServerManager:
                 )()
             except (OSError, RuntimeError, TimeoutError):
                 pass
+            if (
+                agent_status is not None
+                and str(agent_status.get("server_state")) == "stopped"
+                and isinstance(self.process, AgentServerProcess)
+            ):
+                self.process.mark_exited(agent_status)
             if self.process is not None:
                 try:
                     self.process.wait(timeout=5)

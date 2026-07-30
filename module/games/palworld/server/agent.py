@@ -529,7 +529,7 @@ class AgentClient:
                 "--profile",
                 profile_name,
             ]
-            flags = getattr(subprocess, "DETACHED_PROCESS", 0x00000008)
+            flags = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
             flags |= getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
             debug_output = open_debug_log(f"agent-{profile_name}")
             try:

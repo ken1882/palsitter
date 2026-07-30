@@ -1565,6 +1565,7 @@ def test_scheduler_consolidates_instance_operations_without_persistent_strip(tmp
     _prepare_fixed_steamcmd(tmp_path)
     profile_overrides = {
         "executable_args": ["-c", "import time; time.sleep(60)"],
+        "launch_enable_gamedata_api": False,
         "steam_validate": True,
     }
 
@@ -1614,8 +1615,27 @@ def test_scheduler_consolidates_instance_operations_without_persistent_strip(tmp
             try:
                 start.click()
                 stop.wait_for(timeout=5000)
+                page.wait_for_function(
+                    "() => !document.querySelector('#pywebio-scope-scheduler_save button')?.disabled"
+                )
                 stop.click()
                 start.wait_for(timeout=10000)
+                endpoints = scheduler.locator("#pywebio-scope-scheduler_endpoints")
+                endpoints.locator('[data-endpoint="udp"]').get_by_text(
+                    "Closed (8211)", exact=False
+                ).wait_for(timeout=5000)
+                endpoints.locator('[data-endpoint="rest"]').get_by_text(
+                    "Closed", exact=False
+                ).wait_for(timeout=5000)
+                shutdown_bodies = [
+                    body for path, body in rest_calls if path == "/v1/api/shutdown"
+                ]
+                assert shutdown_bodies == [
+                    {
+                        "waittime": 5,
+                        "message": "Server will shutdown immediately",
+                    }
+                ]
                 start.click()
                 stop.wait_for(timeout=5000)
                 for action in ("Stop", "Save", "Backup"):
@@ -1642,22 +1662,8 @@ def test_scheduler_consolidates_instance_operations_without_persistent_strip(tmp
                 assert scheduler.get_by_role(
                     "button", name="Save", exact=True
                 ).is_disabled()
-                deadline = time.time() + 5
-                while not any(
-                    path == "/v1/api/shutdown" for path, _ in rest_calls
-                ) and time.time() < deadline:
-                    time.sleep(0.05)
                 kill.click()
                 start.wait_for(timeout=10000)
-                shutdown_bodies = [
-                    body for path, body in rest_calls if path == "/v1/api/shutdown"
-                ]
-                assert shutdown_bodies == [
-                    {
-                        "waittime": 5,
-                        "message": "Server will shutdown immediately",
-                    }
-                ]
             finally:
                 if stop.count() and stop.is_visible():
                     stop.click()
