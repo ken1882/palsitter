@@ -2,7 +2,7 @@
 
 # Palsitter
 
-#### [![GitHub release](https://img.shields.io/github/v/release/ken1882/palsitter?color=4e4c97)](https://github.com/ken1882/palsitter/releases) [![GitHub commit activity](https://img.shields.io/github/commit-activity/m/ken1882/palsitter?color=4e4c97)](https://github.com/ken1882/palsitter/commits) [![GitHub issues](https://img.shields.io/github/issues/ken1882/palsitter?color=4e4c97)](https://github.com/ken1882/palsitter/issues)
+#### [![GitHub release](https://img.shields.io/github/v/release/ken1882/palsitter?color=4e4c97)](https://github.com/ken1882/palsitter/releases) [![GitHub commit activity](https://img.shields.io/github/commit-activity/m/ken1882/palsitter?color=4e4c97)](https://github.com/ken1882/palsitter/commits) [![GitHub issues](https://img.shields.io/github/issues/ken1882/palsitter?color=4e4c97)](https://github.com/ken1882/palsitter/issues) ![Downloads](https://img.shields.io/github/downloads/ken1882/palsitter/total)
 
 <p align="center"><img src="assets/gui/brand/palsitter.png" alt="Palsitter logo" width="256"></p>
 
@@ -209,7 +209,7 @@ docker compose up -d
 ## Building the Windows Electron release
 
 Local builds require Windows PowerShell, Node.js 24, Python 3.12 with `pip`, Git for
-Windows, and 7-Zip. From the repository root:
+Windows, and 7-Zip (`choco install 7zip`). From the repository root:
 
 ```powershell
 .\build.bat

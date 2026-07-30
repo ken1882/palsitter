@@ -2,7 +2,7 @@
 
 # Palsitter
 
-#### [![GitHub release](https://img.shields.io/github/v/release/ken1882/palsitter?color=4e4c97)](https://github.com/ken1882/palsitter/releases) [![GitHub commit activity](https://img.shields.io/github/commit-activity/m/ken1882/palsitter?color=4e4c97)](https://github.com/ken1882/palsitter/commits) [![GitHub issues](https://img.shields.io/github/issues/ken1882/palsitter?color=4e4c97)](https://github.com/ken1882/palsitter/issues)
+#### [![GitHub release](https://img.shields.io/github/v/release/ken1882/palsitter?color=4e4c97)](https://github.com/ken1882/palsitter/releases) [![GitHub commit activity](https://img.shields.io/github/commit-activity/m/ken1882/palsitter?color=4e4c97)](https://github.com/ken1882/palsitter/commits) [![GitHub issues](https://img.shields.io/github/issues/ken1882/palsitter?color=4e4c97)](https://github.com/ken1882/palsitter/issues) ![Downloads](https://img.shields.io/github/downloads/ken1882/palsitter/total)
 
 <p align="center"><img src="assets/gui/brand/palsitter.png" alt="Palsitter logo" width="256"></p>
 
@@ -172,7 +172,7 @@ docker compose up -d
 ## 建置 Windows Electron 發行版
 
 本機建置需要 Windows PowerShell、Node.js 24、含 `pip` 的 Python 3.12、
-Git for Windows 及 7-Zip。請在專案根目錄執行：
+Git for Windows 及 7-Zip (`choco install 7zip`)。請在專案根目錄執行：
 
 ```powershell
 .\build.bat

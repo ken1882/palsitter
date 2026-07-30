@@ -2,7 +2,7 @@
 
 # Palsitter
 
-#### [![GitHub release](https://img.shields.io/github/v/release/ken1882/palsitter?color=4e4c97)](https://github.com/ken1882/palsitter/releases) [![GitHub commit activity](https://img.shields.io/github/commit-activity/m/ken1882/palsitter?color=4e4c97)](https://github.com/ken1882/palsitter/commits) [![GitHub issues](https://img.shields.io/github/issues/ken1882/palsitter?color=4e4c97)](https://github.com/ken1882/palsitter/issues)
+#### [![GitHub release](https://img.shields.io/github/v/release/ken1882/palsitter?color=4e4c97)](https://github.com/ken1882/palsitter/releases) [![GitHub commit activity](https://img.shields.io/github/commit-activity/m/ken1882/palsitter?color=4e4c97)](https://github.com/ken1882/palsitter/commits) [![GitHub issues](https://img.shields.io/github/issues/ken1882/palsitter?color=4e4c97)](https://github.com/ken1882/palsitter/issues) ![Downloads](https://img.shields.io/github/downloads/ken1882/palsitter/total)
 
 <p align="center"><img src="assets/gui/brand/palsitter.png" alt="Palsitter logo" width="256"></p>
 
@@ -190,7 +190,7 @@ docker compose up -d
 ## Windows Electron リリースのビルド
 
 ローカルビルドには Windows PowerShell、Node.js 24、`pip` を含む Python 3.12、
-Git for Windows、7-Zip が必要です。リポジトリのルートディレクトリで実行してください：
+Git for Windows、7-Zip (`choco install 7zip`) が必要です。リポジトリのルートディレクトリで実行してください：
 
 ```powershell
 .\build.bat
