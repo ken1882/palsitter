@@ -162,22 +162,15 @@ journalctl -u palsitter -f
 
 ## データと更新
 
-Linux シェル版はデフォルトで実行時データを `data/` に保存します：
+ソースからの直接実行と Linux シェル版は、同じプロジェクトルートのディレクトリを使用します：
 
 ```text
-data/config/    Palsitter の設定
-data/profile/   インスタンス、Palworld のインストール、セーブ、バックアップ
-data/logs/      アプリケーションログ
+config/    Palsitter の設定
+profile/   インスタンス、Palworld のインストール、セーブ、バックアップ
+logs/      アプリケーションログ
 ```
 
-更新または移行の前に `data/config` と `data/profile` をバックアップしてください。別の場所を
-使用する場合は、インストール時と実行時で `PALSITTER_DATA_DIR` に同じ値を設定します：
-
-```bash
-export PALSITTER_DATA_DIR=/srv/palsitter-data
-./script/linux/palsitter.sh install
-./script/linux/palsitter.sh run
-```
+更新または移行の前に `config/` と `profile/` をバックアップしてください。
 
 ソース checkout の更新：
 
@@ -193,6 +186,25 @@ Docker 版はイメージを再ビルドして更新します：
 docker compose build --pull
 docker compose up -d
 ```
+
+## Windows Electron リリースのビルド
+
+ローカルビルドには Windows PowerShell、Node.js 24、`pip` を含む Python 3.12、
+Git for Windows、7-Zip が必要です。リポジトリのルートディレクトリで実行してください：
+
+```powershell
+.\build.bat
+```
+
+このバッチファイルは `python` が Python 3.12 を参照していない場合、ステージング前に停止します。
+各スクリプトにはプロセス単位の PowerShell 実行ポリシーのバイパスを適用し、ビルドまたは
+パッケージ済みランタイムの検証に失敗した時点で直ちに終了します。
+
+展開済みアプリケーションは `desktop/dist/win-unpacked/` に出力されます。ポータブル版の
+アーカイブと SHA-256 チェックサムは `desktop/dist/` に出力されます。パッケージの詳細と
+トラブルシューティングについては
+[Windows Electron Release](docs/shared/features/windows-electron-release.md#building-locally)
+を参照してください。
 
 ## ドキュメント
 

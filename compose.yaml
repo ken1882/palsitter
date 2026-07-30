@@ -12,7 +12,6 @@ services:
     ports:
       - "127.0.0.1:${PALSITTER_PORT:-22368}:${PALSITTER_PORT:-22368}"
     environment:
-      PALSITTER_DATA_DIR: /var/lib/palsitter
       PALSITTER_CONFIG_DIR: /var/lib/palsitter/config
       PALSITTER_PROFILE_DIR: /var/lib/palsitter/profile
       PALSITTER_LOG_DIR: /var/lib/palsitter/logs

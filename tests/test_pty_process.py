@@ -235,7 +235,7 @@ def test_windows_pty_process_missing_pywinpty_error(monkeypatch):
 
     monkeypatch.setattr(builtins, "__import__", fake_import)
 
-    with pytest.raises(RuntimeError, match="pywinpty"):
+    with pytest.raises(RuntimeError, match="pywinpty.*Import failed: missing"):
         WindowsPtyProcess(["steamcmd"], "workdir")
 
 

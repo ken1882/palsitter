@@ -4,6 +4,17 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$expectedPythonVersion = [Version]$PythonVersion
+$expectedPythonAbi = "$($expectedPythonVersion.Major).$($expectedPythonVersion.Minor)"
+$buildPythonInfo = (& python -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}|{sys.executable}')").Trim()
+if ($LASTEXITCODE -ne 0) {
+    throw "Could not inspect the Python executable used to install runtime dependencies"
+}
+$buildPythonAbi, $buildPythonExecutable = $buildPythonInfo -split '\|', 2
+if ($buildPythonAbi -ne $expectedPythonAbi) {
+    throw "Python $expectedPythonAbi is required to build embedded Python $PythonVersion, but 'python' is $buildPythonAbi at $buildPythonExecutable"
+}
+
 $outputPath = if ([IO.Path]::IsPathRooted($Output)) {
     [IO.Path]::GetFullPath($Output)
 } else {
@@ -33,7 +44,10 @@ Set-Content -LiteralPath $pth.FullName -Value @(
 ) -Encoding ascii
 
 python -m pip install --disable-pip-version-check --target (Join-Path $outputPath 'Lib\site-packages') -r (Join-Path $PSScriptRoot '..\..\requirements-runtime.txt')
-& (Join-Path $outputPath 'python.exe') -c "import psutil, pywebio, requests; print('Palsitter runtime ready')"
+if ($LASTEXITCODE -ne 0) {
+    throw "Could not install the bundled Python runtime dependencies"
+}
+& (Join-Path $outputPath 'python.exe') -c "import psutil, pywebio, requests, winpty; print('Palsitter runtime ready')"
 if ($LASTEXITCODE -ne 0) {
     throw "The bundled Python runtime failed its import smoke test"
 }

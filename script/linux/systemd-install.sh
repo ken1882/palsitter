@@ -7,7 +7,6 @@ RUNNER="$SCRIPT_DIR/palsitter.sh"
 SERVICE_NAME="${PALSITTER_SYSTEMD_SERVICE:-palsitter}"
 SERVICE_USER="${PALSITTER_SYSTEMD_USER:-${SUDO_USER:-$(id -un)}}"
 SERVICE_GROUP="${PALSITTER_SYSTEMD_GROUP:-}"
-DATA_DIR="${PALSITTER_DATA_DIR:-$PROJECT_ROOT/data}"
 VENV_DIR="${PALSITTER_VENV_DIR:-$PROJECT_ROOT/.venv}"
 PYTHON_MANAGER="${PALSITTER_PYTHON_MANAGER:-${PALSITTER_ENV_MANAGER:-venv}}"
 HOST="${PALSITTER_HOST:-127.0.0.1}"
@@ -26,7 +25,6 @@ Environment:
   PALSITTER_SYSTEMD_SERVICE   Service name (default: palsitter)
   PALSITTER_SYSTEMD_USER      Service user (default: invoking user)
   PALSITTER_SYSTEMD_GROUP     Service group (default: user's primary group)
-  PALSITTER_DATA_DIR          Runtime data directory
   PALSITTER_VENV_DIR          Python virtual environment directory
   PALSITTER_PYTHON_MANAGER    venv, asdf, pipenv, or uv
   PALSITTER_HOST              Web UI bind address (default: 127.0.0.1)
@@ -124,7 +122,6 @@ write_unit() {
     printf 'User=%s\n' "$SERVICE_USER"
     printf 'Group=%s\n' "$SERVICE_GROUP"
     printf 'WorkingDirectory=%s\n' "$(unit_quote "$PROJECT_ROOT")"
-    printf 'Environment=%s\n' "$(unit_quote "PALSITTER_DATA_DIR=$DATA_DIR")"
     printf 'Environment=%s\n' "$(unit_quote "PALSITTER_VENV_DIR=$VENV_DIR")"
     printf 'Environment=%s\n' "$(unit_quote "PALSITTER_PYTHON_MANAGER=$PYTHON_MANAGER")"
     printf 'Environment=%s\n' "$(unit_quote "PALSITTER_HOST=$HOST")"

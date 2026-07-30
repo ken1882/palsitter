@@ -83,22 +83,13 @@ Local builds require Windows PowerShell, Node.js 24, Python 3.12 with `pip`, Git
 Windows, and 7-Zip. From the repository root:
 
 ```powershell
-Set-Location desktop
-npm.cmd ci
-Set-Location ..
-
-# Uncomment this line if script execution is not already allowed.
-# Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force
-.\desktop\scripts\build-runtime.ps1
-.\desktop\scripts\build-git.ps1
-.\desktop\scripts\prepare-source.ps1
-python -m compileall -q .
-
-Set-Location desktop
-npm.cmd run build:win
-Set-Location ..
-.\desktop\scripts\archive-release.ps1
+.\build.bat
 ```
+
+The batch file stops before staging if `python` does not resolve to Python 3.12. It runs
+the PowerShell scripts with a process-only execution-policy bypass, stops on the first
+failed command, verifies the packaged Python imports, and creates the archive only after
+those checks pass.
 
 If 7-Zip is missing, it can be installed with Chocolatey:
 
