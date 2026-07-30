@@ -39,7 +39,10 @@ adding lifecycle controls to those pages.
   alive, `Stop` changes to `KILL`, which force-terminates that owned process tree.
 - For an agent-managed Windows instance, Stop/KILL are sent to the detached agent. The
   agent terminates PalServer through its Job Object and then exits; an unexpected agent
-  exit closes that Job Object and terminates PalServer descendants.
+  exit closes that Job Object and terminates PalServer descendants. After an acknowledged
+  agent shutdown, the supervisor uses the returned terminal status without reconnecting
+  to the exited agent; Overview returns to Start and closes its endpoint indicators on
+  the next lifecycle refresh.
 - A server detected by an exact configured executable-name and executable-path match is
   displayed as Running after a GUI restart. Opening Overview automatically starts the
   Palsitter supervisor in external-watch mode, without updating or launching PalServer,

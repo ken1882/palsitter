@@ -16,7 +16,8 @@ from module.games.palworld.server.output import (
     PalServerLogWriter,
     is_suppressible_rest_access_log,
 )
-from module.instances import DailyLogWriter
+from module.instances import DailyLogWriter, load_runtime, save_runtime
+from module.games.palworld.server import manager as palworld_manager
 from module.server.manager import PalServerManager
 from module.steamcmd import steamcmd_platform_args
 
@@ -27,6 +28,166 @@ def _mock_external_server_probe(monkeypatch):
         "module.games.palworld.server.manager.instance_is_running",
         lambda profile: False,
     )
+
+
+def test_immediate_managed_force_uses_kill_without_grace_wait(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setenv("PALSITTER_CONFIG_DIR", str(tmp_path / "config"))
+    monkeypatch.setenv("PALSITTER_PROFILE_DIR", str(tmp_path / "profile"))
+    executable = tmp_path / "PalServer.exe"
+    executable.write_text("stub", encoding="utf-8")
+    profile = Profile(
+        name="test",
+        executable=str(executable),
+        workdir=str(tmp_path),
+    )
+    save_runtime(
+        "test",
+        {
+            "ownership": "managed",
+            "pid": 123,
+            "create_time": 4.5,
+            "executable": str(executable),
+        },
+    )
+    killed = []
+
+    class Process:
+        pid = 123
+
+        def is_running(self):
+            return not killed
+
+        def create_time(self):
+            return 4.5
+
+        def exe(self):
+            return str(executable)
+
+        def children(self, recursive=False):
+            return []
+
+        def kill(self):
+            killed.append(self.pid)
+
+        def terminate(self):
+            raise AssertionError("immediate force must not terminate gracefully")
+
+    monkeypatch.setattr(palworld_manager, "WINDOWS", False)
+    monkeypatch.setattr(palworld_manager.psutil, "Process", lambda pid: Process())
+    monkeypatch.setattr(
+        palworld_manager,
+        "_expected_executables",
+        lambda current: {os.path.normcase(os.path.abspath(executable))},
+    )
+    monkeypatch.setattr(
+        palworld_manager.psutil,
+        "wait_procs",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("immediate force must not wait per process")
+        ),
+    )
+
+    handle = palworld_manager.force_stop_managed_process(profile)
+
+    assert handle.targeted
+    assert handle.error is None
+    assert killed == [123]
+    assert handle.stopped()
+    assert load_runtime("test") is None
+
+
+def test_immediate_managed_force_rejects_reused_pid_and_clears_stale_runtime(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setenv("PALSITTER_CONFIG_DIR", str(tmp_path / "config"))
+    save_runtime(
+        "test",
+        {
+            "ownership": "managed",
+            "pid": 123,
+            "create_time": 4.5,
+            "executable": str(tmp_path / "PalServer.exe"),
+        },
+    )
+    process = SimpleNamespace(
+        is_running=lambda: True,
+        create_time=lambda: 9.5,
+        kill=lambda: pytest.fail("reused PID must not be killed"),
+    )
+    monkeypatch.setattr(palworld_manager, "WINDOWS", False)
+    monkeypatch.setattr(palworld_manager.psutil, "Process", lambda pid: process)
+
+    handle = palworld_manager.force_stop_managed_process(Profile(name="test"))
+
+    assert not handle.targeted
+    assert handle.stopped()
+    assert load_runtime("test") is None
+
+
+def test_immediate_managed_force_rejects_executable_mismatch(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setenv("PALSITTER_CONFIG_DIR", str(tmp_path / "config"))
+    expected = tmp_path / "PalServer.exe"
+    other = tmp_path / "other.exe"
+    save_runtime(
+        "test",
+        {
+            "ownership": "managed",
+            "pid": 123,
+            "create_time": 4.5,
+            "executable": str(expected),
+        },
+    )
+    process = SimpleNamespace(
+        is_running=lambda: True,
+        create_time=lambda: 4.5,
+        exe=lambda: str(other),
+        kill=lambda: pytest.fail("mismatched executable must not be killed"),
+    )
+    monkeypatch.setattr(palworld_manager, "WINDOWS", False)
+    monkeypatch.setattr(palworld_manager.psutil, "Process", lambda pid: process)
+    monkeypatch.setattr(
+        palworld_manager,
+        "_expected_executables",
+        lambda profile: {os.path.normcase(os.path.abspath(expected))},
+    )
+
+    handle = palworld_manager.force_stop_managed_process(Profile(name="test"))
+
+    assert handle.targeted
+    assert "executable identity" in str(handle.error)
+    assert not handle.stopped()
+    assert load_runtime("test") is not None
+
+
+def test_immediate_managed_force_marks_external_runtime_without_killing(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setenv("PALSITTER_CONFIG_DIR", str(tmp_path / "config"))
+    save_runtime(
+        "test",
+        {
+            "ownership": "external",
+            "pid": 123,
+            "create_time": 4.5,
+            "executable": str(tmp_path / "PalServer.exe"),
+        },
+    )
+    monkeypatch.setattr(palworld_manager, "WINDOWS", False)
+    monkeypatch.setattr(
+        palworld_manager.psutil,
+        "Process",
+        lambda pid: pytest.fail("external PID must not be opened for termination"),
+    )
+
+    handle = palworld_manager.force_stop_managed_process(Profile(name="test"))
+
+    assert not handle.targeted
+    assert handle.external
+    assert handle.stopped()
 
 
 class FakeProc:
@@ -785,6 +946,7 @@ def test_adopt_managed_server_validates_runtime_and_replays_output(tmp_path, mon
 
     assert manager.external_attached is False
     assert manager.process.pid == 4321
+    assert manager.adopt_managed is False
     manager.stop(graceful=False)
 
 
@@ -1646,6 +1808,66 @@ def test_stop_requested_suppresses_restart():
 
     assert called is False
     assert manager.state == "inactive"
+
+
+@pytest.mark.parametrize("self_heal_enabled", [False, True])
+def test_shutdown_during_crash_recovery_delay_cancels_relaunch(
+    self_heal_enabled,
+):
+    stopping = False
+    launches = []
+    logs = []
+
+    def enter_shutdown(_seconds):
+        nonlocal stopping
+        stopping = True
+
+    manager = PalServerManager(
+        Profile(
+            name="test",
+            self_heal_enabled=self_heal_enabled,
+            self_heal_trigger_crash_times=1,
+        ),
+        logger=logs.append,
+        backup_service=FakeBackupService(backup_before_result=None),
+        popen_factory=lambda *args, **kwargs: launches.append(args),
+        sleep=enter_shutdown,
+        stop_requested=lambda: stopping,
+    )
+    manager.process = FakeProc(returncode=1)
+
+    manager.monitor_once()
+
+    assert launches == []
+    assert "Crash recovery cancelled because shutdown is in progress" in logs
+
+
+@pytest.mark.parametrize(
+    "reason",
+    ["automatic update", "planned restart", "memory threshold"],
+)
+def test_shutdown_after_automatic_stop_cancels_relaunch(reason, monkeypatch):
+    stopping = False
+    starts = []
+    manager = PalServerManager(
+        Profile(name="test"),
+        stop_requested=lambda: stopping,
+    )
+
+    def stop(*, graceful):
+        nonlocal stopping
+        stopping = True
+
+    monkeypatch.setattr(manager, "stop", stop)
+    monkeypatch.setattr(
+        manager,
+        "start",
+        lambda **kwargs: starts.append(kwargs),
+    )
+
+    manager.restart(reason=reason, update=reason == "automatic update")
+
+    assert starts == []
 
 
 def test_graceful_stop_waits_without_force_killing_when_server_stays_up():

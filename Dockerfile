@@ -3,7 +3,6 @@ FROM python:3.12-slim-bookworm
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PATH="/opt/venv/bin:$PATH" \
-    PALSITTER_DATA_DIR=/var/lib/palsitter \
     PALSITTER_CONFIG_DIR=/var/lib/palsitter/config \
     PALSITTER_PROFILE_DIR=/var/lib/palsitter/profile \
     PALSITTER_LOG_DIR=/var/lib/palsitter/logs \

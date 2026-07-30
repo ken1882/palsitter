@@ -2,6 +2,7 @@
 
 from .registry import (
     AdapterEvent,
+    ForceStopHandle,
     GameAdapter,
     GameCapabilities,
     InstanceStatusSummary,
@@ -13,6 +14,7 @@ from .registry import (
 
 __all__ = [
     "AdapterEvent",
+    "ForceStopHandle",
     "GameAdapter",
     "GameCapabilities",
     "InstanceStatusSummary",

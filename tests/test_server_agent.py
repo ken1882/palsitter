@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import os
+import subprocess
+import sys
 import threading
 import time
+from contextlib import nullcontext
 from pathlib import Path
 
 import pytest
+import psutil
 
 from module.config import Profile
 from module.games.palworld.config import PalworldProfile
@@ -55,6 +59,118 @@ def test_agent_server_is_running_requires_live_server_for_running_state(
     )
 
     assert agent.agent_server_is_running("test")
+
+
+def test_agent_is_running_clears_stale_state(tmp_path, monkeypatch):
+    monkeypatch.setenv("PALSITTER_CONFIG_DIR", str(tmp_path / "config"))
+    monkeypatch.setenv("PALSITTER_PROFILE_DIR", str(tmp_path / "profile"))
+    save_agent_state(
+        "test",
+        {
+            "agent_pid": 2147483647,
+            "agent_create_time": 1.0,
+            "server_state": "stopped",
+        },
+    )
+
+    assert not agent.agent_is_running("test")
+    assert load_agent_state("test") is None
+
+
+def test_force_kill_managed_agent_uses_validated_pid_without_pipe(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setenv("PALSITTER_CONFIG_DIR", str(tmp_path / "config"))
+    monkeypatch.setenv("PALSITTER_PROFILE_DIR", str(tmp_path / "profile"))
+    state = {
+        "agent_pid": 123,
+        "agent_create_time": 4.5,
+        "server_state": "stopped",
+    }
+    save_agent_state("test", state)
+    killed = []
+
+    class Process:
+        def __init__(self, pid):
+            assert pid == 123
+            self.pid = pid
+
+        def is_running(self):
+            return not killed
+
+        def create_time(self):
+            return 4.5
+
+        def exe(self):
+            return sys.executable
+
+        def kill(self):
+            killed.append(self.pid)
+
+    monkeypatch.setattr(agent.psutil, "Process", Process)
+    monkeypatch.setattr(
+        agent.AgentClient,
+        "connect_existing",
+        lambda name: (_ for _ in ()).throw(AssertionError("force must not use agent IPC")),
+    )
+    profile = PalworldProfile(name="test")
+
+    targeted, stopped, error = agent.force_kill_managed_agent(profile)
+
+    assert targeted
+    assert error is None
+    assert killed == [123]
+    assert stopped()
+    assert load_agent_state("test") is None
+
+
+def test_force_kill_managed_agent_rejects_live_server_executable_mismatch(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setenv("PALSITTER_CONFIG_DIR", str(tmp_path / "config"))
+    expected = tmp_path / "PalServer.exe"
+    save_agent_state(
+        "test",
+        {
+            "agent_pid": 123,
+            "agent_create_time": 4.5,
+            "server_state": "running",
+            "server_pid": 456,
+            "server_create_time": 7.5,
+            "server_executable": str(expected),
+        },
+    )
+
+    class Process:
+        def __init__(self, pid):
+            self.pid = pid
+
+        def is_running(self):
+            return True
+
+        def create_time(self):
+            return 4.5 if self.pid == 123 else 7.5
+
+        def exe(self):
+            return sys.executable if self.pid == 123 else str(tmp_path / "other.exe")
+
+        def kill(self):
+            pytest.fail("mismatched executable identity must not be killed")
+
+    monkeypatch.setattr(agent.psutil, "Process", Process)
+    monkeypatch.setattr(
+        agent,
+        "_expected_executables",
+        lambda profile: {os.path.normcase(os.path.abspath(expected))},
+    )
+
+    targeted, stopped, error = agent.force_kill_managed_agent(
+        PalworldProfile(name="test", executable=str(expected))
+    )
+
+    assert targeted
+    assert "executable identity" in str(error)
+    assert not stopped()
 
 
 def test_stop_idle_agent_stops_live_idle_agent(tmp_path, monkeypatch):
@@ -138,6 +254,44 @@ def test_agent_client_sends_versioned_json_request(monkeypatch):
     assert result == {"server_state": "idle"}
     assert writes[0]["protocol"] == {"major": 1, "minor": 0}
     assert writes[0]["command"] == "status"
+
+
+def test_agent_launch_uses_no_window_process_flag(monkeypatch):
+    state = None
+    captured = {}
+    connected = object()
+
+    def popen(command, **kwargs):
+        nonlocal state
+        captured["command"] = command
+        captured["kwargs"] = kwargs
+        state = {"agent_pid": 123}
+
+    monkeypatch.setattr(agent, "_require_windows", lambda: None)
+    monkeypatch.setattr(agent, "_agent_launch_lock", lambda name: nullcontext())
+    monkeypatch.setattr(agent, "load_agent_state", lambda name: state)
+    monkeypatch.setattr(agent, "open_debug_log", lambda name: None)
+    monkeypatch.setattr(agent.subprocess, "Popen", popen)
+    monkeypatch.setattr(
+        agent.AgentClient,
+        "connect_existing",
+        classmethod(lambda cls, name: connected),
+    )
+
+    result = agent.AgentClient.launch_idle("test")
+
+    assert result is connected
+    assert captured["command"] == [
+        sys.executable,
+        "-m",
+        agent.AGENT_MODULE,
+        "--profile",
+        "test",
+    ]
+    assert captured["kwargs"]["creationflags"] == 0x08000000 | 0x00000200
+    assert captured["kwargs"]["stdin"] == subprocess.DEVNULL
+    assert captured["kwargs"]["stdout"] == subprocess.DEVNULL
+    assert captured["kwargs"]["stderr"] == subprocess.DEVNULL
 
 
 @pytest.mark.parametrize(("method", "command"), [("stop", "stop"), ("kill", "kill")])
@@ -310,41 +464,92 @@ def test_managed_restore_connects_to_idle_agent_without_starting_server(monkeypa
 
     assert calls == [("connect", "test"), ("status",), ("stop",)]
     assert manager.process is None
+    assert manager.adopt_managed is True
 
 
-def test_agent_managed_stop_sends_stop_before_waiting_for_server_exit():
+def test_restart_after_managed_restore_launches_new_agent(monkeypatch):
+    calls = []
+    monkeypatch.setattr("module.games.palworld.server.manager.WINDOWS", True)
+    manager = PalServerManager(
+        Profile(name="test"),
+        agent_client_factory=object(),
+        running_probe=lambda profile: False,
+        adopt_managed=True,
+        sleep=lambda seconds: None,
+    )
+    monkeypatch.setattr(
+        manager,
+        "_adopt_agent_server",
+        lambda: calls.append(("adopt",)) or True,
+    )
+    monkeypatch.setattr(
+        manager,
+        "_start_agent_server",
+        lambda update: calls.append(("start", update)) or True,
+    )
+    monkeypatch.setattr(
+        manager,
+        "stop",
+        lambda graceful: calls.append(("stop", graceful)),
+    )
+
+    manager.start(update=False, manual=False)
+    manager.restart(reason="automatic update", update=True)
+
+    assert calls == [
+        ("adopt",),
+        ("stop", True),
+        ("start", True),
+    ]
+    assert manager.adopt_managed is False
+
+
+def test_agent_managed_stop_caches_acknowledged_exit_without_reconnecting():
     class Client:
         def __init__(self):
-            self.server_state = "running"
             self.stop_calls = 0
+            self.status_calls = 0
 
         def status(self):
-            return {
-                "server_state": self.server_state,
-                "server_pid": 123,
-                "exit_code": 0,
-            }
+            self.status_calls += 1
+            raise AssertionError("acknowledged agent stop must not reconnect")
 
         def stop(self):
             self.stop_calls += 1
-            self.server_state = "stopped"
-            return self.status()
+            return {
+                "server_state": "stopped",
+                "server_pid": 123,
+                "exit_code": 7,
+                "exit_reason": "stopped",
+            }
 
     client = Client()
+    states = []
+
     class Rest:
         def shutdown(self):
             pass
 
-    manager = PalServerManager(Profile(name="test"), rest_client=Rest())
+    manager = PalServerManager(
+        Profile(name="test"),
+        rest_client=Rest(),
+        state_callback=states.append,
+    )
     manager.agent_client = client
-    manager.process = AgentServerProcess(
+    process = AgentServerProcess(
         client,
         {"server_pid": 123, "server_create_time": 1.0},
     )
+    manager.process = process
 
     manager.stop(graceful=True)
 
     assert client.stop_calls == 1
+    assert client.status_calls == 0
+    assert process.poll() == 7
+    assert process.wait(timeout=0) == 7
+    assert manager.alive is False
+    assert states == ["stopping", "inactive"]
 
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows named pipes are Windows-only")
@@ -376,3 +581,43 @@ def test_job_object_can_be_created_without_breakaway_flags():
         assert job.handle
     finally:
         job.close()
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows Job Objects are Windows-only")
+def test_killing_job_owner_terminates_palserver_child(tmp_path):
+    child_pid_path = tmp_path / "child.pid"
+    code = "\n".join(
+        [
+            "import subprocess, sys, time",
+            "from pathlib import Path",
+            "from module.games.palworld.server.agent import JobObject",
+            "child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'])",
+            "job = JobObject()",
+            "job.assign(child.pid)",
+            "Path(sys.argv[1]).write_text(str(child.pid), encoding='ascii')",
+            "time.sleep(60)",
+        ]
+    )
+    owner = subprocess.Popen(
+        [sys.executable, "-c", code, str(child_pid_path)],
+        cwd=Path(__file__).resolve().parents[1],
+    )
+    child = None
+    try:
+        deadline = time.monotonic() + 5
+        while not child_pid_path.exists() and time.monotonic() < deadline:
+            time.sleep(0.05)
+        assert child_pid_path.exists()
+        child = psutil.Process(int(child_pid_path.read_text(encoding="ascii")))
+
+        owner.kill()
+        owner.wait(timeout=2)
+        child.wait(timeout=2)
+
+        assert not child.is_running()
+    finally:
+        if owner.poll() is None:
+            owner.kill()
+            owner.wait(timeout=2)
+        if child is not None and child.is_running():
+            child.kill()

@@ -2,7 +2,7 @@
 
 # Palsitter
 
-#### [![GitHub release](https://img.shields.io/github/v/release/ken1882/palsitter?color=4e4c97)](https://github.com/ken1882/palsitter/releases) [![GitHub commit activity](https://img.shields.io/github/commit-activity/m/ken1882/palsitter?color=4e4c97)](https://github.com/ken1882/palsitter/commits) [![GitHub issues](https://img.shields.io/github/issues/ken1882/palsitter?color=4e4c97)](https://github.com/ken1882/palsitter/issues)
+#### [![GitHub release](https://img.shields.io/github/v/release/ken1882/palsitter?color=4e4c97)](https://github.com/ken1882/palsitter/releases) [![GitHub commit activity](https://img.shields.io/github/commit-activity/m/ken1882/palsitter?color=4e4c97)](https://github.com/ken1882/palsitter/commits) [![GitHub issues](https://img.shields.io/github/issues/ken1882/palsitter?color=4e4c97)](https://github.com/ken1882/palsitter/issues) ![Downloads](https://img.shields.io/github/downloads/ken1882/palsitter/total)
 
 <p align="center"><img src="assets/gui/brand/palsitter.png" alt="Palsitter logo" width="256"></p>
 
@@ -147,22 +147,15 @@ journalctl -u palsitter -f
 
 ## 資料與更新
 
-Linux Shell 部署預設將執行期資料儲存在 `data/`：
+直接從原始碼執行與 Linux Shell 部署會使用相同的專案根目錄：
 
 ```text
-data/config/    Palsitter 設定
-data/profile/   執行個體、Palworld 安裝檔、存檔與備份
-data/logs/      應用程式記錄
+config/    Palsitter 設定
+profile/   執行個體、Palworld 安裝檔、存檔與備份
+logs/      應用程式記錄
 ```
 
-升級或遷移前，請備份 `data/config` 與 `data/profile`。若要使用其他位置，請在安裝與執行
-時一致設定 `PALSITTER_DATA_DIR`：
-
-```bash
-export PALSITTER_DATA_DIR=/srv/palsitter-data
-./script/linux/palsitter.sh install
-./script/linux/palsitter.sh run
-```
+升級或遷移前，請備份 `config/` 與 `profile/`。
 
 來源 checkout 的更新方式：
 
@@ -178,6 +171,23 @@ Docker 部署則透過重新建置映像檔更新：
 docker compose build --pull
 docker compose up -d
 ```
+
+## 建置 Windows Electron 發行版
+
+本機建置需要 Windows PowerShell、Node.js 24、含 `pip` 的 Python 3.12、
+Git for Windows 及 7-Zip (`choco install 7zip`)。請在專案根目錄執行：
+
+```powershell
+.\build.bat
+```
+
+若 `python` 未指向 Python 3.12，批次檔會在準備封裝檔案前停止。它會為各腳本套用
+僅限目前處理程序的 PowerShell 執行原則略過設定，並在任何建置或封裝後執行階段檢查失敗時
+立即結束。
+
+解壓縮的應用程式會輸出至 `desktop/dist/win-unpacked/`。可攜式壓縮檔及其 SHA-256
+總和檢查碼會輸出至 `desktop/dist/`。封裝細節與疑難排解請參考
+[Windows Electron Release](docs/shared/features/windows-electron-release.md#building-locally)。
 
 ## 文件
 

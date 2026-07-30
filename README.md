@@ -2,7 +2,7 @@
 
 # Palsitter
 
-#### [![GitHub release](https://img.shields.io/github/v/release/ken1882/palsitter?color=4e4c97)](https://github.com/ken1882/palsitter/releases) [![GitHub commit activity](https://img.shields.io/github/commit-activity/m/ken1882/palsitter?color=4e4c97)](https://github.com/ken1882/palsitter/commits) [![GitHub issues](https://img.shields.io/github/issues/ken1882/palsitter?color=4e4c97)](https://github.com/ken1882/palsitter/issues)
+#### [![GitHub release](https://img.shields.io/github/v/release/ken1882/palsitter?color=4e4c97)](https://github.com/ken1882/palsitter/releases) [![GitHub commit activity](https://img.shields.io/github/commit-activity/m/ken1882/palsitter?color=4e4c97)](https://github.com/ken1882/palsitter/commits) [![GitHub issues](https://img.shields.io/github/issues/ken1882/palsitter?color=4e4c97)](https://github.com/ken1882/palsitter/issues) ![Downloads](https://img.shields.io/github/downloads/ken1882/palsitter/total)
 
 <p align="center"><img src="assets/gui/brand/palsitter.png" alt="Palsitter logo" width="256"></p>
 
@@ -94,8 +94,8 @@ Download the latest portable archive from [Releases](https://github.com/ken1882/
 extract it to a writable directory, and launch `Palsitter.exe`. The portable release
 stores configuration, profiles, and logs in its local `data/` directory.
 
-Contributor build steps are documented in
-[Windows Electron Release](docs/shared/features/windows-electron-release.md#building-locally).
+See [Building the Windows Electron release](#building-the-windows-electron-release)
+for contributor build steps.
 
 ### Native Linux
 
@@ -184,22 +184,15 @@ journalctl -u palsitter -f
 
 ## Data and upgrades
 
-The Linux shell deployment stores runtime data under `data/` by default:
+Direct source runs and the Linux shell deployment use the same project-root directories:
 
 ```text
-data/config/    Palsitter configuration
-data/profile/   instances, Palworld installations, saves, and backups
-data/logs/      application logs
+config/    Palsitter configuration
+profile/   instances, Palworld installations, saves, and backups
+logs/      application logs
 ```
 
-Back up `data/config` and `data/profile` before upgrading or migrating. To use another
-location, set `PALSITTER_DATA_DIR` consistently for installation and runtime:
-
-```bash
-export PALSITTER_DATA_DIR=/srv/palsitter-data
-./script/linux/palsitter.sh install
-./script/linux/palsitter.sh run
-```
+Back up `config/` and `profile/` before upgrading or migrating.
 
 For a source checkout, update with:
 
@@ -215,6 +208,24 @@ Docker deployments are updated by rebuilding the image:
 docker compose build --pull
 docker compose up -d
 ```
+
+## Building the Windows Electron release
+
+Local builds require Windows PowerShell, Node.js 24, Python 3.12 with `pip`, Git for
+Windows, and 7-Zip (`choco install 7zip`). From the repository root:
+
+```powershell
+.\build.bat
+```
+
+The batch file stops before staging if `python` does not resolve to Python 3.12, applies
+a process-only PowerShell execution-policy bypass for its scripts, and fails immediately
+when any build or packaged-runtime check fails.
+
+The unpacked application is written to `desktop/dist/win-unpacked/`. The portable
+archive and its SHA-256 checksum are written to `desktop/dist/`. See
+[Windows Electron Release](docs/shared/features/windows-electron-release.md#building-locally)
+for packaging details and troubleshooting.
 
 ## Documentation
 

@@ -36,3 +36,42 @@ def test_desktop_source_and_release_icon_exist():
         encoding="utf-8"
     )
     assert '"/profile/template/"' in prepare_source
+
+
+def test_desktop_runtime_build_checks_python_abi_and_packaged_imports():
+    build_batch = (ROOT / "build.bat").read_text(encoding="utf-8")
+    build_runtime = (DESKTOP / "scripts" / "build-runtime.ps1").read_text(
+        encoding="utf-8"
+    )
+    workflow = (ROOT / ".github" / "workflows" / "windows-release.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'if not "%PYTHON_ABI%"=="3.12"' in build_batch
+    assert "npm.cmd --prefix desktop ci" in build_batch
+    assert "desktop\\scripts\\build-runtime.ps1" in build_batch
+    assert "desktop\\scripts\\build-git.ps1" in build_batch
+    assert "desktop\\scripts\\prepare-source.ps1" in build_batch
+    assert "npm.cmd --prefix desktop run build:win" in build_batch
+    assert "desktop\\scripts\\archive-release.ps1" in build_batch
+    assert (
+        '"desktop\\dist\\win-unpacked\\resources\\python\\python.exe" '
+        '-c "import psutil, pywebio, requests, winpty"'
+    ) in build_batch
+    assert "$buildPythonAbi -ne $expectedPythonAbi" in build_runtime
+    assert "import psutil, pywebio, requests, winpty" in build_runtime
+    assert (
+        "win-unpacked\\resources\\python\\python.exe -c "
+        '"import psutil, pywebio, requests, winpty"'
+    ) in workflow
+
+
+def test_desktop_exits_electron_after_backend_and_only_taskkills_backend():
+    source = (DESKTOP / "main.js").read_text(encoding="utf-8")
+
+    assert "taskkill.exe', ['/PID', String(backend.pid), '/T', '/F']" in source
+    assert "await waitForBackendExit();\n    finishExit();" in source
+    finish = source[source.index("function finishExit()") :]
+    assert "mainWindow.close()" in finish
+    assert "tray.destroy()" in finish
+    assert "app.quit()" in finish

@@ -47,6 +47,14 @@ class GameCapabilities:
     save_import: bool = False
 
 
+@dataclass(frozen=True)
+class ForceStopHandle:
+    targeted: bool
+    stopped: Callable[[], bool] = field(repr=False, compare=False)
+    error: str | None = None
+    external: bool = False
+
+
 def _format_uptime(value: int | None) -> str:
     if value is None:
         return "-"
@@ -294,9 +302,25 @@ class GameAdapter:
 
         force_stop_process(self.load_typed_profile(record.name, record.game_config))
 
+    def force_stop_managed_immediate(self, record: InstanceRecord) -> ForceStopHandle:
+        if self.id != "palworld":
+            return ForceStopHandle(False, lambda: True)
+        from module.games.palworld.server.manager import force_stop_managed_process
+
+        return force_stop_managed_process(
+            self.load_typed_profile(record.name, record.game_config)
+        )
+
     def stop_detached_agent(self, record: InstanceRecord) -> None:
         if self.detached_agent_stopper is not None:
             self.detached_agent_stopper(record)
+
+    def detached_agent_is_running(self, record: InstanceRecord) -> bool:
+        if self.id != "palworld" or os.name != "nt":
+            return False
+        from module.games.palworld.server.agent import agent_is_running
+
+        return agent_is_running(record.name)
 
     def verify_managed(self, record: InstanceRecord) -> bool:
         if self.id != "palworld":

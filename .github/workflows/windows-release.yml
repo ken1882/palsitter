@@ -53,6 +53,8 @@ jobs:
           if (-not (Test-Path .\desktop\dist\win-unpacked\resources\app\main.js)) { throw 'Editable Electron source missing' }
           if (-not (Test-Path .\desktop\dist\win-unpacked\resources\backend\gui.py)) { throw 'Editable Python source missing' }
           if (-not (Test-Path .\desktop\dist\win-unpacked\resources\python\python.exe)) { throw 'Standalone Python missing' }
+          & .\desktop\dist\win-unpacked\resources\python\python.exe -c "import psutil, pywebio, requests, winpty"
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged Python runtime failed its import smoke test' }
           if (Test-Path .\desktop\dist\win-unpacked\resources\backend\tests) { throw 'Test source was packaged' }
           if (Test-Path .\desktop\dist\win-unpacked\resources\backend\docs) { throw 'Documentation source was packaged' }
           if (Test-Path .\desktop\dist\win-unpacked\resources\backend\desktop) { throw 'Desktop build source was packaged' }

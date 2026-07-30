@@ -666,9 +666,20 @@ def _start_overview_updates(name: str) -> None:
                 if current_state != last_state:
                     run_if_current(
                         context,
-                        lambda: (
+                        lambda current_state=current_state: (
                             _set_status(_status_code(name)),
                             _update_scheduler_controls(name),
+                            (
+                                _update_scheduler_endpoints(
+                                    name,
+                                    endpoint_status(
+                                        load_profile(name),
+                                        process_running=False,
+                                    ),
+                                )
+                                if current_state == "inactive"
+                                else None
+                            ),
                         ),
                     )
                     last_state = current_state

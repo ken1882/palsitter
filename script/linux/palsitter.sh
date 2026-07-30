@@ -3,7 +3,6 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd -- "$SCRIPT_DIR/../.." && pwd)"
-DATA_DIR="${PALSITTER_DATA_DIR:-$PROJECT_ROOT/data}"
 VENV_DIR="${PALSITTER_VENV_DIR:-$PROJECT_ROOT/.venv}"
 PYTHON_BIN="${PALSITTER_PYTHON_BIN:-python3}"
 PYTHON_MANAGER="${PALSITTER_PYTHON_MANAGER:-${PALSITTER_ENV_MANAGER:-venv}}"
@@ -105,18 +104,12 @@ install_python_dependencies() {
   esac
 }
 
-prepare_data_directories() {
-  printf 'Preparing data directories: %s\n' "$DATA_DIR"
-  mkdir -p "$DATA_DIR/config" "$DATA_DIR/profile" "$DATA_DIR/logs"
-}
-
 install() {
   [ "$(uname -s)" = "Linux" ] || die "this installer supports Linux only"
   validate_python_manager
   install_system_packages
   install_python_dependencies
   "$SCRIPT_DIR/install-dependencies.sh"
-  prepare_data_directories
   printf '\nInstallation complete. Start Palsitter with:\n'
   printf '  %q run\n' "$0"
 }
@@ -134,10 +127,6 @@ run() {
       || die "virtual environment not found; run '$0 install' first"
   fi
 
-  prepare_data_directories
-  export PALSITTER_CONFIG_DIR="$DATA_DIR/config"
-  export PALSITTER_PROFILE_DIR="$DATA_DIR/profile"
-  export PALSITTER_LOG_DIR="$DATA_DIR/logs"
   # Leave the host unset unless the operator explicitly supplied an
   # environment override so the Home -> Settings value can take effect.
   if [ -n "${PALSITTER_HOST:-}" ]; then

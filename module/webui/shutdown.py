@@ -1,22 +1,23 @@
 from __future__ import annotations
 
-import os
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
-from typing import Any
+from dataclasses import dataclass, field
+from typing import Any, Sequence
 
-from module.games import get_game
-from module.instances import list_instances, load_agent_state
+from module.games import ForceStopHandle, get_game
+from module.instances import list_instances
 from module.webui.process_manager import ProcessManager
 
 
 SHUTDOWN_TIMEOUT_SECONDS = 60
+FORCE_VERIFY_SECONDS = 0.5
 
 _STATE_LOCK = threading.RLock()
 _SHUTDOWN_LOCK = threading.Lock()
 _SHUTTING_DOWN = False
+_SHUTDOWN_LATCHED = False
 
 
 @dataclass(frozen=True)
@@ -35,13 +36,25 @@ class ShutdownResult:
 
 def is_shutting_down() -> bool:
     with _STATE_LOCK:
-        return _SHUTTING_DOWN
+        return _SHUTTING_DOWN or _SHUTDOWN_LATCHED
 
 
 def _set_shutting_down(value: bool) -> None:
     global _SHUTTING_DOWN
     with _STATE_LOCK:
         _SHUTTING_DOWN = value
+
+
+def latch_shutdown_for_exit() -> None:
+    global _SHUTDOWN_LATCHED
+    with _STATE_LOCK:
+        _SHUTDOWN_LATCHED = True
+
+
+def release_shutdown_latch() -> None:
+    global _SHUTDOWN_LATCHED
+    with _STATE_LOCK:
+        _SHUTDOWN_LATCHED = False
 
 
 def _active_records() -> list[Any]:
@@ -56,14 +69,14 @@ def _active_records() -> list[Any]:
             server_running = bool(adapter.is_running(record))
         except (OSError, RuntimeError):
             pass
-        agent_running = os.name == "nt" and load_agent_state(record.name) is not None
+        agent_running = adapter.detached_agent_is_running(record)
         if manager.active or manager.operation_busy or server_running or agent_running:
             records.append(record)
     return records
 
 
 def _agent_running(record: Any) -> bool:
-    return os.name == "nt" and load_agent_state(record.name) is not None
+    return get_game(record.game).detached_agent_is_running(record)
 
 
 def _attach_unmanaged_target(record: Any) -> tuple[str, str | None]:
@@ -174,13 +187,17 @@ def _verify_stopped(record: Any) -> tuple[str, str | None]:
     return record.name, None
 
 
-def shutdown_all(timeout: float = SHUTDOWN_TIMEOUT_SECONDS) -> ShutdownResult:
+def shutdown_all(
+    timeout: float = SHUTDOWN_TIMEOUT_SECONDS,
+    *,
+    records: Sequence[Any] | None = None,
+) -> ShutdownResult:
     """Gracefully stop every active lifecycle instance and its supervisor."""
     if not _SHUTDOWN_LOCK.acquire(blocking=False):
         return ShutdownResult(False, {}, "Shutdown is already in progress")
     _set_shutting_down(True)
     try:
-        records = _active_records()
+        records = list(records) if records is not None else _active_records()
         statuses = {
             record.name: {"status": "pending", "message": "Shutdown pending"}
             for record in records
@@ -284,37 +301,115 @@ def shutdown_all(timeout: float = SHUTDOWN_TIMEOUT_SECONDS) -> ShutdownResult:
         _SHUTDOWN_LOCK.release()
 
 
-def force_shutdown_all() -> ShutdownResult:
+@dataclass
+class _PreparedForceStop:
+    record: Any
+    manager: ProcessManager
+    ownership: str
+    handle: ForceStopHandle | None = None
+    error: str | None = None
+    dispatch_complete: threading.Event = field(default_factory=threading.Event)
+
+
+def _dispatch_force_stop(item: _PreparedForceStop) -> _PreparedForceStop:
+    try:
+        item.manager.terminate_supervisor_immediate()
+    except Exception as exc:
+        item.error = str(exc)
+    try:
+        if item.ownership == "external":
+            item.handle = ForceStopHandle(False, lambda: True, external=True)
+        else:
+            item.handle = get_game(item.record.game).force_stop_managed_immediate(
+                item.record
+            )
+    except Exception as exc:
+        item.error = item.error or str(exc)
+    finally:
+        item.dispatch_complete.set()
+    return item
+
+
+def force_shutdown_all(
+    *,
+    records: Sequence[Any] | None = None,
+) -> ShutdownResult:
     """Force-stop every active managed instance for an explicit desktop request."""
-    records = _active_records()
-    statuses: dict[str, dict[str, str]] = {}
-    failures = False
-    for record in records:
-        manager = ProcessManager.get(record.name)
-        try:
-            if manager.active or manager.alive:
-                if not manager.kill(shutdown=True):
-                    raise RuntimeError("Could not force-stop the instance")
+    _set_shutting_down(True)
+    try:
+        selected = list(records) if records is not None else _active_records()
+        prepared: list[_PreparedForceStop] = []
+        for record in selected:
+            manager = ProcessManager.get(record.name)
+            ownership = manager.prepare_force_shutdown()
+            prepared.append(
+                _PreparedForceStop(
+                    record,
+                    manager,
+                    ownership,
+                )
+            )
+
+        deadline = time.monotonic() + FORCE_VERIFY_SECONDS
+        for item in prepared:
+            threading.Thread(
+                target=_dispatch_force_stop,
+                args=(item,),
+                daemon=True,
+            ).start()
+
+        while time.monotonic() < deadline:
+            if all(
+                item.dispatch_complete.is_set()
+                and item.handle is not None
+                and item.handle.stopped()
+                and item.manager.force_shutdown_supervisor_stopped()
+                for item in prepared
+            ):
+                break
+            time.sleep(0.01)
+
+        statuses: dict[str, dict[str, str]] = {}
+        failures = False
+        for item in prepared:
+            handle = item.handle or ForceStopHandle(False, lambda: True)
+            server_stopped = handle.stopped()
+            supervisor_stopped = item.manager.force_shutdown_supervisor_stopped()
+            error = item.error or handle.error
+            if error is None and not item.dispatch_complete.is_set():
+                error = "Force-stop dispatch exceeded the verification deadline"
+            if error is None and not server_stopped:
+                error = "Managed agent or server survived force shutdown"
+            if error is None and not supervisor_stopped:
+                error = "Supervisor survived force shutdown"
+
+            if error is not None:
+                failures = True
+                item.manager.append_log(f"Force shutdown failed: {error}")
+                statuses[item.record.name] = {
+                    "status": "force_stop_failed",
+                    "message": error,
+                }
+            elif item.ownership == "external" or handle.external:
+                message = "External server left running"
+                item.manager.append_log(f"Force shutdown: {message.lower()}")
+                statuses[item.record.name] = {
+                    "status": "external_skipped",
+                    "message": message,
+                }
             else:
-                # Let the selected adapter handle detached agents and fall
-                # back to terminating the exact server process if its agent
-                # pipe is unavailable.
-                get_game(record.game).force_stop(record)
-            statuses[record.name] = {
-                "status": "force_stopped",
-                "message": "Force-stopped",
-            }
-        except Exception as exc:
-            failures = True
-            statuses[record.name] = {
-                "status": "force_stop_failed",
-                "message": str(exc),
-            }
-    return ShutdownResult(
-        not failures,
-        statuses,
-        "Could not force-stop every active instance" if failures else None,
-    )
+                item.manager.append_log("Force shutdown completed")
+                statuses[item.record.name] = {
+                    "status": "force_stopped",
+                    "message": "Force-stopped",
+                }
+        return ShutdownResult(
+            not failures,
+            statuses,
+            "Some managed processes survived force shutdown" if failures else None,
+        )
+    finally:
+        _set_shutting_down(False)
 
 
 def active_records() -> list[Any]:
@@ -323,9 +418,12 @@ def active_records() -> list[Any]:
 
 __all__ = [
     "SHUTDOWN_TIMEOUT_SECONDS",
+    "FORCE_VERIFY_SECONDS",
     "ShutdownResult",
     "active_records",
     "force_shutdown_all",
     "is_shutting_down",
+    "latch_shutdown_for_exit",
+    "release_shutdown_latch",
     "shutdown_all",
 ]

@@ -31,12 +31,16 @@ from module.games.palworld.config import (
 )
 from module.pty_process import PtyProcessLike, spawn_pty_process
 from module.games.palworld.server.rest import PalRestClient
-from module.games.palworld.server.agent import AgentClient
+from module.games.palworld.server.agent import AgentClient, force_kill_managed_agent
 from module.games.palworld.server.output import (
     PalServerLogWriter,
     is_suppressible_rest_access_log,
 )
-from module.games.palworld.server.status import instance_is_running, matching_instance_processes
+from module.games.palworld.server.status import (
+    _expected_executables,
+    instance_is_running,
+    matching_instance_processes,
+)
 from module.games.palworld.server.history import (
     LifecycleEvent,
     TerminationInfo,
@@ -51,7 +55,7 @@ from module.games.palworld.audit import (
 from module.games.palworld.update import PalworldUpdateService
 from module.steamcmd import steamcmd_platform_args
 from module.thread_watchdog import ThreadWatchdog
-from module.games.registry import AdapterEvent, UpdateInfo
+from module.games.registry import AdapterEvent, ForceStopHandle, UpdateInfo
 from module.debug_log import debug_enabled
 from module.instances import (
     DailyLogWriter,
@@ -118,7 +122,16 @@ class AgentServerProcess:
         self.create_time = status.get("server_create_time")
         self.returncode: int | None = None
 
+    def mark_exited(self, status: dict[str, object]) -> None:
+        value = status.get("exit_code")
+        try:
+            self.returncode = int(value) if value is not None else 0
+        except (TypeError, ValueError):
+            self.returncode = 0
+
     def poll(self) -> int | None:
+        if self.returncode is not None:
+            return self.returncode
         try:
             status = self.client.status()
         except (OSError, RuntimeError, TimeoutError):
@@ -186,6 +199,78 @@ def force_stop_process(profile: PalworldProfile) -> None:
             except (OSError, psutil.Error):
                 pass
     clear_runtime(profile.name)
+
+
+def force_stop_managed_process(profile: PalworldProfile) -> ForceStopHandle:
+    """Dispatch an immediate stop only for a persisted managed process identity."""
+    if WINDOWS:
+        targeted, stopped, error = force_kill_managed_agent(profile)
+        if targeted:
+            return ForceStopHandle(True, stopped, error)
+
+    runtime = load_runtime(profile.name)
+    if runtime is None:
+        try:
+            external = bool(instance_is_running(profile))
+        except (OSError, psutil.Error):
+            external = False
+        return ForceStopHandle(False, lambda: True, external=external)
+    if runtime.get("ownership") != "managed":
+        return ForceStopHandle(
+            False,
+            lambda: True,
+            external=runtime.get("ownership") == "external",
+        )
+    try:
+        pid = int(runtime["pid"])
+        expected_created = float(runtime["create_time"])
+        process = psutil.Process(pid)
+        if (
+            not process.is_running()
+            or abs(process.create_time() - expected_created) > 0.01
+        ):
+            clear_runtime(profile.name, pid=pid)
+            return ForceStopHandle(False, lambda: True)
+        expected = _expected_executables(profile)
+        recorded = os.path.normcase(os.path.abspath(str(runtime["executable"])))
+        actual = os.path.normcase(os.path.abspath(process.exe()))
+        if recorded not in expected or actual not in expected:
+            return ForceStopHandle(
+                True,
+                lambda: False,
+                "Managed PalServer executable identity does not match",
+            )
+        try:
+            processes = [*process.children(recursive=True), process]
+        except (OSError, psutil.Error):
+            processes = [process]
+        for item in processes:
+            try:
+                item.kill()
+            except psutil.NoSuchProcess:
+                pass
+    except (KeyError, OSError, psutil.Error, TypeError, ValueError) as exc:
+        return ForceStopHandle(
+            True,
+            lambda: False,
+            f"Could not terminate managed PalServer identity: {exc}",
+        )
+
+    def stopped() -> bool:
+        try:
+            current = psutil.Process(pid)
+            alive = (
+                current.is_running()
+                and abs(current.create_time() - expected_created) <= 0.01
+            )
+        except (OSError, psutil.Error):
+            alive = False
+        if alive:
+            return False
+        clear_runtime(profile.name, pid=pid)
+        return True
+
+    return ForceStopHandle(True, stopped)
 
 
 class PalServerManager:
@@ -1191,7 +1276,8 @@ class PalServerManager:
             self.next_planned_restart = None
         if self.agent_client_factory is not None and WINDOWS:
             if self.adopt_managed and not self._crash_recovery:
-                self._adopt_agent_server()
+                if self._adopt_agent_server():
+                    self.adopt_managed = False
                 return
             if self.running_probe(self.profile):
                 self.external_attached = True
@@ -1207,6 +1293,7 @@ class PalServerManager:
                 raise RuntimeError("Managed server is no longer running; adoption aborted")
             self.log("Existing managed server detected; adopting without launching")
             self._adopt_existing_process()
+            self.adopt_managed = False
             return
         if self.running_probe(self.profile):
             self.external_attached = True
@@ -1258,6 +1345,10 @@ class PalServerManager:
         ]
         if self.profile.query_port > 0:
             cmd.append(f"-queryport={self.profile.query_port}")
+        if self.stop_requested():
+            self.log("Server launch skipped because shutdown is in progress")
+            self.state_callback("inactive")
+            return
         self.log(f"Starting server: {' '.join(cmd)}")
         self._server_output_tail.clear()
         self._server_output_path = profile_server_output_path(self.profile.name)
@@ -1372,13 +1463,13 @@ class PalServerManager:
                     self.log(f"Force stop request failed: {exc}")
         agent_managed = self.agent_client is not None
         agent_status: dict[str, object] | None = None
-        if self.process is not None and self.alive and graceful and not agent_managed:
+        if self.process is not None and graceful and not agent_managed and self.alive:
             try:
                 self.process.wait(timeout=max(3, self.profile.shutdown_wait_seconds + 5))
             except subprocess.TimeoutExpired:
                 self.log("PalServer is still running; use KILL to force stop")
                 return
-        elif self.process is not None and self.alive and not agent_managed:
+        elif self.process is not None and not agent_managed and self.alive:
             self.process.terminate()
             self.process.wait(timeout=5)
         if agent_managed:
@@ -1388,6 +1479,12 @@ class PalServerManager:
                 )()
             except (OSError, RuntimeError, TimeoutError):
                 pass
+            if (
+                agent_status is not None
+                and str(agent_status.get("server_state")) == "stopped"
+                and isinstance(self.process, AgentServerProcess)
+            ):
+                self.process.mark_exited(agent_status)
             if self.process is not None:
                 try:
                     self.process.wait(timeout=5)
@@ -1421,7 +1518,13 @@ class PalServerManager:
     def restart(self, reason: str = "manual", *, update: bool = False) -> None:
         self.log(f"Restarting server ({reason})")
         self.stop(graceful=True)
+        if self.stop_requested():
+            self.log("Server restart cancelled because shutdown is in progress")
+            return
         self.sleep(1)
+        if self.stop_requested():
+            self.log("Server restart cancelled because shutdown is in progress")
+            return
         self.start(update=update, manual=False)
 
     def _crash_termination(self) -> TerminationInfo:
@@ -1492,6 +1595,9 @@ class PalServerManager:
             self.log("Process exited unexpectedly; restarting")
             outcome = "restarted"
         self.sleep(1)
+        if self.stop_requested():
+            self.log("Crash recovery cancelled because shutdown is in progress")
+            return
         self._crash_recovery = True
         try:
             self.start(update=False, manual=False)

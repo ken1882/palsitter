@@ -167,6 +167,7 @@ def _mock_metrics_server(
     shutdown_executable=None,
     banlist_path=None,
     post_delay=0,
+    post_stream_seconds=0,
     post_started=None,
     post_completed=None,
 ):
@@ -181,6 +182,26 @@ def _mock_metrics_server(
             self.send_header("Content-Length", str(len(payload)))
             self.end_headers()
             self.wfile.write(payload)
+
+        def _write_streamed_empty_json(self, seconds):
+            interval = 0.25
+            spaces = max(1, int(seconds / interval))
+            payload_length = spaces + 2
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(payload_length))
+            self.end_headers()
+            try:
+                self.wfile.write(b"{")
+                self.wfile.flush()
+                for _ in range(spaces):
+                    time.sleep(interval)
+                    self.wfile.write(b" ")
+                    self.wfile.flush()
+                self.wfile.write(b"}")
+                self.wfile.flush()
+            except OSError:
+                pass
 
         def do_GET(self):
             nonlocal player_get_count
@@ -279,7 +300,10 @@ def _mock_metrics_server(
                 if post_started is not None:
                     post_started.set()
                 time.sleep(post_delay)
-                self._write_json({})
+                if post_stream_seconds:
+                    self._write_streamed_empty_json(post_stream_seconds)
+                else:
+                    self._write_json({})
                 if post_completed is not None:
                     post_completed.set()
                 if self.path == "/v1/api/shutdown" and shutdown_executable is not None:
@@ -952,6 +976,81 @@ def test_utils_actions_and_log(tmp_path, monkeypatch):
 
 
 @pytest.mark.playwright
+@pytest.mark.serial_playwright
+def test_force_shutdown_kills_managed_server_and_stops_backend_promptly(
+    tmp_path, monkeypatch
+):
+    steam_calls = tmp_path / "force-shutdown-steamcmd-calls.txt"
+    _prepare_fixed_palserver_python(tmp_path)
+    _prepare_fixed_steamcmd(tmp_path)
+    with _mock_metrics_server(post_stream_seconds=7) as (rest_port, _):
+        with _gui_page(
+            tmp_path,
+            monkeypatch,
+            rest_port=rest_port,
+            profile_overrides={
+                "executable_args": ["-c", "import time; time.sleep(60)"],
+                "launch_enable_gamedata_api": False,
+                "shutdown_wait_seconds": 60,
+            },
+            extra_env={"PALSITTER_FAKE_STEAMCMD_CALLS": str(steam_calls)},
+        ) as (page, _):
+            page.locator("#pywebio-scope-aside").get_by_text(
+                "default", exact=True
+            ).click()
+            scheduler = page.locator("#pywebio-scope-scheduler_panel")
+            scheduler.get_by_role("button", name="Start", exact=True).click()
+            scheduler.get_by_role("button", name="Stop", exact=True).wait_for(
+                timeout=10000
+            )
+            page.wait_for_function(
+                "() => !document.querySelector("
+                "'#pywebio-scope-scheduler_save button')?.disabled"
+            )
+            from module.games.palworld.server.status import instance_is_running
+
+            deadline = time.monotonic() + 5
+            while (
+                not instance_is_running(load_profile("default"))
+                and time.monotonic() < deadline
+            ):
+                time.sleep(0.05)
+            assert instance_is_running(load_profile("default"))
+
+            page.locator("#pywebio-scope-aside").get_by_text(
+                "Home", exact=True
+            ).click()
+            page.locator("#pywebio-scope-menu").get_by_text(
+                "Utils", exact=True
+            ).click()
+            page.get_by_role(
+                "button", name="Shutdown Palsitter", exact=True
+            ).click()
+            modal = page.locator(".modal.show")
+            modal.get_by_role("button", name="Stop all", exact=True).click()
+            force = page.locator(
+                "#pywebio-scope-shutdown_force_button"
+            ).get_by_role("button", name="Force Shutdown", exact=True)
+            force.wait_for(timeout=7000)
+
+            started = time.monotonic()
+            assert not force.is_disabled(), page.locator(
+                "#pywebio-scope-shutdown_overlay"
+            ).inner_text()
+            force.click()
+            page.wait_for_function(
+                """
+                () => fetch(location.href, {cache: 'no-store'})
+                    .then(() => false)
+                    .catch(() => true)
+                """,
+                timeout=2000,
+                polling=50,
+            )
+            assert time.monotonic() - started < 2
+
+
+@pytest.mark.playwright
 def test_utils_run_stop_and_kill_use_mocked_processes(tmp_path, monkeypatch):
     steam_calls = tmp_path / "utils-steamcmd-calls.txt"
     _prepare_fixed_palserver_python(tmp_path)
@@ -1466,6 +1565,7 @@ def test_scheduler_consolidates_instance_operations_without_persistent_strip(tmp
     _prepare_fixed_steamcmd(tmp_path)
     profile_overrides = {
         "executable_args": ["-c", "import time; time.sleep(60)"],
+        "launch_enable_gamedata_api": False,
         "steam_validate": True,
     }
 
@@ -1515,8 +1615,27 @@ def test_scheduler_consolidates_instance_operations_without_persistent_strip(tmp
             try:
                 start.click()
                 stop.wait_for(timeout=5000)
+                page.wait_for_function(
+                    "() => !document.querySelector('#pywebio-scope-scheduler_save button')?.disabled"
+                )
                 stop.click()
                 start.wait_for(timeout=10000)
+                endpoints = scheduler.locator("#pywebio-scope-scheduler_endpoints")
+                endpoints.locator('[data-endpoint="udp"]').get_by_text(
+                    "Closed (8211)", exact=False
+                ).wait_for(timeout=5000)
+                endpoints.locator('[data-endpoint="rest"]').get_by_text(
+                    "Closed", exact=False
+                ).wait_for(timeout=5000)
+                shutdown_bodies = [
+                    body for path, body in rest_calls if path == "/v1/api/shutdown"
+                ]
+                assert shutdown_bodies == [
+                    {
+                        "waittime": 5,
+                        "message": "Server will shutdown immediately",
+                    }
+                ]
                 start.click()
                 stop.wait_for(timeout=5000)
                 for action in ("Stop", "Save", "Backup"):
@@ -1543,22 +1662,8 @@ def test_scheduler_consolidates_instance_operations_without_persistent_strip(tmp
                 assert scheduler.get_by_role(
                     "button", name="Save", exact=True
                 ).is_disabled()
-                deadline = time.time() + 5
-                while not any(
-                    path == "/v1/api/shutdown" for path, _ in rest_calls
-                ) and time.time() < deadline:
-                    time.sleep(0.05)
                 kill.click()
                 start.wait_for(timeout=10000)
-                shutdown_bodies = [
-                    body for path, body in rest_calls if path == "/v1/api/shutdown"
-                ]
-                assert shutdown_bodies == [
-                    {
-                        "waittime": 5,
-                        "message": "Server will shutdown immediately",
-                    }
-                ]
             finally:
                 if stop.count() and stop.is_visible():
                     stop.click()

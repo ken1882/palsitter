@@ -161,8 +161,8 @@ class WindowsPtyProcess:
                 import winpty as pty_module
             except ImportError as exc:
                 raise RuntimeError(
-                    "pywinpty is required on Windows to run SteamCMD with real-time output. "
-                    "Install dependencies with `pip install -r requirements.txt`."
+                    "pywinpty could not be loaded on Windows; SteamCMD real-time output "
+                    f"is unavailable. Import failed: {exc}"
                 ) from exc
         self.args = cmd
         self._sleep = sleep
