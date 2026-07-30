@@ -36,3 +36,14 @@ def test_desktop_source_and_release_icon_exist():
         encoding="utf-8"
     )
     assert '"/profile/template/"' in prepare_source
+
+
+def test_desktop_exits_electron_after_backend_and_only_taskkills_backend():
+    source = (DESKTOP / "main.js").read_text(encoding="utf-8")
+
+    assert "taskkill.exe', ['/PID', String(backend.pid), '/T', '/F']" in source
+    assert "await waitForBackendExit();\n    finishExit();" in source
+    finish = source[source.index("function finishExit()") :]
+    assert "mainWindow.close()" in finish
+    assert "tray.destroy()" in finish
+    assert "app.quit()" in finish

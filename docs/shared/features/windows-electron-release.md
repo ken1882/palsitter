@@ -28,7 +28,13 @@ through every active supervisor and agent, waits for game servers and agents to 
 stops the PyWebIO server, and then quits Electron. The dialog enables `Force Shutdown`
 after five seconds; that explicit action kills managed processes instead of waiting for
 graceful shutdown. If any component does not stop within 60 seconds, the dialog remains
-available so the operator can force shutdown.
+available so the operator can force shutdown. Force Shutdown latches lifecycle work,
+arms every instance against automatic or queued restarts, and hard-kills only
+identity-validated managed agents, game processes, and supervisors in parallel. External
+servers remain running. All targets share one 500-millisecond verification deadline;
+the backend exits immediately afterward even if a survivor is reported in its persistent
+instance log. Electron observes the backend exit, closes its window and tray, and quits
+separately. Its `taskkill /T /F` path remains a fallback for a hung backend only.
 
 The desktop backend control endpoint is loopback-only and authenticated with the
 per-launch `PALSITTER_DESKTOP_TOKEN`:

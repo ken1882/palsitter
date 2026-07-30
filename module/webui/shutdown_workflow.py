@@ -12,7 +12,14 @@ from pywebio.session import register_thread
 from module.webui.assets import client_call, put_asset_widget
 from module.webui.i18n import t
 from module.webui.session import register_stop_event
-from module.webui.shutdown import ShutdownResult, active_records, force_shutdown_all, shutdown_all
+from module.webui.shutdown import (
+    ShutdownResult,
+    active_records,
+    force_shutdown_all,
+    latch_shutdown_for_exit,
+    release_shutdown_latch,
+    shutdown_all,
+)
 
 
 FORCE_SHUTDOWN_DELAY_SECONDS = 5
@@ -20,6 +27,7 @@ CLIENT_NOTICE_DELAY_SECONDS = 3
 _STATE_LOCK = threading.RLock()
 _WORKFLOW_THREAD: threading.Thread | None = None
 _WORKFLOW_STATE: dict[str, Any] | None = None
+_WORKFLOW_RECORDS: tuple[Any, ...] = ()
 _FORCE_REQUESTED = threading.Event()
 _ON_COMPLETE: Callable[[], None] | None = None
 _RENDER_LOCK = threading.RLock()
@@ -37,10 +45,10 @@ def load_state() -> dict[str, Any] | None:
         return copy.deepcopy(_WORKFLOW_STATE)
 
 
-def _instance_snapshot() -> dict[str, dict[str, str]]:
+def _instance_snapshot(records: tuple[Any, ...]) -> dict[str, dict[str, str]]:
     return {
         record.name: {"status": "pending", "message": t("utils.shutdown_pending")}
-        for record in active_records()
+        for record in records
     }
 
 
@@ -57,20 +65,31 @@ def _request_result(status: str) -> ShutdownResult:
 
 
 def start_workflow() -> ShutdownResult:
-    global _WORKFLOW_THREAD, _WORKFLOW_STATE
+    global _WORKFLOW_RECORDS, _WORKFLOW_THREAD, _WORKFLOW_STATE
     with _STATE_LOCK:
         if _WORKFLOW_STATE is not None and _WORKFLOW_STATE.get("phase") in {
             "stopping",
             "force_stopping",
         }:
             return _request_result("shutdown_in_progress")
+        latch_shutdown_for_exit()
+        try:
+            records = tuple(active_records())
+        except Exception:
+            release_shutdown_latch()
+            raise
         _FORCE_REQUESTED.clear()
+        _WORKFLOW_RECORDS = records
         _WORKFLOW_STATE = {
             "phase": "stopping",
             "force_available_at": time.time() + FORCE_SHUTDOWN_DELAY_SECONDS,
-            "instances": _instance_snapshot(),
+            "instances": _instance_snapshot(records),
         }
-        _WORKFLOW_THREAD = threading.Thread(target=_run_graceful, daemon=True)
+        _WORKFLOW_THREAD = threading.Thread(
+            target=_run_graceful,
+            args=(records,),
+            daemon=True,
+        )
         _WORKFLOW_THREAD.start()
     return _request_result("shutdown_started")
 
@@ -115,10 +134,11 @@ def _finish(result, *, force: bool) -> None:
         state["phase"] = "completed" if result.ok else "failed"
         state["instances"] = result.instances
         state["error"] = result.error
-        if result.ok:
+        if result.ok or force:
             callback = _ON_COMPLETE
     if callback is not None:
-        threading.Thread(target=_finish_after_client_notice, args=(callback,), daemon=True).start()
+        target = callback if force else lambda: _finish_after_client_notice(callback)
+        threading.Thread(target=target, daemon=True).start()
 
 
 def _finish_after_client_notice(callback: Callable[[], None]) -> None:
@@ -126,9 +146,9 @@ def _finish_after_client_notice(callback: Callable[[], None]) -> None:
     callback()
 
 
-def _run_graceful() -> None:
+def _run_graceful(records: tuple[Any, ...]) -> None:
     try:
-        result = shutdown_all()
+        result = shutdown_all(records=records)
     except Exception as exc:
         result = ShutdownResult(False, {}, str(exc))
     if not _FORCE_REQUESTED.is_set():
@@ -137,7 +157,7 @@ def _run_graceful() -> None:
 
 def _run_force() -> None:
     try:
-        result = force_shutdown_all()
+        result = force_shutdown_all(records=_WORKFLOW_RECORDS)
     except Exception as exc:
         result = ShutdownResult(False, {}, str(exc))
     _finish(result, force=True)

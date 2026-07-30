@@ -8,7 +8,7 @@ import psutil
 import pytest
 
 from module.config import Profile, fixed_executable_path, profile_log_path, save_profile
-from module.games import OperationProgress, UpdateInfo
+from module.games import ForceStopHandle, OperationProgress, UpdateInfo
 from module.games.palworld.config import profile_server_output_path
 from module.instances import (
     DailyLogWriter,
@@ -16,6 +16,7 @@ from module.instances import (
     prune_dated_log_files,
 )
 from module.webui.process_manager import ProcessManager, _PROCESS_CONTEXT, _run_profile
+from module.webui import shutdown
 
 
 @pytest.fixture(autouse=True)
@@ -737,16 +738,11 @@ def test_stop_requests_graceful_shutdown_without_killing_process_tree(monkeypatc
     assert manager.alive is True
 
 
-def test_kill_force_stops_process_tree_and_returns_inactive(monkeypatch):
+def test_kill_uses_immediate_supervisor_stop_and_returns_inactive(monkeypatch):
     calls = []
 
-    class KillableProcess(FakeMpProcess):
-        def join(self, timeout=None):
-            calls.append(("join", timeout))
-            self._alive = False
-
     manager = ProcessManager("test")
-    manager._process = KillableProcess()
+    manager._process = FakeMpProcess()
     manager._set_state("stopping")
     monkeypatch.setattr(
         "module.webui.process_manager._kill_process_tree",
@@ -755,8 +751,81 @@ def test_kill_force_stops_process_tree_and_returns_inactive(monkeypatch):
 
     manager.kill()
 
-    assert calls == [("kill", 999, 0), ("join", 2)]
+    assert calls == [("kill", 999, 0)]
     assert manager.state == "inactive"
+
+
+def test_manual_kill_reuses_validated_immediate_adapter_stop(tmp_path, monkeypatch):
+    manager = _manager_with_profile(tmp_path, monkeypatch)
+    manager._ownership = "managed"
+    manager._set_state("running")
+    calls = []
+    adapter = SimpleNamespace(
+        force_stop_managed_immediate=lambda record: (
+            calls.append(record.name)
+            or ForceStopHandle(True, lambda: True)
+        ),
+        record_audit_event=lambda record, event: None,
+    )
+    monkeypatch.setattr("module.webui.process_manager.get_game", lambda game: adapter)
+    monkeypatch.setattr(
+        "module.webui.process_manager._kill_process_tree",
+        lambda pid, grace: None,
+    )
+
+    assert manager.kill()
+
+    assert calls == ["test"]
+    assert manager._stop_requested.is_set()
+    assert manager._force_stop_requested.is_set()
+
+
+def test_prepare_force_shutdown_arms_managed_flags_before_supervisor_kill(
+    monkeypatch,
+):
+    calls = []
+    manager = ProcessManager("test")
+    manager._process = FakeMpProcess()
+    manager._ownership = "managed"
+    manager._set_state("running")
+    monkeypatch.setattr(
+        "module.webui.process_manager._kill_process_tree",
+        lambda pid, grace: calls.append((pid, grace)),
+    )
+
+    ownership = manager.prepare_force_shutdown()
+
+    assert ownership == "managed"
+    assert manager._intentional_exit
+    assert manager._stop_requested.is_set()
+    assert manager._force_stop_requested.is_set()
+    assert calls == []
+
+    assert manager.terminate_supervisor_immediate()
+    assert calls == [(999, 0)]
+
+
+def test_prepare_force_shutdown_handoffs_external_watcher_without_force_flag():
+    manager = ProcessManager("test")
+    manager._ownership = "external"
+    manager._set_state("running")
+
+    ownership = manager.prepare_force_shutdown()
+
+    assert ownership == "external"
+    assert manager._intentional_exit
+    assert manager._handoff_requested.is_set()
+    assert not manager._force_stop_requested.is_set()
+
+
+def test_shutdown_latch_rejects_queued_restart_start(tmp_path, monkeypatch):
+    manager = _manager_with_profile(tmp_path, monkeypatch)
+    shutdown.latch_shutdown_for_exit()
+    try:
+        assert manager.start(update=False) is False
+        assert any("shutting down" in line.lower() for line in manager.logs)
+    finally:
+        shutdown.release_shutdown_latch()
 
 
 def test_handoff_joins_only_supervisor_and_leaves_managed_server_running(

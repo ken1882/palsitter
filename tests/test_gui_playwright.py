@@ -167,6 +167,7 @@ def _mock_metrics_server(
     shutdown_executable=None,
     banlist_path=None,
     post_delay=0,
+    post_stream_seconds=0,
     post_started=None,
     post_completed=None,
 ):
@@ -181,6 +182,26 @@ def _mock_metrics_server(
             self.send_header("Content-Length", str(len(payload)))
             self.end_headers()
             self.wfile.write(payload)
+
+        def _write_streamed_empty_json(self, seconds):
+            interval = 0.25
+            spaces = max(1, int(seconds / interval))
+            payload_length = spaces + 2
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(payload_length))
+            self.end_headers()
+            try:
+                self.wfile.write(b"{")
+                self.wfile.flush()
+                for _ in range(spaces):
+                    time.sleep(interval)
+                    self.wfile.write(b" ")
+                    self.wfile.flush()
+                self.wfile.write(b"}")
+                self.wfile.flush()
+            except OSError:
+                pass
 
         def do_GET(self):
             nonlocal player_get_count
@@ -279,7 +300,10 @@ def _mock_metrics_server(
                 if post_started is not None:
                     post_started.set()
                 time.sleep(post_delay)
-                self._write_json({})
+                if post_stream_seconds:
+                    self._write_streamed_empty_json(post_stream_seconds)
+                else:
+                    self._write_json({})
                 if post_completed is not None:
                     post_completed.set()
                 if self.path == "/v1/api/shutdown" and shutdown_executable is not None:
@@ -949,6 +973,81 @@ def test_utils_actions_and_log(tmp_path, monkeypatch):
         shutdown_overlay.get_by_text(
             "Palsitter stopped, you can now safely close this window", exact=True
         ).wait_for(timeout=15000)
+
+
+@pytest.mark.playwright
+@pytest.mark.serial_playwright
+def test_force_shutdown_kills_managed_server_and_stops_backend_promptly(
+    tmp_path, monkeypatch
+):
+    steam_calls = tmp_path / "force-shutdown-steamcmd-calls.txt"
+    _prepare_fixed_palserver_python(tmp_path)
+    _prepare_fixed_steamcmd(tmp_path)
+    with _mock_metrics_server(post_stream_seconds=7) as (rest_port, _):
+        with _gui_page(
+            tmp_path,
+            monkeypatch,
+            rest_port=rest_port,
+            profile_overrides={
+                "executable_args": ["-c", "import time; time.sleep(60)"],
+                "launch_enable_gamedata_api": False,
+                "shutdown_wait_seconds": 60,
+            },
+            extra_env={"PALSITTER_FAKE_STEAMCMD_CALLS": str(steam_calls)},
+        ) as (page, _):
+            page.locator("#pywebio-scope-aside").get_by_text(
+                "default", exact=True
+            ).click()
+            scheduler = page.locator("#pywebio-scope-scheduler_panel")
+            scheduler.get_by_role("button", name="Start", exact=True).click()
+            scheduler.get_by_role("button", name="Stop", exact=True).wait_for(
+                timeout=10000
+            )
+            page.wait_for_function(
+                "() => !document.querySelector("
+                "'#pywebio-scope-scheduler_save button')?.disabled"
+            )
+            from module.games.palworld.server.status import instance_is_running
+
+            deadline = time.monotonic() + 5
+            while (
+                not instance_is_running(load_profile("default"))
+                and time.monotonic() < deadline
+            ):
+                time.sleep(0.05)
+            assert instance_is_running(load_profile("default"))
+
+            page.locator("#pywebio-scope-aside").get_by_text(
+                "Home", exact=True
+            ).click()
+            page.locator("#pywebio-scope-menu").get_by_text(
+                "Utils", exact=True
+            ).click()
+            page.get_by_role(
+                "button", name="Shutdown Palsitter", exact=True
+            ).click()
+            modal = page.locator(".modal.show")
+            modal.get_by_role("button", name="Stop all", exact=True).click()
+            force = page.locator(
+                "#pywebio-scope-shutdown_force_button"
+            ).get_by_role("button", name="Force Shutdown", exact=True)
+            force.wait_for(timeout=7000)
+
+            started = time.monotonic()
+            assert not force.is_disabled(), page.locator(
+                "#pywebio-scope-shutdown_overlay"
+            ).inner_text()
+            force.click()
+            page.wait_for_function(
+                """
+                () => fetch(location.href, {cache: 'no-store'})
+                    .then(() => false)
+                    .catch(() => true)
+                """,
+                timeout=2000,
+                polling=50,
+            )
+            assert time.monotonic() - started < 2
 
 
 @pytest.mark.playwright

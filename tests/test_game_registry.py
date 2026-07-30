@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 
+import module.games.registry as game_registry
 from module.games import InstanceStatusSummary, get_game, list_games
 from module.config import Profile
 from module.games.palworld.server.history import LifecycleEvent
@@ -31,6 +32,20 @@ def test_builtin_games_and_capabilities():
     assert palworld.world_settings is True
     assert palworld.save_import is True
     assert get_game("satisfactory").capabilities.lifecycle is False
+
+
+def test_palworld_detached_agent_liveness_uses_identity_probe(monkeypatch):
+    calls = []
+    record = InstanceRecord("alpha", "palworld", {})
+
+    monkeypatch.setattr(game_registry, "os", SimpleNamespace(name="nt"))
+    monkeypatch.setattr(
+        "module.games.palworld.server.agent.agent_is_running",
+        lambda name: calls.append(name) or True,
+    )
+
+    assert get_game("palworld").detached_agent_is_running(record)
+    assert calls == ["alpha"]
 
 
 def test_unsupported_status_summary_is_typed_without_dispatching_palworld(tmp_path, monkeypatch):

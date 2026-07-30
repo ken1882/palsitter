@@ -54,7 +54,10 @@ failure cannot leave an idle agent indefinitely. The stable version-1 named pipe
 owning user and validated against the WTS session; its UUID `session_id` is an application
 session identifier stored separately from that WTS session ID. A Windows named mutex
 serializes launches and enforces one live agent per instance before `agent-state.json` is
-published.
+published. Explicit application Force Shutdown does not wait on this pipe: after validating
+the persisted agent PID, creation time, executable, owner, and Windows session, it
+terminates the agent directly. Closing the agent-owned kill-on-close Job Object terminates
+PalServer descendants, with the validated server identity used as a fallback.
 
 On native Linux, managed Palworld servers are supervised directly by the adapter with
 `Popen` and `psutil`; the detached agent, ConPTY handoff, and Job Object ownership rules

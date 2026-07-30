@@ -33,7 +33,12 @@
   stopping state, saves active instances, requests graceful shutdown, and closes the GUI
   after every lifecycle instance stops. The overlay enables `Force Shutdown (5)` after
   five seconds, counts down once per second, removes the counter at zero, and force-kills
-  managed instances only when the operator clicks it. The same choices and workflows are
+  managed instances only when the operator clicks it. Force Shutdown first arms every
+  manager against restarts, hard-kills validated managed agents, game processes, and
+  supervisors in parallel without agent IPC, and verifies them against one shared
+  500-millisecond deadline. External servers are left running and reported as skipped.
+  The backend exits immediately after that bounded verification, including after a
+  partial failure; Electron then closes separately. The same choices and workflows are
   used by the Windows Electron tray exit.
 - Restart state is stored atomically under `tmp/webui/restart-state.json`. Refreshing or
   reconnecting reconstructs the active overlay. The initiating browser connection is

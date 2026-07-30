@@ -20,7 +20,7 @@ import time
 import uuid
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import psutil
 
@@ -662,7 +662,84 @@ def _agent_identity_alive(state: dict[str, Any]) -> bool:
 
 def agent_is_running(profile_name: str) -> bool:
     state = load_agent_state(profile_name)
-    return state is not None and _agent_identity_alive(state)
+    if state is None:
+        return False
+    if _agent_identity_alive(state):
+        return True
+    clear_agent_state(profile_name)
+    return False
+
+
+def force_kill_managed_agent(
+    profile: PalworldProfile,
+) -> tuple[bool, Callable[[], bool], str | None]:
+    """Hard-kill an identity-validated managed agent without using its pipe."""
+    state = load_agent_state(profile.name)
+    if state is None:
+        return False, lambda: True, None
+    if not _agent_identity_alive(state):
+        clear_agent_state(profile.name)
+        return False, lambda: True, None
+    try:
+        agent_process = psutil.Process(int(state["agent_pid"]))
+        expected_python = os.path.normcase(os.path.abspath(sys.executable))
+        actual_python = os.path.normcase(os.path.abspath(agent_process.exe()))
+        if actual_python != expected_python:
+            return True, lambda: False, "Managed agent executable identity does not match"
+        if os.name == "nt":
+            expected_owner = (
+                str(state["owner_sid"]),
+                int(state["windows_session_id"]),
+            )
+            if _process_identity(agent_process.pid) != expected_owner:
+                return True, lambda: False, "Managed agent owner identity does not match"
+
+        server_process: psutil.Process | None = None
+        if _server_identity_alive(state):
+            recorded_server = os.path.normcase(
+                os.path.abspath(str(state.get("server_executable") or ""))
+            )
+            server_process = psutil.Process(int(state["server_pid"]))
+            actual_server = os.path.normcase(os.path.abspath(server_process.exe()))
+            expected_servers = _expected_executables(profile)
+            if (
+                recorded_server not in expected_servers
+                or actual_server not in expected_servers
+            ):
+                return True, lambda: False, "Managed PalServer executable identity does not match"
+
+        agent_process.kill()
+        processes: list[psutil.Process] = []
+        if server_process is not None:
+            try:
+                processes.extend(server_process.children(recursive=True))
+            except (OSError, psutil.Error):
+                pass
+            processes.append(server_process)
+        for process in processes:
+            try:
+                process.kill()
+            except psutil.NoSuchProcess:
+                pass
+    except (KeyError, OSError, psutil.Error, TypeError, ValueError) as exc:
+        return True, lambda: False, f"Could not terminate managed agent identity: {exc}"
+
+    expected_agent = {
+        "agent_pid": state.get("agent_pid"),
+        "agent_create_time": state.get("agent_create_time"),
+    }
+
+    def stopped() -> bool:
+        agent_stopped = not _agent_identity_alive(state)
+        server_stopped = not _server_identity_alive(state)
+        if not (agent_stopped and server_stopped):
+            return False
+        current = load_agent_state(profile.name)
+        if current is not None and _agent_identity_matches(current, expected_agent):
+            clear_agent_state(profile.name)
+        return True
+
+    return True, stopped, None
 
 
 def _wait_for_agent_exit(profile_name: str, expected_state: dict[str, Any] | None) -> None:

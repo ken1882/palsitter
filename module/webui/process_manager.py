@@ -719,32 +719,76 @@ class ProcessManager:
             return self._operation_rejected("Cannot KILL an externally managed server")
         if not self.active and not self.alive:
             return self._operation_rejected("Not running")
-        with self._lock:
-            self._stop_reason = "manual kill"
-            self._intentional_exit = True
-            self._state = "killing"
-        self.append_log("Stop requested: manual kill")
-        self._stop_requested.set()
-        self._force_stop_requested.set()
+        self._arm_managed_force_stop(
+            reason="manual kill",
+            message="Stop requested: manual kill",
+        )
         try:
             record = load_instance(self.config_name)
-            get_game(record.game).force_stop(record)
+            handle = get_game(record.game).force_stop_managed_immediate(record)
+            if handle.error is not None:
+                self.append_log(f"Could not force-stop server process: {handle.error}")
+            elif handle.targeted and not handle.stopped():
+                self.append_log("Managed server is still stopping")
         except (FileNotFoundError, OSError, RuntimeError) as exc:
             self.append_log(f"Could not force-stop server process: {exc}")
-        with self._lock:
-            process = self._process
-        if process is not None and process.is_alive():
-            _kill_process_tree(process.pid, grace=0)
-            process.join(timeout=2)
-        self.append_log("Killed supervisor process")
+        self.terminate_supervisor_immediate(message="Killed supervisor process")
         self._record_lifecycle_event("manual kill", "stopped")
         self._record_adapter_event("server_stop", "Server force-stopped")
+        return True
+
+    def _arm_managed_force_stop(self, *, reason: str, message: str) -> None:
+        with self._lock:
+            self._stop_reason = reason
+            self._intentional_exit = True
+            self._state = "killing"
+        self.append_log(message)
+        self._stop_requested.set()
+        self._force_stop_requested.set()
+
+    def prepare_force_shutdown(self) -> str:
+        """Arm restart prevention before the shared coordinator kills anything."""
+        with self._lock:
+            ownership = self._ownership
+        if ownership == "external":
+            with self._lock:
+                self._stop_reason = "Palsitter force shutdown"
+                self._intentional_exit = True
+                self._state = "detaching"
+            self.append_log(
+                "Force shutdown: detaching external watcher and leaving server running"
+            )
+            self._handoff_requested.set()
+        else:
+            self._arm_managed_force_stop(
+                reason="Palsitter force shutdown",
+                message="Force shutdown: armed managed process termination",
+            )
+        return ownership
+
+    def terminate_supervisor_immediate(
+        self,
+        *,
+        message: str = "Force shutdown: terminating supervisor",
+    ) -> bool:
+        """Hard-kill the supervisor without joining it on the force critical path."""
+        with self._lock:
+            process = self._process
+        targeted = bool(process is not None and process.is_alive())
+        if targeted:
+            self.append_log(message)
+            _kill_process_tree(process.pid, grace=0)
         with self._lock:
             self.warning = False
             self._ownership = "none"
             self._state = "inactive"
             self.backup_schedule_started_at = None
-        return True
+        return targeted
+
+    def force_shutdown_supervisor_stopped(self) -> bool:
+        with self._lock:
+            process = self._process
+        return process is None or not process.is_alive()
 
     def prepare_shutdown(self) -> bool:
         """Expose the stopping state while shutdown saves the instance state."""
