@@ -5,6 +5,12 @@ The registry supplies each game's defaults, cloning rules, typed configuration, 
 capabilities, typed status summary, backup integration, and ordered instance-page
 manifest.
 
+New runnable integrations installed through SteamCMD must follow
+[SteamCMD-Managed Games Without an API](./steamcmd-managed-games.md) as their minimum
+contract. SteamCMD usage does not imply Palworld capabilities, paths, ports, settings,
+backup rules, or pages; every capability beyond that baseline requires an explicit
+game-owned specification.
+
 - `OperationProgress` carries operation kind, phase, optional percentage, message, and
   optional error.
 - `UpdateInfo` carries installed and available build ids, check time, and status.
