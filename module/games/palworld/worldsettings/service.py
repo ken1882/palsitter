@@ -115,6 +115,7 @@ def migrate_world_option_sav_to_ini(profile: PalworldProfile) -> Optional[Path]:
         sav_path.unlink()
         return None
     values["PublicPort"] = profile.game_port
+    values["RESTAPIEnabled"] = True
     values["RESTAPIPort"] = profile.rest_port
     if profile.rest_password:
         values["AdminPassword"] = profile.rest_password

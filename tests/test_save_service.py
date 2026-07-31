@@ -3,6 +3,10 @@ from pathlib import Path
 import pytest
 
 from module.config import Profile
+from module.worldsettings.ini_codec import (
+    read_ini_option_settings,
+    write_ini_option_settings,
+)
 from module.games.palworld.backup import BackupResult, BackupService
 from module.games.palworld.saves import (
     ManagedWorldService,
@@ -119,7 +123,10 @@ def test_import_world_settings_ini_uses_windows_or_linux_server_relative_path(
     level.write_bytes(b"level")
     linux_ini = server_root / "Pal" / "Saved" / "Config" / "LinuxServer" / "PalWorldSettings.ini"
     linux_ini.parent.mkdir(parents=True)
-    linux_ini.write_text("linux", encoding="utf-8")
+    write_ini_option_settings(
+        linux_ini,
+        {"ServerName": "Imported server", "RESTAPIEnabled": False},
+    )
     profile = _profile(tmp_path)
 
     monkeypatch.setattr("module.games.palworld.config.WINDOWS", False)
@@ -135,7 +142,11 @@ def test_import_world_settings_ini_uses_windows_or_linux_server_relative_path(
         / "LinuxServer"
         / "PalWorldSettings.ini"
     )
-    assert target.read_text(encoding="utf-8") == "linux"
+    imported_values = read_ini_option_settings(target)
+    assert imported_values["ServerName"] == "Imported server"
+    assert imported_values["RESTAPIEnabled"] is True
+    assert profile.world_settings["RESTAPIEnabled"] is True
+    assert read_ini_option_settings(linux_ini)["RESTAPIEnabled"] is False
 
 
 def test_import_world_settings_ini_keeps_profile_template_when_source_has_no_ini(
@@ -157,8 +168,6 @@ def test_import_world_settings_ini_keeps_profile_template_when_source_has_no_ini
         / "WindowsServer"
         / "PalWorldSettings.ini"
     )
-    from module.worldsettings.ini_codec import read_ini_option_settings
-
     assert read_ini_option_settings(target)["BuildObjectDeteriorationDamageRate"] == 0.0
 
 

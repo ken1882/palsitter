@@ -224,6 +224,12 @@ def import_world_settings_ini(profile: PalworldProfile, source: str | Path) -> O
     )
     target.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(source_path, target)
+    from module.games.palworld.worldsettings.ini_codec import (
+        write_ini_option_settings,
+    )
+
+    write_ini_option_settings(target, {"RESTAPIEnabled": True})
+    profile.world_settings["RESTAPIEnabled"] = True
     return target
 
 

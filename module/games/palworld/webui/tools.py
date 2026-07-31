@@ -32,10 +32,12 @@ from module.games.palworld.firewall import (
 )
 from module.games.palworld.saves import (
     PlayerMigrationError,
+    PlayerMigrationDetails,
     PlayerMigrationUnavailable,
     PlayerNameCacheError,
     build_player_name_cache,
     list_player_files,
+    load_player_details_cache,
     load_player_name_cache,
     migrate_player_ids,
 )
@@ -496,13 +498,11 @@ def _render_migration(name: str) -> None:
         except OSError as exc:
             put_warning(t("tools.migration_failed", error=exc))
             return
-        name_cache = load_player_name_cache(_migration_world(name))
+        details_cache = load_player_details_cache(_migration_world(name))
         options = [
             {
-                "label": (
-                    f"{name_cache.get(path.stem.casefold())} — {path.name}"
-                    if name_cache.get(path.stem.casefold())
-                    else path.name
+                "label": _migration_player_label(
+                    path.name, details_cache.get(path.stem.casefold())
                 ),
                 "value": path.name,
             }
@@ -541,6 +541,31 @@ def _render_migration(name: str) -> None:
         )
 
 
+def _migration_player_label(
+    filename: str, details: PlayerMigrationDetails | None
+) -> str:
+    if details is None:
+        return filename
+    if details.name is None:
+        if details.owned_pal_count is None:
+            return filename
+        return t(
+            "tools.migration_player_option_without_name",
+            pal_count=details.owned_pal_count,
+            id=filename,
+        )
+    return t(
+        "tools.migration_player_option",
+        name=details.name,
+        pal_count=(
+            details.owned_pal_count
+            if details.owned_pal_count is not None
+            else "?"
+        ),
+        id=filename,
+    )
+
+
 def _confirm_migration(name: str) -> None:
     if _manager(name).active:
         with use_scope("tools_migration_status", clear=True):
@@ -575,7 +600,10 @@ def _confirm_decoded_name_mismatch(
 
     def resolve(continue_migration: bool) -> None:
         decision["continue"] = continue_migration
-        close_popup()
+        if continue_migration:
+            _show_migration_progress()
+        else:
+            close_popup()
         resolved.set()
 
     run_if_current(
@@ -601,11 +629,8 @@ def _open_decoded_name_mismatch(
     destination_actual: str,
     resolve,
 ) -> None:
-    with popup(
-        t("tools.migration_name_mismatch_title"),
-        closable=False,
-        implicit_close=False,
-    ):
+    with use_scope("tools_migration_dialog", clear=True):
+        put_text(t("tools.migration_name_mismatch_title"))
         put_text(
             t(
                 "tools.migration_name_mismatch",
@@ -613,6 +638,67 @@ def _open_decoded_name_mismatch(
                 source_actual=source_actual,
                 destination_expected=destination_expected,
                 destination_actual=destination_actual,
+            )
+        )
+        put_row(
+            [
+                put_button(
+                    t("common.cancel"),
+                    onclick=lambda: resolve(False),
+                    color="secondary",
+                ),
+                put_button(
+                    t("tools.migration_continue"),
+                    onclick=lambda: resolve(True),
+                    color="warning",
+                ),
+            ],
+            size="1fr auto",
+        )
+
+
+def _confirm_destination_pal_count(
+    context,
+    source_pal_count: int,
+    destination_pal_count: int,
+) -> bool:
+    decision = {"continue": False}
+    resolved = threading.Event()
+
+    def resolve(continue_migration: bool) -> None:
+        decision["continue"] = continue_migration
+        if continue_migration:
+            _show_migration_progress()
+        else:
+            close_popup()
+        resolved.set()
+
+    run_if_current(
+        context,
+        lambda: _open_destination_pal_count_warning(
+            source_pal_count,
+            destination_pal_count,
+            resolve,
+        ),
+    )
+    while not resolved.wait(0.1):
+        if context is not None and context.stop_event.is_set():
+            return False
+    return bool(decision["continue"])
+
+
+def _open_destination_pal_count_warning(
+    source_pal_count: int,
+    destination_pal_count: int,
+    resolve,
+) -> None:
+    with use_scope("tools_migration_dialog", clear=True):
+        put_text(t("tools.migration_destination_pals_title"))
+        put_text(
+            t(
+                "tools.migration_destination_pals",
+                source_count=source_pal_count,
+                destination_count=destination_pal_count,
             )
         )
         put_row(
@@ -657,6 +743,8 @@ def _migration_progress_label(phase: str, filename: str | None) -> str:
         return t("tools.migration_progress_backup")
     if phase == "unpack":
         return t("tools.migration_progress_unpack", filename=filename or "")
+    if phase == "cache":
+        return t("tools.migration_progress_cache")
     if phase == "update":
         return t("tools.migration_progress_update")
     if phase == "repack":
@@ -701,11 +789,21 @@ def _open_operation_progress(title: str, scope: str, starting: str) -> None:
 
 
 def _open_migration_progress() -> None:
-    _open_operation_progress(
+    with popup(
         t("tools.migration_progress_title"),
-        "tools_migration_progress",
-        t("tools.migration_progress_starting"),
-    )
+        closable=False,
+        implicit_close=False,
+    ):
+        put_scope("tools_migration_dialog")
+    _show_migration_progress()
+
+
+def _show_migration_progress() -> None:
+    with use_scope("tools_migration_dialog", clear=True):
+        put_scope(
+            "tools_migration_progress",
+            [put_text(t("tools.migration_progress_starting"))],
+        )
 
 
 def _migrate(name: str, old_player: str, new_player: str) -> None:
@@ -716,7 +814,14 @@ def _migrate(name: str, old_player: str, new_player: str) -> None:
     expected_names = load_player_name_cache(_migration_world(name))
 
     def progress(phase: str, filename: str | None) -> None:
-        progress_events.append((phase, filename))
+        if (
+            phase == "unpack"
+            and progress_events
+            and progress_events[-1][0] == "unpack"
+        ):
+            progress_events[-1] = (phase, filename)
+        else:
+            progress_events.append((phase, filename))
         run_if_current(
             context,
             lambda: _render_migration_progress(progress_events),
@@ -760,26 +865,37 @@ def _run_migration(
                 destination_expected,
                 destination_actual,
             ),
+            confirm_destination_pal_count=lambda source_count, destination_count: _confirm_destination_pal_count(
+                context,
+                source_count,
+                destination_count,
+            ),
         )
     except PlayerMigrationUnavailable as exc:
         _manager(name).append_log(f"Player migration unavailable: {exc}")
         run_if_current(
             context,
-            lambda exc=exc: _render_migration_error("tools.migration_unavailable", exc),
+            lambda exc=exc: _render_migration_error(
+                name, "tools.migration_unavailable", exc
+            ),
         )
         return
     except (PlayerMigrationError, OSError) as exc:
         _manager(name).append_log(f"Player migration failed: {exc}")
         run_if_current(
             context,
-            lambda exc=exc: _render_migration_error("tools.migration_failed", exc),
+            lambda exc=exc: _render_migration_error(
+                name, "tools.migration_failed", exc
+            ),
         )
         return
     except Exception as exc:
         _manager(name).append_log(f"Player migration failed: {exc}")
         run_if_current(
             context,
-            lambda exc=exc: _render_migration_error("tools.migration_failed", exc),
+            lambda exc=exc: _render_migration_error(
+                name, "tools.migration_failed", exc
+            ),
         )
         return
     _manager(name).append_log(
@@ -788,7 +904,7 @@ def _run_migration(
     )
     run_if_current(
         context,
-        lambda: _render_migration_success(result.safety_backup),
+        lambda: _render_migration_success(name, result.safety_backup),
     )
 
 
@@ -885,14 +1001,16 @@ def _render_name_cache_success(name: str, path: Path, player_count: int) -> None
         put_text(t("tools.name_cache_completed", path=path, count=player_count))
 
 
-def _render_migration_error(key: str, error: BaseException) -> None:
+def _render_migration_error(name: str, key: str, error: BaseException) -> None:
     close_popup()
+    _render_migration(name)
     with use_scope("tools_migration_status", clear=True):
         put_warning(t(key, error=error))
 
 
-def _render_migration_success(backup: Path) -> None:
+def _render_migration_success(name: str, backup: Path) -> None:
     close_popup()
+    _render_migration(name)
     with use_scope("tools_migration_status", clear=True):
         put_text(t("tools.migration_completed", backup=backup))
 

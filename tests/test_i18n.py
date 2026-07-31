@@ -15,6 +15,20 @@ def test_translation_catalogs_and_fallback():
     assert normalize_language("fr-FR") == "en-US"
     assert t("nav.home", language="en-US") == "Home"
     assert t("nav.home", language="zh-TW") == "首頁"
+    assert (
+        t(
+            "tools.migration_player_option",
+            language="zh-TW",
+            name="玩家",
+            pal_count=12,
+            id="PLAYER.sav",
+        )
+        == "玩家（擁有帕魯：12）— PLAYER.sav"
+    )
+    assert (
+        t("tools.migration_destination_pals_title", language="zh-TW")
+        == "目的地玩家擁有較多帕魯"
+    )
     assert t("missing.key", language="zh-TW") == "missing.key"
 
 
@@ -58,4 +72,3 @@ def test_translation_falls_back_outside_pywebio_session(monkeypatch):
     monkeypatch.setattr("module.webui.i18n.local", NoSessionLocal())
 
     assert t("utils.restart_saved") == "World saved"
-

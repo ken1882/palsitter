@@ -209,7 +209,12 @@ def test_migrate_world_option_sav_to_ini_removes_sav_and_uses_profile_ports(
         save_dir / "WorldOption.sav",
         merge_option_values(
             codec.load_template(),
-            {"ServerName": "Imported world", "PublicPort": 7000, "RESTAPIPort": 7001},
+            {
+                "ServerName": "Imported world",
+                "PublicPort": 7000,
+                "RESTAPIEnabled": False,
+                "RESTAPIPort": 7001,
+            },
         ),
         save_type=save_type,
     )
@@ -221,8 +226,10 @@ def test_migrate_world_option_sav_to_ini_removes_sav_and_uses_profile_ports(
     values = read_ini_option_settings(resolve_ini_path(profile))
     assert values["ServerName"] == "Imported world"
     assert values["PublicPort"] == 9123
+    assert values["RESTAPIEnabled"] is True
     assert values["RESTAPIPort"] == 9124
     assert values["AdminPassword"] == "profile-secret"
+    assert profile.world_settings["RESTAPIEnabled"] is True
 
 
 @pytest.mark.parametrize(

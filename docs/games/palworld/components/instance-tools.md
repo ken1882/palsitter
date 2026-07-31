@@ -31,15 +31,25 @@ The page also exposes Palworld player-ID migration for imported local worlds:
 - Select the original player `.sav` and the newly generated player `.sav`. The tool
   requires both IDs to already be referenced by `Level.sav`. If the selector only shows
   GUID filenames, use `Build player name cache` first.
-- `Build player name cache` reads the player entries in `Level.sav` and writes the
-  generated `.palsitter-player-names.json` ID-to-name cache beside `Level.sav`. The
-  selector uses names as labels while retaining the GUID filename as the actual value.
+- `Build player name cache` reads the player and personally owned Pal entries in
+  `Level.sav`, plus each player's `_dps.sav` Dimensional Pal Storage sidecar, and writes
+  `.palsitter-player-names.json` beside `Level.sav`. The selector shows
+  `<name> (owned Pals: <count>) — <GUID>.sav` while retaining the GUID filename as the
+  actual value. The count excludes nil-owner guild/base Pals and cross-world Global
+  Palbox data.
 - A safety backup is created before the tool swaps the player documents and all matching
   player GUID references in `Level.sav`. The server must remain stopped during the
-  operation.
+  operation. While the migration documents are decoded, the tool also rebuilds the player
+  cache without unpacking those files a second time. Once decoding completes, the
+  pre-migration cache is retained after cancellation or failure; a successful save
+  transaction includes the migrated cache. The player selectors are refreshed after
+  every outcome.
 - The migration button is disabled while the server is running. After confirmation, an
-  undismissable progress dialog reports the safety backup, each save unpacked (including
-  player `_dps.sav` sidecars when present), save-data updates, and each file repacked.
+  undismissable dialog remains open while it transitions between identity warnings,
+  owned-Pal warnings, and progress. Progress reports the safety backup, each save unpacked
+  (including player `_dps.sav` sidecars when present), save-data updates, and each file
+  repacked. Consecutive unpack operations share one progress row whose filename updates
+  to the file currently being unpacked.
 - The current Oodle-capable `palsav-flex` codec is required for current `PlM1` saves;
   the older `palworld-save-tools` dependency alone cannot decode them.
 
@@ -66,6 +76,10 @@ The page also exposes Palworld player-ID migration for imported local worlds:
   modified, the source and destination names are compared with each other and with the
   names selected from the player-name cache. If either identity differs, the page asks
   whether to continue; cancelling leaves the save documents unchanged.
+- After the name check is accepted, the decoded personally owned Pal totals are compared,
+  including Dimensional Pal Storage. If the destination owns more Pals than the source,
+  a second confirmation warns that the selections may be reversed. Cancelling leaves the
+  save documents unchanged.
 - Check and repair results are also written to the instance Overview log. Results are not
   persisted as Audit events. Raw administrator-command stdout/stderr and exit codes from
   repair are streamed to the same Overview log.
