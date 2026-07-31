@@ -165,6 +165,9 @@ def test_gui_manifest_registers_every_safe_frontend_asset_once():
     templates = manifest["templates"]
     assert len(templates) == len(set(templates.values()))
     registered.extend(templates.values())
+    modules = manifest["modules"]
+    assert len(modules) == len(set(modules.values()))
+    registered.extend(modules.values())
     for value in registered:
         path = (ROOT / "assets" / value).resolve()
         assert ROOT / "assets" in path.parents
@@ -175,6 +178,7 @@ def test_gui_manifest_registers_every_safe_frontend_asset_once():
         for suffix in ("*.css", "*.js", "*.html")
         for path in GUI_ASSETS.rglob(suffix)
     }
+    discovered.update(modules.values())
     assert discovered == set(registered)
 
 

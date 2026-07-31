@@ -23,6 +23,9 @@
     "gui/js/palworld/players.js",
     "gui/js/palworld/map.js"
   ],
+  "modules": {
+    "ag-grid": "vendor/ag-grid-community/28.2.0/ag-grid-community.min.js"
+  },
   "templates": {
     "shared.panel_title": "gui/html/shared/panel_title.html",
     "shared.section_navigator": "gui/html/shared/section_navigator.html",

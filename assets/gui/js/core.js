@@ -2,6 +2,13 @@
     "use strict";
 
     const root = window.Palsitter = window.Palsitter || {};
+    window.addEventListener("DOMContentLoaded", () => {
+        window.requirejs?.config({
+            paths: {
+                "ag-grid": "/static/vendor/ag-grid-community/28.2.0/ag-grid-community.min",
+            },
+        });
+    }, {once: true});
 
     const resolve = path => {
         let value = root;

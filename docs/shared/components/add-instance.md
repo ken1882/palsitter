@@ -41,9 +41,13 @@ its Overview.
   distinguish a host-only co-op world from single-player.
 - A sibling `WorldOption.sav` is decoded into the new profile's
   `PalWorldSettings.ini`, then removed from the managed copy. Newly allocated network
-  ports and the REST secret replace imported values.
+  ports and the REST secret replace imported values, and `RESTAPIEnabled` is forced on.
+- If `WorldOption.sav` cannot be decoded or parsed, it is removed only from the managed
+  copy and import continues with the companion server INI or template settings. The
+  source save remains unchanged.
 - When no `WorldOption.sav` exists, the companion WindowsServer or LinuxServer
-  `PalWorldSettings.ini` is imported when present. Otherwise template settings remain.
+  `PalWorldSettings.ini` is imported when present with `RESTAPIEnabled` forced on.
+  Otherwise template settings remain.
 - Nested `backup` folders are excluded. Satisfactory exposes no import fields.
 - Local single-player and co-op worlds are imported, but the resulting warning explains
   that player identity migration may still be required before the original characters
