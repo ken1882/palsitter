@@ -1752,6 +1752,57 @@ def test_start_warns_before_running_with_low_disk_space(tmp_path, monkeypatch):
 
 
 @pytest.mark.playwright
+def test_start_disables_world_option_sav_when_ini_already_exists(tmp_path, monkeypatch):
+    _prepare_fixed_palserver_python(tmp_path)
+    _prepare_fixed_steamcmd(tmp_path)
+    world_id = "D4" * 16
+    backup_source = _fixed_backup_source(tmp_path)
+    sav_path = backup_source / world_id / "WorldOption.sav"
+    sav_path.parent.mkdir(parents=True)
+    sav_path.write_bytes(b"legacy override")
+    ini_path = resolve_ini_path(
+        Profile(name="default", workdir=str(_fixed_palserver_dir(tmp_path)))
+    )
+    write_ini_option_settings(ini_path, {"AdminPassword": "initial-secret"})
+
+    with _gui_page(
+        tmp_path,
+        monkeypatch,
+        profile_overrides={
+            "backup_source": str(backup_source),
+            "dedicated_server_name": world_id,
+            "launch_enable_gamedata_api": False,
+            "executable_args": ["-c", "import time; time.sleep(60)"],
+            "shutdown_wait_seconds": 0,
+        },
+        extra_env={"PALSITTER_FAKE_STEAMCMD_CALLS": str(tmp_path / "steamcmd.txt")},
+    ) as (page, _):
+        page.locator("#pywebio-scope-aside").get_by_text("default", exact=True).click()
+        scheduler = page.locator("#pywebio-scope-scheduler_panel")
+        start = scheduler.get_by_role("button", name="Start", exact=True)
+        start.wait_for(timeout=5000)
+        start.click()
+
+        if shutil.disk_usage(tmp_path).free < 10 * 1024 * 1024 * 1024:
+            page.locator(".modal.show").get_by_role(
+                "button", name="Continue", exact=True
+            ).click()
+
+        stop = scheduler.get_by_role("button", name="Stop", exact=True)
+        stop.wait_for(timeout=10000)
+        deadline = time.time() + 10
+        while sav_path.exists() and time.time() < deadline:
+            page.wait_for_timeout(100)
+        assert not sav_path.exists()
+        assert sav_path.with_name("WorldOption.sav.disabled").read_bytes() == (
+            b"legacy override"
+        )
+
+        stop.click()
+        start.wait_for(timeout=10000)
+
+
+@pytest.mark.playwright
 def test_scheduler_endpoint_statuses_retry_during_startup(tmp_path, monkeypatch):
     probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     probe.bind(("127.0.0.1", 0))
@@ -4926,6 +4977,7 @@ def test_world_settings_validation_and_unsaved_save_leave(tmp_path, monkeypatch)
         assert "field-invalid" in day_rate.get_attribute("class")
 
         day_rate.fill("1.7")
+        page.locator('input[name="world_AdminPassword"]').fill("initial-secret")
         page.locator("#pywebio-scope-menu").get_by_text("Overview").click()
         page.get_by_text("Unsaved changes", exact=True).wait_for(timeout=5000)
         page.get_by_role("button", name="Save and leave", exact=True).click()
@@ -4935,6 +4987,71 @@ def test_world_settings_validation_and_unsaved_save_leave(tmp_path, monkeypatch)
         profile = Profile(name="default", workdir=str(workdir), backup_source=str(_fixed_backup_source(tmp_path)))
         saved = read_ini_option_settings(resolve_ini_path(profile))
         assert saved["DayTimeSpeedRate"] == 1.7
+
+
+@pytest.mark.playwright
+@pytest.mark.parametrize(
+    "risk",
+    ["rest-disabled", "empty-admin-password"],
+)
+def test_world_settings_warns_before_disabling_rest_management(
+    tmp_path, monkeypatch, risk
+):
+    workdir = _fixed_palserver_dir(tmp_path)
+
+    with _gui_page(
+        tmp_path,
+        monkeypatch,
+        profile_overrides={
+            "rest_password": "initial-secret",
+            "world_settings": {"AdminPassword": "initial-secret"},
+        },
+    ) as (page, _):
+        page.locator("#pywebio-scope-aside").get_by_text("default").click()
+        page.locator("#pywebio-scope-menu").get_by_text("World Settings").click()
+        page.locator("#pywebio-scope-world_settings_form").wait_for(timeout=5000)
+
+        ini_path = resolve_ini_path(Profile(name="default", workdir=str(workdir)))
+        initial_values = read_ini_option_settings(ini_path)
+        if risk == "rest-disabled":
+            rest_toggle = page.locator("#pywebio-scope-world_toggle_RESTAPIEnabled")
+            rest_toggle.get_by_role("button", name="On", exact=True).click()
+            rest_toggle.get_by_role("button", name="Off", exact=True).wait_for(
+                timeout=2000
+            )
+        else:
+            page.locator('input[name="world_AdminPassword"]').fill("")
+
+        actions = page.locator("#pywebio-scope-world_settings_actions")
+        actions.get_by_role("button", name="Save", exact=True).click()
+        warning = page.locator(".modal.show")
+        warning.get_by_role(
+            "heading", name="REST API access warning", exact=True
+        ).wait_for(timeout=5000)
+        warning.get_by_text(
+            "most Palsitter management features unavailable", exact=False
+        ).wait_for(timeout=5000)
+        warning.get_by_role("button", name="Cancel", exact=True).click()
+        warning.wait_for(state="detached", timeout=5000)
+        assert read_ini_option_settings(ini_path) == initial_values
+
+        page.locator("#pywebio-scope-menu").get_by_text("Overview").click()
+        page.get_by_role("heading", name="Unsaved changes", exact=True).wait_for(
+            timeout=5000
+        )
+        page.get_by_role("button", name="Save and leave", exact=True).click()
+        warning = page.locator(".modal.show")
+        warning.get_by_role(
+            "heading", name="REST API access warning", exact=True
+        ).wait_for(timeout=5000)
+        warning.get_by_role("button", name="Save anyway", exact=True).click()
+        page.locator("#pywebio-scope-scheduler_panel").wait_for(timeout=5000)
+
+        saved = read_ini_option_settings(ini_path)
+        if risk == "rest-disabled":
+            assert saved["RESTAPIEnabled"] is False
+        else:
+            assert saved["AdminPassword"] == ""
 
 
 @pytest.mark.playwright
@@ -4997,6 +5114,7 @@ def test_world_settings_menu_position_and_field_types_save_to_ini(tmp_path, monk
         page.locator('input[name="world_DayTimeSpeedRate"]').fill("2.5")
         page.locator('select[name="world_DeathPenalty"]').select_option(label="Item")
         page.locator('input[name="world_ServerDescription"]').fill("Hello World")
+        page.locator('input[name="world_AdminPassword"]').fill("initial-secret")
         xbox = page.get_by_label("Xbox", exact=True)
         xbox.uncheck()
 
@@ -5504,8 +5622,11 @@ def test_dedicated_save_import_preview_and_managed_world_switch(tmp_path, monkey
         )
         imported_ini_values = read_ini_option_settings(imported_ini)
         assert imported_ini_values["ServerName"] == "Source world settings"
+        assert imported_ini_values["AdminPassword"] == imported.rest_password
         assert imported_ini_values["RESTAPIEnabled"] is True
+        assert imported.world_settings["AdminPassword"] == imported.rest_password
         assert read_ini_option_settings(source_ini)["RESTAPIEnabled"] is False
+        assert "AdminPassword" not in read_ini_option_settings(source_ini)
         assert (first / "Level.sav").read_text(encoding="utf-8") == "original"
 
         second = Path(imported.backup_source) / second_id
@@ -5609,15 +5730,20 @@ def test_local_save_import_handles_world_option_formats(
         ) == "level"
         imported_world = Path(imported.backup_source) / world_id
         assert not (imported_world / "WorldOption.sav").exists()
+        disabled_world_option = imported_world / "WorldOption.sav.disabled"
+        assert disabled_world_option.exists() is (world_option_format == "oodle")
         imported_ini = resolve_ini_path(imported)
         imported_values = read_ini_option_settings(imported_ini)
         assert imported_values["ServerName"] == expected_server_name
+        assert imported_values["AdminPassword"] == imported.rest_password
         assert imported_values["PublicPort"] == imported.game_port
         assert imported_values["RESTAPIEnabled"] is True
         assert imported_values["RESTAPIPort"] == imported.rest_port
+        assert imported.world_settings["AdminPassword"] == imported.rest_password
         assert imported.world_settings["RESTAPIEnabled"] is True
         if world_option_format == "oodle":
             source_values = extract_option_values(codec.read(world_option_path))
+            assert source_values["AdminPassword"] == ""
             assert source_values["RESTAPIEnabled"] is False
         assert world_option_path.exists()
 
@@ -5727,6 +5853,7 @@ def test_world_settings_uses_ini_only_when_legacy_sav_exists(tmp_path, monkeypat
         assert randomizer_select.locator("option:checked").inner_text() == "None"
 
         page.locator('input[name="world_ServerDescription"]').fill("Changed via ini")
+        page.locator('input[name="world_AdminPassword"]').fill("initial-secret")
         page.locator("#pywebio-scope-world_settings_actions").get_by_role(
             "button", name="Save", exact=True
         ).click()
@@ -5734,7 +5861,9 @@ def test_world_settings_uses_ini_only_when_legacy_sav_exists(tmp_path, monkeypat
 
         assert page.locator('select[name="world_settings_format"]').count() == 0
 
-    reread = extract_option_values(codec.read(sav_path))
+    assert not sav_path.exists()
+    disabled_sav_path = sav_path.with_name("WorldOption.sav.disabled")
+    reread = extract_option_values(codec.read(disabled_sav_path))
     assert reread["RandomizerType"] == "Region"
 
 

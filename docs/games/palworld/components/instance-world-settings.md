@@ -45,7 +45,13 @@ about layout only.
   button and no `Delete instance` button on this page.
 - `Save` validates field types before writing. Invalid numeric fields receive a red
   border and inline error message, and the world settings are not saved until highlighted
-  errors are fixed.
+  errors are fixed. After the INI is successfully written, an active
+  `WorldOption.sav` is renamed to `WorldOption.sav.disabled` so it cannot override the
+  saved INI values.
+- Saving with `RESTAPIEnabled` Off or an empty admin password opens a warning that most
+  Palsitter management features will become unavailable. `Cancel` keeps the edits
+  unsaved; `Save anyway` persists them. The same confirmation interrupts `Save and
+  leave`, then resumes navigation only after the operator confirms and the save succeeds.
 - Leaving the page through in-app navigation while the form has unsaved edits opens an
   unsaved-changes dialog with `Save and leave`, `Discard changes`, and `Cancel`. Browser
   refresh/reload is not intercepted.

@@ -411,13 +411,85 @@ def _validate_world_settings_form(values: dict) -> bool:
                 valid = False
     return valid
 
-def _save_world_settings(name: str, *, rerender: bool = False) -> bool:
+def _world_rest_access_unavailable(values: dict) -> bool:
+    return (
+        not bool(values.get("RESTAPIEnabled"))
+        or not str(values.get("AdminPassword") or "").strip()
+    )
+
+
+def _cancel_world_rest_warning() -> None:
+    close_popup()
+    _set_dirty_form_busy(False)
+
+
+def _save_world_settings_after_rest_warning(
+    name: str,
+    *,
+    rerender: bool,
+    continue_navigation,
+) -> None:
+    close_popup()
+    saved = _save_world_settings(name, rerender=rerender, save_anyway=True)
+    if saved and continue_navigation is not None:
+        local.dirty_form_context = None
+        continue_navigation()
+
+
+def _open_world_rest_warning(
+    name: str,
+    *,
+    rerender: bool,
+    continue_navigation,
+) -> None:
+    with popup(t("world.rest_access_warning_title"), closable=True):
+        put_warning(t("world.rest_access_warning"))
+        put_row(
+            [
+                put_button(
+                    t("common.cancel"),
+                    onclick=_cancel_world_rest_warning,
+                    color="secondary",
+                ),
+                put_button(
+                    t("world.save_anyway"),
+                    onclick=lambda: _save_world_settings_after_rest_warning(
+                        name,
+                        rerender=rerender,
+                        continue_navigation=continue_navigation,
+                    ),
+                    color="warning",
+                ),
+            ],
+            size="1fr auto",
+        )
+    _set_dirty_form_busy(False)
+
+
+def _save_world_settings(
+    name: str,
+    *,
+    rerender: bool = False,
+    save_anyway: bool = False,
+) -> bool | None:
     profile = load_profile(name)
     values = _collect_world_values()
     if not _validate_world_settings_form(values):
         toast(t("validation.fix_errors"), color="error")
         _set_dirty_form_busy(False)
         return False
+    if _world_rest_access_unavailable(values) and not save_anyway:
+        continue_navigation = None
+        if bool(getattr(local, "dirty_save_for_navigation", False)):
+            continue_navigation = getattr(local, "pending_navigation", None)
+            local.pending_navigation = None
+            close_popup()
+        _open_world_rest_warning(
+            name,
+            rerender=rerender,
+            continue_navigation=continue_navigation,
+        )
+        return None
     try:
         save_world_settings(
             profile,

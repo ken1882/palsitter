@@ -8,6 +8,7 @@ from module.worldsettings.ini_codec import read_ini_option_settings
 from module.worldsettings.sav_codec import WorldOptionSavCodec, extract_option_values, merge_option_values
 from module.worldsettings.schema import WORLD_OPTION_FIELDS_BY_KEY
 from module.worldsettings.service import (
+    disable_world_option_sav,
     find_world_sav_path,
     ensure_world_settings,
     load_world_settings,
@@ -137,6 +138,27 @@ def test_ensure_world_settings_does_not_reuse_other_platform_ini(
     assert other.read_text(encoding="utf-8") == "old Windows settings"
 
 
+def test_ensure_world_settings_disables_sav_when_ini_already_exists(tmp_path):
+    profile = _make_profile(tmp_path)
+    ini_path = ensure_world_settings(profile)
+    original_ini = ini_path.read_bytes()
+    sav_path = (
+        Path(profile.backup_source)
+        / profile.dedicated_server_name
+        / "WorldOption.sav"
+    )
+    sav_path.parent.mkdir(parents=True)
+    sav_path.write_bytes(b"legacy override")
+
+    assert ensure_world_settings(profile) == ini_path
+
+    assert ini_path.read_bytes() == original_ini
+    assert not sav_path.exists()
+    assert sav_path.with_name("WorldOption.sav.disabled").read_bytes() == (
+        b"legacy override"
+    )
+
+
 def test_default_profile_keeps_world_settings_under_tmp(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr("module.games.palworld.config.WINDOWS", True)
@@ -177,7 +199,7 @@ def test_load_world_settings_syncs_rest_credentials_and_ports(tmp_path):
     assert profile.rest_password == "effective-password"
 
 
-def test_load_world_settings_ignores_legacy_sav_when_present(tmp_path):
+def test_save_world_settings_ini_disables_legacy_sav(tmp_path):
     profile = _make_profile(tmp_path)
     save_dir = Path(profile.backup_source) / profile.dedicated_server_name
     save_dir.mkdir()
@@ -188,6 +210,8 @@ def test_load_world_settings_ignores_legacy_sav_when_present(tmp_path):
     )
     save_world_settings(profile, {"ServerName": "INI settings"}, "ini")
 
+    assert not (save_dir / "WorldOption.sav").exists()
+    assert (save_dir / "WorldOption.sav.disabled").is_file()
     loaded = load_world_settings(profile)
     assert loaded.source_format == "ini"
     assert loaded.sav_path is None
@@ -195,7 +219,7 @@ def test_load_world_settings_ignores_legacy_sav_when_present(tmp_path):
 
 
 @pytest.mark.parametrize("save_type", [0x31, 0x32], ids=["oodle", "zlib"])
-def test_migrate_world_option_sav_to_ini_removes_sav_and_uses_profile_ports(
+def test_migrate_world_option_sav_to_ini_disables_sav_and_uses_profile_ports(
     tmp_path, save_type
 ):
     profile = _make_profile(tmp_path)
@@ -223,6 +247,7 @@ def test_migrate_world_option_sav_to_ini_removes_sav_and_uses_profile_ports(
 
     assert migrated == save_dir / "WorldOption.sav"
     assert not migrated.exists()
+    assert migrated.with_name("WorldOption.sav.disabled").is_file()
     values = read_ini_option_settings(resolve_ini_path(profile))
     assert values["ServerName"] == "Imported world"
     assert values["PublicPort"] == 9123
@@ -344,7 +369,22 @@ def test_saving_ini_does_not_reenable_legacy_sav_preference(tmp_path):
 
     save_world_settings(profile, {"ServerName": "Switched to ini"}, "ini")
 
-    # Legacy SAV files no longer override the INI workflow.
+    assert not (save_dir / "WorldOption.sav").exists()
+    assert (save_dir / "WorldOption.sav.disabled").is_file()
     loaded = load_world_settings(profile)
     assert loaded.source_format == "ini"
     assert loaded.values["ServerName"] == "Switched to ini"
+
+
+def test_disable_world_option_sav_preserves_existing_disabled_copy(tmp_path):
+    profile = _make_profile(tmp_path)
+    save_dir = Path(profile.backup_source) / profile.dedicated_server_name
+    save_dir.mkdir()
+    (save_dir / "WorldOption.sav").write_bytes(b"active")
+    (save_dir / "WorldOption.sav.disabled").write_bytes(b"previous")
+
+    disabled = disable_world_option_sav(profile)
+
+    assert disabled == save_dir / "WorldOption.sav.disabled"
+    assert disabled.read_bytes() == b"active"
+    assert (save_dir / "WorldOption.sav.disabled.1").read_bytes() == b"previous"

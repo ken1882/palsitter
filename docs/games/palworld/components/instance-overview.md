@@ -19,7 +19,9 @@ lightweight watcher keeps the header current on non-Overview instance pages with
 adding lifecycle controls to those pages.
 
 - Overview's `Start` action updates or installs PalServer before launch. It applies the
-  `Validate server files` option from Server Settings. The Operations card does not expose
+  `Validate server files` option from Server Settings and renames an active
+  `WorldOption.sav` to `WorldOption.sav.disabled` before launch, ensuring the managed
+  `PalWorldSettings.ini` remains authoritative. The Operations card does not expose
   separate Check update, Update, Validate/Repair, Retry, or operation-progress controls.
 - When the disk containing the PalServer installation has less than 10 GB available,
   clicking `Start` shows a warning and requires explicit confirmation before starting.

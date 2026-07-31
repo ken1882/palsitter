@@ -36,7 +36,13 @@ def _save_dirty_then_continue() -> None:
     if not context or action is None:
         close_popup()
         return
-    saved = context["save"]()
+    local.dirty_save_for_navigation = True
+    try:
+        saved = context["save"]()
+    finally:
+        local.dirty_save_for_navigation = False
+    if saved is None:
+        return
     if not saved:
         close_popup()
         return
