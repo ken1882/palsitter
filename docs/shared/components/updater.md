@@ -1,5 +1,7 @@
 # Shared Component: Updater
 
+- The Updater is included only in standard distributions. The updater-free Windows build
+  contains no Updater page or automatic application-update checker.
 - The Updater displays a state indicator and matching action at the top of the content
   area.
 - `Latest version` uses a gray filled border indicator and a blue `Check update` button.

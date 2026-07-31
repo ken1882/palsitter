@@ -2,6 +2,13 @@
 setlocal
 pushd "%~dp0"
 
+set "NOUPDATE_BUILD=0"
+set "RELEASE_ARCHIVE=desktop\dist\Palsitter-win-x64.7z"
+if /i "%PALSITTER_BUILD_VARIANT%"=="noupdate" (
+    set "NOUPDATE_BUILD=1"
+    set "RELEASE_ARCHIVE=desktop\dist\Palsitter-win-x64-noupdate.7z"
+)
+
 where python >nul 2>nul
 if errorlevel 1 (
     echo ERROR: Python 3.12 was not found on PATH.
@@ -44,12 +51,18 @@ echo Building the standalone Python runtime...
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "desktop\scripts\build-runtime.ps1"
 if errorlevel 1 goto :fail
 
-echo Building the bundled Git runtime...
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "desktop\scripts\build-git.ps1"
-if errorlevel 1 goto :fail
+if "%NOUPDATE_BUILD%"=="0" (
+    echo Building the bundled Git runtime...
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File "desktop\scripts\build-git.ps1"
+    if errorlevel 1 goto :fail
+)
 
 echo Staging the packaged backend source...
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "desktop\scripts\prepare-source.ps1"
+if "%NOUPDATE_BUILD%"=="1" (
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File "desktop\scripts\prepare-source.ps1" -NoUpdate
+) else (
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File "desktop\scripts\prepare-source.ps1"
+)
 if errorlevel 1 goto :fail
 
 echo Compiling Python sources...
@@ -64,11 +77,38 @@ echo Verifying the packaged Python runtime...
 "desktop\dist\win-unpacked\resources\python\python.exe" -c "import psutil, pywebio, requests, winpty"
 if errorlevel 1 goto :fail
 
+if "%NOUPDATE_BUILD%"=="1" (
+    if not exist "desktop\dist\win-unpacked\resources\backend\.palsitter-noupdate" (
+        echo ERROR: The updater-free marker is missing from the packaged backend.
+        goto :fail
+    )
+    if exist "desktop\dist\win-unpacked\resources\backend\.git" (
+        echo ERROR: The updater-free package contains Git metadata.
+        goto :fail
+    )
+    if exist "desktop\dist\win-unpacked\resources\git" (
+        echo ERROR: The updater-free package contains the bundled Git runtime.
+        goto :fail
+    )
+    if exist "desktop\dist\win-unpacked\resources\backend\module\webui\pages\updater.py" (
+        echo ERROR: The updater-free package contains the backend updater module.
+        goto :fail
+    )
+    if exist "desktop\dist\win-unpacked\resources\backend\module\webui\pages\__pycache__\updater.*.pyc" (
+        echo ERROR: The updater-free package contains compiled backend updater bytecode.
+        goto :fail
+    )
+    if exist "desktop\dist\win-unpacked\resources\app\self-updater.js" (
+        echo ERROR: The updater-free package contains the Electron updater module.
+        goto :fail
+    )
+)
+
 echo Creating the portable archive...
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "desktop\scripts\archive-release.ps1"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "desktop\scripts\archive-release.ps1" -OutputArchive "%RELEASE_ARCHIVE%"
 if errorlevel 1 goto :fail
 
-echo Build complete: desktop\dist\Palsitter-win-x64.7z
+echo Build complete: %RELEASE_ARCHIVE%
 popd
 exit /b 0
 

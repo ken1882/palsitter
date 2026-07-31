@@ -3,6 +3,8 @@
 `Home`, `Updater`, `Settings`, and `Utils` are sibling tabs reached from the same secondary menu once
 the `Home` item is active in the [Left Sidebar](./left-sidebar.md); see
 [Updater](./updater.md), [Settings](./settings.md), and [Utils](./utils.md) for those tabs.
+The updater-free Windows distribution omits `Updater`, leaving `Home`, `Settings`, and
+`Utils` in the same order on every Home sibling page.
 
 - The landing Home tab shows a responsive card grid containing every stored instance,
   followed by the language selector (see [Language / i18n](../features/i18n.md)), theme

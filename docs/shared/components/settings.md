@@ -1,10 +1,14 @@
 # Shared Component: Settings
 
 The Home secondary menu contains `Home`, `Updater`, `Settings`, and `Utils`.
+The updater-free Windows distribution omits `Updater` from this menu.
 
 - Settings uses the shared section layout in this order: `Network`, `HTTP authentication`,
   `Updates`, and `Diagnostics`. The page title, validation messages, and one shared
   Save/Reset bar remain outside those sibling cards.
+- The updater-free distribution omits the `Updates` section and does not act on a saved
+  application `auto_update` value. The setting remains stored for compatibility with the
+  standard distribution.
 - Save and Reset lock immediately in the browser after either action is clicked. A
   validation failure or confirmation prompt unlocks them; successful Save and Reset
   clear the dirty state.

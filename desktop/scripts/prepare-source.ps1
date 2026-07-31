@@ -1,5 +1,6 @@
 param(
-    [string]$Output = "$(Join-Path $PSScriptRoot '..\source')"
+    [string]$Output = "$(Join-Path $PSScriptRoot '..\source')",
+    [switch]$NoUpdate
 )
 
 $ErrorActionPreference = "Stop"
@@ -97,4 +98,14 @@ if ($status) {
 
 if (-not (Test-Path -LiteralPath (Join-Path $outputPath 'gui.py'))) {
     throw "The staged source is missing gui.py"
+}
+
+if ($NoUpdate) {
+    $updaterPath = Join-Path $outputPath 'module\webui\pages\updater.py'
+    if (-not (Test-Path -LiteralPath $updaterPath)) {
+        throw "The staged source is missing the updater module"
+    }
+    Remove-Item -LiteralPath $updaterPath -Force
+    New-Item -ItemType File -Path (Join-Path $outputPath '.palsitter-noupdate') -Force | Out-Null
+    Remove-Item -LiteralPath $metadataPath -Recurse -Force
 }

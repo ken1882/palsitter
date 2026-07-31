@@ -516,6 +516,60 @@ def test_home_has_home_updater_settings_utils_and_no_add_server(tmp_path, monkey
 
 
 @pytest.mark.playwright
+def test_noupdate_build_hides_self_updater_but_keeps_game_updates(tmp_path, monkeypatch):
+    settings_dir = tmp_path / "config" / "webui"
+    settings_dir.mkdir(parents=True)
+    (settings_dir / "settings.json").write_text(
+        json.dumps({"auto_update": True}), encoding="utf-8"
+    )
+    git_calls = tmp_path / "git-calls.txt"
+    mock_git = tmp_path / "git-mock.cmd"
+    mock_git.write_text(f'@echo %* >> "{git_calls}"', encoding="ascii")
+
+    with _gui_page(
+        tmp_path,
+        monkeypatch,
+        preferred_language=None,
+        extra_env={
+            "PALSITTER_SELF_UPDATE": "0",
+            "PALSITTER_GIT": str(mock_git),
+        },
+    ) as (page, _):
+        menu = page.locator("#pywebio-scope-menu")
+        assert menu.locator(".menu-button").all_inner_texts() == [
+            "Home",
+            "Settings",
+            "Utils",
+        ]
+        assert menu.get_by_text("Updater", exact=True).count() == 0
+
+        menu.get_by_text("Settings", exact=True).click()
+        settings = page.locator("#pywebio-scope-webui_settings_panel")
+        settings.wait_for(timeout=5000)
+        assert settings.locator(
+            ".section-layout-navigation-button"
+        ).all_inner_texts() == [
+            "Network",
+            "HTTP authentication",
+            "Diagnostics",
+        ]
+        assert settings.get_by_text("Automatic update", exact=True).count() == 0
+        assert menu.get_by_text("Updater", exact=True).count() == 0
+
+        menu.get_by_text("Utils", exact=True).click()
+        page.locator("#pywebio-scope-util-buttons").wait_for(timeout=5000)
+        assert menu.get_by_text("Updater", exact=True).count() == 0
+
+        page.locator("#pywebio-scope-aside").get_by_text("default", exact=True).click()
+        page.locator("#pywebio-scope-overview_log_check_update_btn").get_by_role(
+            "button", name="Check update", exact=True
+        ).wait_for(timeout=5000)
+        page.wait_for_timeout(500)
+        assert page.locator(".toastify").count() == 0
+        assert not git_calls.exists()
+
+
+@pytest.mark.playwright
 def test_home_and_utils_keep_specialized_layout_while_settings_uses_sections(
     tmp_path, monkeypatch
 ):

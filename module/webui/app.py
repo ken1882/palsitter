@@ -4,6 +4,7 @@ from pywebio.output import put_scope, use_scope
 from pywebio.session import defer_call, info, set_env
 from module.instances import initialize_instances
 from module.webui.assets import asset_urls
+from module.webui.build_policy import self_update_available
 from module.webui.i18n import init_language
 from module.webui.session import cleanup_session, initialize_page_lifecycle
 from module.webui.restart import mount_overlay
@@ -32,7 +33,8 @@ def app() -> None:
     _inject_css()
     put_scope("ROOT")
     _home()
-    _start_automatic_update_checker()
+    if self_update_available():
+        _start_automatic_update_checker()
     with use_scope("ROOT"):
         mount_overlay()
         mount_shutdown_overlay()

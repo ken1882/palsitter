@@ -218,6 +218,10 @@ Windows, and 7-Zip (`choco install 7zip`). From the repository root:
 .\build.bat
 ```
 
+For an updater-free Nexus Mods package without Palsitter's Git updater, packaged `.git`
+history, or bundled Git runtime, run `build-noupdate.bat` instead. Palworld server updates
+remain available in this build.
+
 The batch file stops before staging if `python` does not resolve to Python 3.12, applies
 a process-only PowerShell execution-policy bypass for its scripts, and fails immediately
 when any build or packaged-runtime check fails.

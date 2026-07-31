@@ -7,7 +7,7 @@
   "private": true,
   "scripts": {
     "start": "electron .",
-    "build:win": "electron-builder --win --x64"
+    "build:win": "electron-builder --config electron-builder.config.js --win --x64"
   },
   "devDependencies": {
     "electron": "43.1.1",
@@ -23,6 +23,7 @@
     },
     "files": [
       "main.js",
+      "self-updater.js",
       "package.json",
       "assets/**/*"
     ],

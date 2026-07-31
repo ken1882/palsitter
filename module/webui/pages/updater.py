@@ -12,12 +12,8 @@ from module.webui.session import page_context, register_page_stop_event, registe
 from module.webui.assets import put_asset_widget
 from module.webui.settings import load_web_settings
 
-def _home(*args, **kwargs):
-    from module.webui.pages.home import _home as implementation
-    return implementation(*args, **kwargs)
-
-def _menu_button(*args, **kwargs):
-    from module.webui.instance import _menu_button as implementation
+def _render_home_menu(*args, **kwargs):
+    from module.webui.instance import _render_home_menu as implementation
     return implementation(*args, **kwargs)
 
 def _set_frame(*args, **kwargs):
@@ -26,14 +22,6 @@ def _set_frame(*args, **kwargs):
 
 def _run_navigation(*args, **kwargs):
     from module.webui.instance import _run_navigation as implementation
-    return implementation(*args, **kwargs)
-
-def _utils(*args, **kwargs):
-    from module.webui.pages.utils import _utils as implementation
-    return implementation(*args, **kwargs)
-
-def _settings(*args, **kwargs):
-    from module.webui.pages.settings import _settings as implementation
     return implementation(*args, **kwargs)
 
 def _force_restart(*args, **kwargs):
@@ -367,12 +355,7 @@ def _updater() -> None:
 def _render_updater() -> None:
     if _set_frame(t("nav.updater"), "Home") is None:
         return
-    clear("menu")
-    with use_scope("menu"):
-        _menu_button(t("nav.home"), _home)
-        _menu_button(t("nav.updater"), _updater, True)
-        _menu_button(t("nav.settings"), _settings)
-        _menu_button(t("nav.utils"), _utils)
+    _render_home_menu("updater")
     clear("content")
     with use_scope("content"):
         put_scope(

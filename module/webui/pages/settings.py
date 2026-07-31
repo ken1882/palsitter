@@ -26,6 +26,7 @@ from module.firewall import (
     PortFirewallStatus,
 )
 from module.webui.assets import client_call, put_asset_widget
+from module.webui.build_policy import self_update_available
 from module.webui.forms import (
     _mark_dirty_form,
     _settings_field_row,
@@ -47,14 +48,8 @@ from module.webui.settings import (
 )
 
 
-def _home(*args, **kwargs):
-    from module.webui.pages.home import _home as implementation
-
-    return implementation(*args, **kwargs)
-
-
-def _menu_button(*args, **kwargs):
-    from module.webui.instance import _menu_button as implementation
+def _render_home_menu(*args, **kwargs):
+    from module.webui.instance import _render_home_menu as implementation
 
     return implementation(*args, **kwargs)
 
@@ -67,18 +62,6 @@ def _set_frame(*args, **kwargs):
 
 def _run_navigation(*args, **kwargs):
     from module.webui.instance import _run_navigation as implementation
-
-    return implementation(*args, **kwargs)
-
-
-def _updater(*args, **kwargs):
-    from module.webui.pages.updater import _updater as implementation
-
-    return implementation(*args, **kwargs)
-
-
-def _utils(*args, **kwargs):
-    from module.webui.pages.utils import _utils as implementation
 
     return implementation(*args, **kwargs)
 
@@ -471,7 +454,8 @@ def _save_settings(*, save_anyway: bool = False) -> bool:
     )
     close_popup()
     clear_dirty_form()
-    _configure_automatic_update_checker(auto_update)
+    if self_update_available():
+        _configure_automatic_update_checker(auto_update)
     if restart_required:
         _force_restart()
     return True
@@ -490,7 +474,8 @@ def _reset_settings() -> None:
         }
     )
     _render_auth_toggle()
-    _render_auto_update_toggle()
+    if self_update_available():
+        _render_auto_update_toggle()
     _set_auth_fields_disabled()
     clear("webui_settings_error")
     _render_firewall_status(t("webui_settings.firewall_not_checked"))
@@ -501,46 +486,47 @@ def _render_settings() -> None:
     if _set_frame(t("nav.settings"), "Home") is None:
         return
     local.webui_firewall_check_busy = False
-    clear("menu")
-    with use_scope("menu"):
-        _menu_button(t("nav.home"), _home)
-        _menu_button(t("nav.updater"), _updater)
-        _menu_button(t("nav.settings"), _render_settings, True)
-        _menu_button(t("nav.utils"), _utils)
+    _render_home_menu("settings")
     settings = load_web_settings()
     local.web_auto_update = settings.auto_update
     local.web_debug_mode = settings.debug_mode
     local.web_auth_enabled = settings.auth_enabled
     clear("content")
     with use_scope("content"):
-        put_section_layout(
-            "webui_settings_panel",
-            [
-                SectionSpec(
-                    "network",
-                    t("webui_settings.network_title"),
-                    "webui_settings_network",
-                    ("settings-view",),
-                ),
-                SectionSpec(
-                    "authentication",
-                    t("webui_settings.auth_title"),
-                    "webui_settings_auth",
-                    ("settings-view",),
-                ),
+        sections = [
+            SectionSpec(
+                "network",
+                t("webui_settings.network_title"),
+                "webui_settings_network",
+                ("settings-view",),
+            ),
+            SectionSpec(
+                "authentication",
+                t("webui_settings.auth_title"),
+                "webui_settings_auth",
+                ("settings-view",),
+            ),
+        ]
+        if self_update_available():
+            sections.append(
                 SectionSpec(
                     "updates",
                     t("webui_settings.updates_title"),
                     "webui_settings_updates",
                     ("settings-view",),
-                ),
-                SectionSpec(
-                    "diagnostics",
-                    t("webui_settings.diagnostics_title"),
-                    "webui_settings_diagnostics",
-                    ("settings-view",),
-                ),
-            ],
+                )
+            )
+        sections.append(
+            SectionSpec(
+                "diagnostics",
+                t("webui_settings.diagnostics_title"),
+                "webui_settings_diagnostics",
+                ("settings-view",),
+            )
+        )
+        put_section_layout(
+            "webui_settings_panel",
+            sections,
             groups_scope="webui_settings_form",
             header=[
                 put_asset_widget("shared.panel_title", {"title": t("webui_settings.title")}),
@@ -575,14 +561,15 @@ def _render_settings() -> None:
             put_input("web_auth_password", label=t("webui_settings.password"), type="password", value="")
             put_text(t("webui_settings.password_help"))
             _set_auth_fields_disabled()
-        with use_scope("webui_settings_updates"):
-            put_asset_widget("shared.panel_title", {"title": t("webui_settings.updates_title")})
-            _settings_field_row(
-                t("webui_settings.automatic_update"),
-                put_scope("web_auto_update_toggle"),
-            )
-            put_text(t("webui_settings.automatic_update_help"))
-            _render_auto_update_toggle()
+        if self_update_available():
+            with use_scope("webui_settings_updates"):
+                put_asset_widget("shared.panel_title", {"title": t("webui_settings.updates_title")})
+                _settings_field_row(
+                    t("webui_settings.automatic_update"),
+                    put_scope("web_auto_update_toggle"),
+                )
+                put_text(t("webui_settings.automatic_update_help"))
+                _render_auto_update_toggle()
         with use_scope("webui_settings_diagnostics"):
             put_asset_widget("shared.panel_title", {"title": t("webui_settings.diagnostics_title")})
             _settings_field_row(

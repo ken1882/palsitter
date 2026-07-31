@@ -14,6 +14,11 @@ are excluded.
 The sparse checkout persists across updater fetch/reset operations, so updates retain that
 production-only working tree without requiring Git to be installed separately.
 
+The separate updater-free build contains a `resources/backend/.palsitter-noupdate`
+policy marker and physically omits the backend and Electron updater modules,
+`resources/backend/.git`, and `resources/git`. It does not display or run Palsitter's
+application updater. Palworld installation and SteamCMD game updates are unchanged.
+
 Packaged runtime data is stored beside `Palsitter.exe` in the portable release's `data`
 directory instead of `%APPDATA%`: persistent configuration is under `data/config`,
 instance state under `data/profile`, and logs under `data/logs`. Runtime-only scratch
@@ -86,6 +91,12 @@ Windows, and 7-Zip. From the repository root:
 .\build.bat
 ```
 
+For the Nexus-compatible updater-free archive, run:
+
+```powershell
+.\build-noupdate.bat
+```
+
 The batch file stops before staging if `python` does not resolve to Python 3.12. It runs
 the PowerShell scripts with a process-only execution-policy bypass, stops on the first
 failed command, verifies the packaged Python imports, and creates the archive only after
@@ -100,3 +111,5 @@ choco install 7zip -y --no-progress
 The unpacked application is written to `desktop/dist/win-unpacked/`. The archive and
 checksum are written to `desktop/dist/Palsitter-win-x64.7z` and
 `desktop/dist/Palsitter-win-x64.7z.sha256`.
+The updater-free equivalents are `Palsitter-win-x64-noupdate.7z` and
+`Palsitter-win-x64-noupdate.7z.sha256`.

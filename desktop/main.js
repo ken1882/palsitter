@@ -8,6 +8,7 @@ const CONTROL_HOST = '127.0.0.1';
 const DEFAULT_WEB_PORT = 22368;
 const DEFAULT_CONTROL_PORT = 22369;
 const SHUTDOWN_TIMEOUT_MS = 65_000;
+const NO_UPDATE_MARKER = '.palsitter-noupdate';
 
 let mainWindow = null;
 let splashWindow = null;
@@ -24,6 +25,8 @@ let webPort = null;
 let webListenHost = CONTROL_HOST;
 let webConnectHost = CONTROL_HOST;
 let exitFinished = false;
+let selfUpdaterResolved = false;
+let selfUpdater = null;
 
 function applicationRoot() {
   return app.isPackaged ? process.resourcesPath : path.resolve(__dirname, '..');
@@ -43,12 +46,6 @@ function pythonPath() {
   if (process.env.PALSITTER_PYTHON) return process.env.PALSITTER_PYTHON;
   if (app.isPackaged) return path.join(applicationRoot(), 'python', 'python.exe');
   return process.platform === 'win32' ? 'python.exe' : 'python3';
-}
-
-function gitPath() {
-  if (process.env.PALSITTER_GIT) return process.env.PALSITTER_GIT;
-  if (app.isPackaged) return path.join(applicationRoot(), 'git', 'cmd', 'git.exe');
-  return process.platform === 'win32' ? 'git.exe' : 'git';
 }
 
 function debugLogDescriptor(component) {
@@ -117,22 +114,13 @@ function spawnSyncWithDebug(component, executable, args, options = {}) {
   }
 }
 
-function refreshPackagedRepository() {
-  if (!app.isPackaged) return Promise.resolve();
-  // Run git asynchronously so the splash window keeps painting instead of
-  // freezing the main process while the packaged repository is refreshed.
-  return new Promise((resolve) => {
-    const child = spawnWithDebug('desktop-git', gitPath(), [
-      '-c',
-      `safe.directory=${path.resolve(backendRoot())}`,
-      '-C',
-      backendRoot(),
-      'update-index',
-      '--refresh',
-    ], { windowsHide: true });
-    child.once('exit', () => resolve());
-    child.once('error', () => resolve());
-  });
+function getSelfUpdater() {
+  if (selfUpdaterResolved) return selfUpdater;
+  selfUpdaterResolved = true;
+  if (fs.existsSync(path.join(backendRoot(), NO_UPDATE_MARKER))) return null;
+  const { createSelfUpdater } = require('./self-updater');
+  selfUpdater = createSelfUpdater({ app, applicationRoot, backendRoot, spawnWithDebug });
+  return selfUpdater;
 }
 
 function configuredWebHost(dataRoot) {
@@ -284,16 +272,17 @@ async function waitForBackend(url) {
 
 function buildEnvironment(dataRoot) {
   const backend = backendRoot();
-  return {
+  const environment = {
     ...process.env,
     PALSITTER_CONFIG_DIR: path.join(dataRoot, 'config'),
     PALSITTER_PROFILE_DIR: path.join(dataRoot, 'profile'),
     PALSITTER_LOG_DIR: path.join(dataRoot, 'logs'),
     PALSITTER_BACKEND_DIR: backend,
-    PALSITTER_GIT: gitPath(),
     PYTHONPATH: process.env.PYTHONPATH ? `${backend}${path.delimiter}${process.env.PYTHONPATH}` : backend,
     PALSITTER_DESKTOP_TOKEN: controlToken,
   };
+  const updater = getSelfUpdater();
+  return updater ? updater.addBackendEnvironment(environment) : environment;
 }
 
 function showWindow() {
@@ -585,7 +574,8 @@ async function main() {
   createWindow();
   createTray();
   try {
-    await refreshPackagedRepository();
+    const updater = getSelfUpdater();
+    if (updater) await updater.refreshPackagedRepository();
     await startBackend();
     await mainWindow.loadURL(`http://${webConnectHost}:${webPort}/`);
   } catch (error) {

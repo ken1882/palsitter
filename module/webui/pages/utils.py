@@ -16,16 +16,12 @@ from module.webui.session import page_context, register_page_stop_event, run_if_
 from module.webui.assets import client_call, client_query, put_asset_widget
 from module.webui.checkbox_groups import mount_checkbox_group
 
-def _home(*args, **kwargs):
-    from module.webui.pages.home import _home as implementation
+def _render_home_menu(*args, **kwargs):
+    from module.webui.instance import _render_home_menu as implementation
     return implementation(*args, **kwargs)
 
 def _manager(*args, **kwargs):
     from module.webui.instance import _manager as implementation
-    return implementation(*args, **kwargs)
-
-def _menu_button(*args, **kwargs):
-    from module.webui.instance import _menu_button as implementation
     return implementation(*args, **kwargs)
 
 def _profile_label(*args, **kwargs):
@@ -38,14 +34,6 @@ def _set_frame(*args, **kwargs):
 
 def _run_navigation(*args, **kwargs):
     from module.webui.instance import _run_navigation as implementation
-    return implementation(*args, **kwargs)
-
-def _updater(*args, **kwargs):
-    from module.webui.pages.updater import _updater as implementation
-    return implementation(*args, **kwargs)
-
-def _settings(*args, **kwargs):
-    from module.webui.pages.settings import _settings as implementation
     return implementation(*args, **kwargs)
 
 UTIL_LOGS: list[str] = []
@@ -280,12 +268,7 @@ def _utils() -> None:
 def _render_utils() -> None:
     if _set_frame(t("nav.utils"), "Home") is None:
         return
-    clear("menu")
-    with use_scope("menu"):
-        _menu_button(t("nav.home"), _home)
-        _menu_button(t("nav.updater"), _updater)
-        _menu_button(t("nav.settings"), _settings)
-        _menu_button(t("nav.utils"), _utils, True)
+    _render_home_menu("utils")
     clear("content")
     with use_scope("content"):
         put_scope("overview", [put_scope("util-buttons"), put_scope("logs")])

@@ -20,6 +20,7 @@ from module.webui.session import (
     run_if_current,
 )
 from module.webui.assets import client_call, put_asset_icon, put_asset_widget
+from module.webui.build_policy import self_update_available
 
 def _add_server(*args, **kwargs):
     from module.webui.add_instance import _add_server as implementation
@@ -206,13 +207,14 @@ def _menu_button(label: str, onclick, active: bool = False) -> None:
         {"classes": cls, "icon": [], "label": label},
     ).onclick(lambda: _guard_unsaved_navigation(onclick))
 
-def _render_home_menu() -> None:
+def _render_home_menu(active: str = "home") -> None:
     clear("menu")
     with use_scope("menu"):
-        _menu_button(t("nav.home"), _home, True)
-        _menu_button(t("nav.updater"), _updater)
-        _menu_button(t("nav.settings"), _home_settings)
-        _menu_button(t("nav.utils"), _utils)
+        _menu_button(t("nav.home"), _home, active == "home")
+        if self_update_available():
+            _menu_button(t("nav.updater"), _updater, active == "updater")
+        _menu_button(t("nav.settings"), _home_settings, active == "settings")
+        _menu_button(t("nav.utils"), _utils, active == "utils")
 
 def _render_instance_menu(name: str, active: str = "overview") -> None:
     clear("menu")
