@@ -46,9 +46,10 @@ each field.
 When importing a world containing `WorldOption.sav`, Palsitter decodes its option values
 into the new profile's `PalWorldSettings.ini`, replaces `PublicPort`, `RESTAPIPort`, and
 the REST admin password with the newly allocated profile values, and removes the active
-SAV override. A malformed or undecodable SAV aborts the import without changing the
-source. If no SAV or companion server INI is present, the new profile's template settings
-remain in effect as the fallback.
+SAV override. If the SAV cannot be decoded or parsed for any reason, it is removed only
+from the managed copy and the import continues with the companion server INI or the new
+profile's template settings. The source remains unchanged. If no SAV or companion server
+INI is present, the new profile's template settings remain in effect as the fallback.
 
 Every successful save also stores the normalized settings dictionary in the Palsitter
 profile as a synchronized fallback copy. If neither target file exists, the World

@@ -1,4 +1,7 @@
+import pytest
+
 from module.worldsettings.sav_codec import (
+    UnsupportedWorldOptionSaveFormat,
     WorldOptionSavCodec,
     extract_option_values,
     find_option_container,
@@ -132,11 +135,12 @@ def test_world_option_sav_codec_read_write_call_sequence(tmp_path):
     )
 
     sav_path = tmp_path / "WorldOption.sav"
-    sav_path.write_bytes(b"initial-bytes")
+    initial_bytes = bytes(8) + b"PlM" + bytes([0x31]) + b"initial-bytes"
+    sav_path.write_bytes(initial_bytes)
 
     read_back = codec.read(sav_path)
     assert read_back == dumped
-    assert calls[0] == ("decompress", b"initial-bytes")
+    assert calls[0] == ("decompress", initial_bytes)
     assert calls[1] == ("gvas_read", b"raw-gvas-bytes")
 
     codec.write(sav_path, dumped)
@@ -165,14 +169,42 @@ def test_world_option_sav_codec_write_defaults_save_type_when_no_prior_read(tmp_
     assert target.exists()
 
 
-def test_template_round_trips_through_real_palworld_save_tools(tmp_path):
+def test_world_option_sav_codec_rejects_unknown_header_before_decompression(tmp_path):
+    path = tmp_path / "WorldOption.sav"
+    path.write_bytes(bytes(8) + b"BAD" + bytes([0x31]) + b"payload")
+    decompressed = False
+
+    def unexpected_decompress(data):
+        nonlocal decompressed
+        decompressed = True
+
+    codec = WorldOptionSavCodec(decompress=unexpected_decompress)
+
+    with pytest.raises(
+        UnsupportedWorldOptionSaveFormat,
+        match=r"unsupported WorldOption\.sav format: b'BAD'",
+    ):
+        codec.read(path)
+
+    assert decompressed is False
+
+
+@pytest.mark.parametrize(
+    ("save_type", "expected_header"),
+    [(0x31, b"PlM1"), (0x32, b"PlZ2")],
+    ids=["oodle", "zlib"],
+)
+def test_template_round_trips_through_dual_format_codec(
+    tmp_path, save_type, expected_header
+):
     codec = WorldOptionSavCodec()
     dumped = codec.load_template()
     values = extract_option_values(dumped)
     assert set(values) == set(WORLD_OPTION_FIELDS_BY_KEY)
 
     sav_path = tmp_path / "WorldOption.sav"
-    codec.write(sav_path, dumped)
+    codec.write(sav_path, dumped, save_type=save_type)
+    assert sav_path.read_bytes()[8:12] == expected_header
     reread = codec.read(sav_path)
     assert extract_option_values(reread) == values
 

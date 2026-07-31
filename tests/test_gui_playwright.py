@@ -447,7 +447,7 @@ def _gui_page(
                 lambda request: failed_assets.append(
                     f"{request.url}: {request.failure}"
                 )
-                if "/static/gui/" in request.url
+                if "/static/gui/" in request.url or "/static/vendor/" in request.url
                 else None,
             )
             page.on(
@@ -455,7 +455,11 @@ def _gui_page(
                 lambda response: failed_assets.append(
                     f"{response.url}: HTTP {response.status}"
                 )
-                if "/static/gui/" in response.url and response.status >= 400
+                if (
+                    "/static/gui/" in response.url
+                    or "/static/vendor/" in response.url
+                )
+                and response.status >= 400
                 else None,
             )
             _goto(page, port, connect_host)
@@ -3913,7 +3917,8 @@ def _wait_for_datalist_value(page, expected):
         expected => {
             const input = document.querySelector('input[name="browse_address_value"]');
             const list = input && document.getElementById(input.getAttribute('list'));
-            return !!list && Array.from(list.options).some(option => option.value === expected);
+            const values = list ? Array.from(list.options, option => option.value) : [];
+            return values.length === 1 && values[0] === expected;
         }
         """,
         arg=expected,
@@ -3937,6 +3942,86 @@ def _autocomplete_snapshot(page):
         }
         """
     )
+
+
+@pytest.mark.playwright
+def test_file_browser_loads_local_grid_while_instance_is_updating(tmp_path, monkeypatch):
+    world = tmp_path / ("A" * 32)
+    world.mkdir()
+    level = world / "Level.sav"
+    level.write_text("level", encoding="utf-8")
+    _prepare_fixed_palserver_python(tmp_path)
+    _prepare_fixed_steamcmd(tmp_path)
+    steam_calls = tmp_path / "steamcmd-calls.txt"
+    profile_overrides = {
+        "executable_args": ["-c", "import time; time.sleep(60)"],
+        "launch_enable_gamedata_api": False,
+    }
+
+    with _gui_page(
+        tmp_path,
+        monkeypatch,
+        profile_overrides=profile_overrides,
+        extra_env={"PALSITTER_FAKE_STEAMCMD_CALLS": str(steam_calls)},
+    ) as (page, _):
+        ag_grid_requests = []
+        page.on(
+            "request",
+            lambda request: ag_grid_requests.append(request.url)
+            if "ag-grid" in request.url
+            else None,
+        )
+        page.route(
+            re.compile(r"https://unpkg\.com/ag-grid-.*"),
+            lambda route: route.abort(),
+        )
+        page.locator("#pywebio-scope-aside").get_by_text("default", exact=True).click()
+        page.locator("#pywebio-scope-scheduler_panel").get_by_role(
+            "button", name="Start", exact=True
+        ).click()
+        page.locator("#pywebio-scope-header_status").get_by_text(
+            "Updating", exact=True
+        ).wait_for(timeout=5000)
+
+        page.locator("#pywebio-scope-aside").get_by_text("Add", exact=True).click()
+        page.get_by_label("Import Level.sav file", exact=True).fill(str(level))
+        page.locator(".add-import-panel").get_by_role(
+            "button", name="Browse", exact=True
+        ).click()
+
+        browser = page.locator(".modal.show")
+        browser.get_by_text("Level.sav", exact=True).wait_for(timeout=5000)
+        assert browser.get_by_text("1 entries", exact=True).count() == 1
+        assert browser.get_by_text("Loading Datatable...", exact=False).count() == 0
+        assert len(ag_grid_requests) == 1
+        assert "/static/vendor/ag-grid-community/28.2.0/ag-grid-community.min.js" in (
+            ag_grid_requests[0]
+        )
+        assert "unpkg.com" not in ag_grid_requests[0]
+
+        grid = browser.locator("#pywebio-scope-browse_list .ag-grid")
+        headers = grid.locator(".ag-header-cell")
+        assert headers.count() == 2
+        type_header = headers.nth(0)
+        name_header = headers.nth(1)
+        grid_box = grid.bounding_box()
+        type_box = type_header.bounding_box()
+        name_box = name_header.bounding_box()
+        assert grid_box and type_box and name_box
+        assert abs(type_box["width"] - 150) <= 2
+        assert name_box["width"] > type_box["width"]
+        assert grid_box["x"] + grid_box["width"] - (
+            name_box["x"] + name_box["width"]
+        ) <= 20
+        first_row = grid.locator(".ag-center-cols-container .ag-row").first
+        row_style = first_row.evaluate(
+            "element => ({color: getComputedStyle(element).color, "
+            "background: getComputedStyle(element).backgroundColor})"
+        )
+        assert row_style == {
+            "color": "rgb(245, 245, 245)",
+            "background": "rgb(45, 52, 54)",
+        }
 
 
 @pytest.mark.playwright
@@ -3988,9 +4073,12 @@ def test_backup_settings_browse_navigates_and_selects_folder(tmp_path, monkeypat
         )
         assert address.input_value() == str(relative_target.resolve())
         list_scope.get_by_text("gui", exact=True).wait_for(timeout=5000)
+        list_scope.get_by_text("SaveData", exact=True).wait_for(
+            state="detached", timeout=5000
+        )
         address.fill(str(workroot))
         modal.get_by_role("button", name="Go", exact=True).click()
-        page.get_by_text("2 entries", exact=True).wait_for(timeout=5000)
+        list_scope.get_by_text("SaveData", exact=True).wait_for(timeout=5000)
         assert address.input_value() == str(workroot)
 
         # The datalist filters by basename and parent+partial prefixes, but does
@@ -5219,7 +5307,28 @@ def test_dedicated_save_import_preview_and_managed_world_switch(tmp_path, monkey
 
 
 @pytest.mark.playwright
-def test_single_player_save_import_starts_migration_workflow(tmp_path, monkeypatch):
+@pytest.mark.parametrize(
+    (
+        "additional_player",
+        "world_option_format",
+        "expected_message",
+        "expected_server_name",
+    ),
+    [
+        (False, "oodle", "Single-player world imported", "Imported local world"),
+        (True, "oodle", "Co-op world imported", "Imported local world"),
+        (True, "corrupt", "Co-op world imported", "Default Palworld Server"),
+    ],
+    ids=["single-player", "steam-coop", "corrupt-fallback"],
+)
+def test_local_save_import_handles_world_option_formats(
+    tmp_path,
+    monkeypatch,
+    additional_player,
+    world_option_format,
+    expected_message,
+    expected_server_name,
+):
     world_id = "C" * 32
     world = tmp_path / "Pal" / "Saved" / "SaveGames" / "76561198170852193" / world_id
     (world / "Players").mkdir(parents=True)
@@ -5227,11 +5336,24 @@ def test_single_player_save_import_starts_migration_workflow(tmp_path, monkeypat
     (world / "Players" / "00000000000000000000000000000001.sav").write_text(
         "player", encoding="utf-8"
     )
-    codec = WorldOptionSavCodec()
-    codec.write(
-        world / "WorldOption.sav",
-        merge_option_values(codec.load_template(), {"ServerName": "Imported single-player world"}),
-    )
+    if additional_player:
+        (world / "Players" / f"{'A' * 32}.sav").write_text(
+            "co-op player", encoding="utf-8"
+        )
+    world_option_path = world / "WorldOption.sav"
+    if world_option_format == "oodle":
+        codec = WorldOptionSavCodec()
+        codec.write(
+            world_option_path,
+            merge_option_values(
+                codec.load_template(), {"ServerName": "Imported local world"}
+            ),
+        )
+        assert world_option_path.read_bytes()[8:12] == b"PlM1"
+    else:
+        world_option_path.write_bytes(
+            bytes(8) + b"PlM" + bytes([0x31]) + b"corrupt"
+        )
 
     with _gui_page(tmp_path, monkeypatch) as (page, config_dir):
         page.locator("#pywebio-scope-aside").get_by_text("Add", exact=True).click()
@@ -5251,7 +5373,7 @@ def test_single_player_save_import_starts_migration_workflow(tmp_path, monkeypat
         page.locator("#pywebio-scope-menu .menu-active").get_by_text(
             "Overview", exact=True
         ).wait_for(timeout=5000)
-        page.get_by_text("Single-player world imported", exact=False).wait_for(timeout=5000)
+        page.get_by_text(expected_message, exact=False).wait_for(timeout=5000)
         monkeypatch.setenv("PALSITTER_CONFIG_DIR", str(config_dir))
         imported = load_profile("singleplayer-import")
         assert (Path(imported.backup_source) / world_id / "Level.sav").read_text(
@@ -5261,10 +5383,10 @@ def test_single_player_save_import_starts_migration_workflow(tmp_path, monkeypat
         assert not (imported_world / "WorldOption.sav").exists()
         imported_ini = resolve_ini_path(imported)
         imported_values = read_ini_option_settings(imported_ini)
-        assert imported_values["ServerName"] == "Imported single-player world"
+        assert imported_values["ServerName"] == expected_server_name
         assert imported_values["PublicPort"] == imported.game_port
         assert imported_values["RESTAPIPort"] == imported.rest_port
-        assert (world / "WorldOption.sav").exists()
+        assert world_option_path.exists()
 
 
 @pytest.mark.playwright
