@@ -41,7 +41,10 @@ from module.games.palworld.audit import AuditEvent, AuditStore
 from module.webui.global_audit import GlobalAuditEvent, GlobalAuditStore
 from module.games.palworld.players_cache import PlayerCache
 from module.games.palworld.version_cache import update_version_cache
-from module.worldsettings.ini_codec import read_ini_option_settings
+from module.worldsettings.ini_codec import (
+    read_ini_option_settings,
+    write_ini_option_settings,
+)
 from module.worldsettings.sav_codec import WorldOptionSavCodec, extract_option_values, merge_option_values
 from module.worldsettings.service import resolve_ini_path
 
@@ -2395,7 +2398,18 @@ def test_palworld_tools_player_migration_uses_real_selection_and_confirmation(
     (players / old_player).write_bytes(b"fake old player")
     (players / new_player).write_bytes(b"fake new player")
     (world / ".palsitter-player-names.json").write_text(
-        json.dumps({old_player[:-4]: "Original", new_player[:-4]: "New"}),
+        json.dumps(
+            {
+                old_player[:-4]: {
+                    "name": "Original",
+                    "owned_pal_count": 37,
+                },
+                new_player[:-4]: {
+                    "name": "New",
+                    "owned_pal_count": 0,
+                },
+            }
+        ),
         encoding="utf-8",
     )
 
@@ -2415,14 +2429,14 @@ def test_palworld_tools_player_migration_uses_real_selection_and_confirmation(
         assert migration.get_by_label(
             "Original player save", exact=True
         ).locator("option").all_text_contents() == [
-            f"Original — {old_player}",
-            f"New — {new_player}",
+            f"Original (owned Pals: 37) — {old_player}",
+            f"New (owned Pals: 0) — {new_player}",
         ]
         page.get_by_label("Original player save", exact=True).select_option(
-            label=f"Original — {old_player}"
+            label=f"Original (owned Pals: 37) — {old_player}"
         )
         page.get_by_label("New server player save", exact=True).select_option(
-            label=f"New — {new_player}"
+            label=f"New (owned Pals: 0) — {new_player}"
         )
         migration.get_by_role("button", name="Migrate player ID", exact=True).click()
 
@@ -2440,6 +2454,12 @@ def test_palworld_tools_player_migration_uses_real_selection_and_confirmation(
             re.compile("(Player migration is unavailable|Could not migrate the player ID)"),
             exact=False,
         ).wait_for(timeout=10000)
+        assert migration.get_by_label(
+            "Original player save", exact=True
+        ).locator("option").all_text_contents() == [
+            f"Original (owned Pals: 37) — {old_player}",
+            f"New (owned Pals: 0) — {new_player}",
+        ]
 
 
 @pytest.mark.playwright
@@ -2491,6 +2511,35 @@ def test_palworld_tools_migration_confirms_decoded_name_mismatch(tmp_path, monke
                         "value": [
                             level_entry(old_guid, "Original"),
                             level_entry(new_guid, "New"),
+                            {
+                                "key": {
+                                    "PlayerUId": {"value": new_guid},
+                                    "InstanceId": {
+                                        "value": "10000000000000000000000000000001"
+                                    },
+                                },
+                                "value": {
+                                    "RawData": {
+                                        "value": {
+                                            "object": {
+                                                "SaveParameter": {
+                                                    "value": {
+                                                        "IsPlayer": {
+                                                            "value": False
+                                                        },
+                                                        "OwnerPlayerUId": {
+                                                            "value": new_guid
+                                                        },
+                                                        "CharacterID": {
+                                                            "value": "SheepBall"
+                                                        },
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                },
+                            },
                         ]
                     }
                 }
@@ -2517,30 +2566,63 @@ def test_palworld_tools_migration_confirms_decoded_name_mismatch(tmp_path, monke
             "backup_source": str(source),
             "dedicated_server_name": world_id,
         },
-        extra_env={"PALSITTER_TEST_PLAYER_MIGRATION_CODEC": "json"},
+        extra_env={
+            "PALSITTER_TEST_PLAYER_MIGRATION_CODEC": "json",
+            "PALSITTER_TEST_PLAYER_MIGRATION_CODEC_DELAY": "0.25",
+        },
     ) as (page, _):
         page.locator("#pywebio-scope-aside").get_by_text("default", exact=True).click()
         page.locator("#pywebio-scope-menu").get_by_text("Tools", exact=True).click()
         migration = page.locator("#pywebio-scope-tools_migration")
         migration.get_by_label("Original player save", exact=True).select_option(
-            label=f"Original — {old_guid}.sav"
+            label=f"Original (owned Pals: ?) — {old_guid}.sav"
         )
         migration.get_by_label("New server player save", exact=True).select_option(
-            label=f"New — {new_guid}.sav"
+            label=f"New (owned Pals: ?) — {new_guid}.sav"
         )
         migration.get_by_role("button", name="Migrate player ID", exact=True).click()
         page.locator(".modal.show").get_by_role(
             "button", name="Migrate player ID", exact=True
         ).click()
 
+        progress_modal = page.locator(".modal.show")
+        for filename in (f"{old_guid}.sav", f"{new_guid}.sav", "Level.sav"):
+            progress_modal.get_by_text(
+                f"Unpack player save ({filename})", exact=True
+            ).wait_for(timeout=5000)
+            assert progress_modal.get_by_text(
+                re.compile(r"^Unpack player save \(.+\.sav\)$")
+            ).count() == 1
+
         mismatch = page.locator(".modal.show").last
         mismatch.get_by_text("Player name mismatch", exact=True).wait_for(timeout=10000)
         mismatch.get_by_text("Original", exact=False).wait_for(timeout=5000)
         mismatch.get_by_text("Original", exact=False).wait_for(timeout=5000)
-        mismatch.get_by_role("button", name="Cancel", exact=True).click()
+        mismatch.get_by_role("button", name="Continue", exact=True).click()
+        assert page.locator(".modal.show").count() == 1
+
+        pal_warning = page.locator(".modal.show").last
+        pal_warning.get_by_text(
+            "Destination owns more Pals", exact=True
+        ).wait_for(timeout=1500)
+        assert page.locator(".modal.show").count() == 1
+        assert pal_warning.locator("button.close").count() == 0
+        pal_warning.get_by_text(
+            "owned-Pal count is 1", exact=False
+        ).wait_for(timeout=5000)
+        pal_warning.get_by_text(
+            "source player's 0", exact=False
+        ).wait_for(timeout=5000)
+        pal_warning.get_by_role("button", name="Cancel", exact=True).click()
         migration.get_by_text(
             "Could not migrate the player ID", exact=False
         ).wait_for(timeout=10000)
+        assert migration.get_by_label(
+            "Original player save", exact=True
+        ).locator("option").all_text_contents() == [
+            f"Original (owned Pals: 0) — {old_guid}.sav",
+            f"New (owned Pals: 1) — {new_guid}.sav",
+        ]
 
     assert (world / "Level.sav").read_bytes() == original_level
 
@@ -2554,13 +2636,116 @@ def test_palworld_tools_build_player_name_cache_uses_confirmation_flow(
     world = source / world_id
     players = world / "Players"
     players.mkdir(parents=True)
-    (world / "Level.sav").write_bytes(b"fake level")
-    (players / "00000000000000000000000000000001.sav").write_bytes(b"old")
+    old_guid = "00000000000000000000000000000001"
+    new_guid = "8E910AC2000000000000000000000000"
+    old_level_pal = "10000000000000000000000000000001"
+    old_dps_pal = "20000000000000000000000000000001"
+
+    def player_entry(guid, name):
+        return {
+            "key": {"PlayerUId": {"value": guid}},
+            "value": {
+                "RawData": {
+                    "value": {
+                        "object": {
+                            "SaveParameter": {
+                                "value": {
+                                    "IsPlayer": {"value": True},
+                                    "NickName": {"value": name},
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+        }
+
+    def player_document(guid):
+        return {
+            "properties": {
+                "SaveData": {
+                    "value": {
+                        "PlayerUId": {"value": guid},
+                        "IndividualId": {
+                            "value": {"PlayerUId": {"value": guid}}
+                        },
+                    }
+                }
+            }
+        }
+
+    def pal_entry(owner, instance_id):
+        return {
+            "key": {
+                "PlayerUId": {"value": owner},
+                "InstanceId": {"value": instance_id},
+            },
+            "value": {
+                "RawData": {
+                    "value": {
+                        "object": {
+                            "SaveParameter": {
+                                "value": {
+                                    "IsPlayer": {"value": False},
+                                    "OwnerPlayerUId": {"value": owner},
+                                    "CharacterID": {"value": "SheepBall"},
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+        }
+
+    level = {
+        "properties": {
+            "worldSaveData": {
+                "value": {
+                    "CharacterSaveParameterMap": {
+                        "value": [
+                            player_entry(old_guid, "Original"),
+                            player_entry(new_guid, "New"),
+                            pal_entry(old_guid, old_level_pal),
+                        ]
+                    }
+                }
+            }
+        }
+    }
+    dps = {
+        "properties": {
+            "SaveParameterArray": {
+                "value": {
+                    "values": [
+                        {
+                            "InstanceId": {
+                                "value": {"InstanceId": {"value": old_dps_pal}}
+                            },
+                            "SaveParameter": {
+                                "value": {"CharacterID": {"value": "PinkCat"}}
+                            },
+                        }
+                    ]
+                }
+            }
+        }
+    }
+    (world / "Level.sav").write_text(json.dumps(level), encoding="utf-8")
+    (players / f"{old_guid}.sav").write_text(
+        json.dumps(player_document(old_guid)), encoding="utf-8"
+    )
+    (players / f"{new_guid}.sav").write_text(
+        json.dumps(player_document(new_guid)), encoding="utf-8"
+    )
+    (players / f"{old_guid}_dps.sav").write_text(
+        json.dumps(dps), encoding="utf-8"
+    )
 
     with _gui_page(
         tmp_path,
         monkeypatch,
         profile_overrides={"dedicated_server_name": world_id},
+        extra_env={"PALSITTER_TEST_PLAYER_MIGRATION_CODEC": "json"},
     ) as (page, _):
         page.locator("#pywebio-scope-aside").get_by_text(
             "default", exact=True
@@ -2574,15 +2759,48 @@ def test_palworld_tools_build_player_name_cache_uses_confirmation_flow(
         ).click()
         modal = page.locator(".modal.show")
         modal.get_by_text(
-            "This reads Level.sav and creates an ID-to-name cache", exact=False
+            "This reads Level.sav and Dimensional Pal Storage sidecars",
+            exact=False,
         ).wait_for(timeout=5000)
         modal.get_by_role(
             "button", name="Build player name cache", exact=True
         ).click()
         migration.get_by_text(
-            re.compile("(Could not build the player name cache|Player name cache is unavailable)"),
+            "Player name cache built for 2 players",
             exact=False,
         ).wait_for(timeout=10000)
+        assert migration.get_by_label(
+            "Original player save", exact=True
+        ).locator("option").all_text_contents() == [
+            f"Original (owned Pals: 2) — {old_guid}.sav",
+            f"New (owned Pals: 0) — {new_guid}.sav",
+        ]
+
+        migration.get_by_label("Original player save", exact=True).select_option(
+            label=f"Original (owned Pals: 2) — {old_guid}.sav"
+        )
+        migration.get_by_label("New server player save", exact=True).select_option(
+            label=f"New (owned Pals: 0) — {new_guid}.sav"
+        )
+        migration.get_by_role("button", name="Migrate player ID", exact=True).click()
+        page.locator(".modal.show").get_by_role(
+            "button", name="Migrate player ID", exact=True
+        ).click()
+        page.locator(".modal.show").get_by_text(
+            "Player name mismatch", exact=True
+        ).wait_for(timeout=10000)
+        page.locator(".modal.show").get_by_role(
+            "button", name="Continue", exact=True
+        ).click()
+        migration.get_by_text("Player ID migrated", exact=False).wait_for(
+            timeout=10000
+        )
+        assert migration.get_by_label(
+            "Original player save", exact=True
+        ).locator("option").all_text_contents() == [
+            f"New (owned Pals: 0) — {old_guid}.sav",
+            f"Original (owned Pals: 2) — {new_guid}.sav",
+        ]
 
 
 @pytest.mark.playwright
@@ -5242,7 +5460,10 @@ def test_dedicated_save_import_preview_and_managed_world_switch(tmp_path, monkey
     config_directory = "WindowsServer" if os.name == "nt" else "LinuxServer"
     source_ini = source_root / "Pal" / "Saved" / "Config" / config_directory / "PalWorldSettings.ini"
     source_ini.parent.mkdir(parents=True, exist_ok=True)
-    source_ini.write_text("source world settings", encoding="utf-8")
+    write_ini_option_settings(
+        source_ini,
+        {"ServerName": "Source world settings", "RESTAPIEnabled": False},
+    )
 
     with _gui_page(tmp_path, monkeypatch) as (page, config_dir):
         page.locator("#pywebio-scope-aside").get_by_text("Add", exact=True).click()
@@ -5281,7 +5502,10 @@ def test_dedicated_save_import_preview_and_managed_world_switch(tmp_path, monkey
             / config_directory
             / "PalWorldSettings.ini"
         )
-        assert imported_ini.read_text(encoding="utf-8") == "source world settings"
+        imported_ini_values = read_ini_option_settings(imported_ini)
+        assert imported_ini_values["ServerName"] == "Source world settings"
+        assert imported_ini_values["RESTAPIEnabled"] is True
+        assert read_ini_option_settings(source_ini)["RESTAPIEnabled"] is False
         assert (first / "Level.sav").read_text(encoding="utf-8") == "original"
 
         second = Path(imported.backup_source) / second_id
@@ -5346,7 +5570,11 @@ def test_local_save_import_handles_world_option_formats(
         codec.write(
             world_option_path,
             merge_option_values(
-                codec.load_template(), {"ServerName": "Imported local world"}
+                codec.load_template(),
+                {
+                    "ServerName": "Imported local world",
+                    "RESTAPIEnabled": False,
+                },
             ),
         )
         assert world_option_path.read_bytes()[8:12] == b"PlM1"
@@ -5385,7 +5613,12 @@ def test_local_save_import_handles_world_option_formats(
         imported_values = read_ini_option_settings(imported_ini)
         assert imported_values["ServerName"] == expected_server_name
         assert imported_values["PublicPort"] == imported.game_port
+        assert imported_values["RESTAPIEnabled"] is True
         assert imported_values["RESTAPIPort"] == imported.rest_port
+        assert imported.world_settings["RESTAPIEnabled"] is True
+        if world_option_format == "oodle":
+            source_values = extract_option_values(codec.read(world_option_path))
+            assert source_values["RESTAPIEnabled"] is False
         assert world_option_path.exists()
 
 

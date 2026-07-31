@@ -4,6 +4,7 @@ import json
 import os
 import re
 import shutil
+import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -17,6 +18,7 @@ GUID_RE = re.compile(r"^[0-9A-Fa-f]{32}$")
 PLAYER_NAME_CACHE_FILENAME = ".palsitter-player-names.json"
 ProgressCallback = Callable[[str, str | None], None]
 NameMismatchConfirmation = Callable[[str, str, str, str], bool]
+PalCountConfirmation = Callable[[int, int], bool]
 
 
 class PlayerMigrationError(RuntimeError):
@@ -44,6 +46,12 @@ class PlayerNameCacheResult:
     world_path: Path
     cache_path: Path
     player_count: int
+
+
+@dataclass(frozen=True)
+class PlayerMigrationDetails:
+    name: str | None
+    owned_pal_count: int | None
 
 
 @dataclass(frozen=True)
@@ -93,6 +101,9 @@ class _PalSavCodec:
 
 class _JsonTestCodec:
     def read(self, path: Path) -> _SaveDocument:
+        delay = float(os.getenv("PALSITTER_TEST_PLAYER_MIGRATION_CODEC_DELAY", "0"))
+        if delay > 0:
+            time.sleep(delay)
         try:
             document = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError) as exc:
@@ -270,6 +281,16 @@ def player_name_cache_path(world_path: str | Path) -> Path:
 
 
 def load_player_name_cache(world_path: str | Path) -> dict[str, str]:
+    return {
+        guid: details.name
+        for guid, details in load_player_details_cache(world_path).items()
+        if details.name is not None
+    }
+
+
+def load_player_details_cache(
+    world_path: str | Path,
+) -> dict[str, PlayerMigrationDetails]:
     path = player_name_cache_path(world_path)
     if not path.is_file() or path.is_symlink():
         return {}
@@ -279,14 +300,34 @@ def load_player_name_cache(world_path: str | Path) -> dict[str, str]:
         return {}
     if not isinstance(data, dict):
         return {}
-    return {
-        key.casefold(): value.strip()
-        for key, value in data.items()
-        if isinstance(key, str)
-        and GUID_RE.fullmatch(key) is not None
-        and isinstance(value, str)
-        and value.strip()
-    }
+    details: dict[str, PlayerMigrationDetails] = {}
+    for key, value in data.items():
+        if not isinstance(key, str) or GUID_RE.fullmatch(key) is None:
+            continue
+        if isinstance(value, str):
+            name = value.strip()
+            if name:
+                details[key.casefold()] = PlayerMigrationDetails(name, None)
+            continue
+        if not isinstance(value, dict):
+            continue
+        raw_name = value.get("name")
+        name = (
+            raw_name.strip()
+            if isinstance(raw_name, str) and raw_name.strip()
+            else None
+        )
+        raw_count = value.get("owned_pal_count")
+        owned_pal_count = (
+            raw_count
+            if isinstance(raw_count, int)
+            and not isinstance(raw_count, bool)
+            and raw_count >= 0
+            else None
+        )
+        if name is not None or owned_pal_count is not None:
+            details[key.casefold()] = PlayerMigrationDetails(name, owned_pal_count)
+    return details
 
 
 def _property_value(value: object) -> object:
@@ -329,6 +370,147 @@ def _extract_player_names(document: dict[str, Any]) -> dict[str, str]:
     return names
 
 
+def _character_map(document: dict[str, Any]) -> list[object]:
+    try:
+        character_map = document["properties"]["worldSaveData"]["value"][
+            "CharacterSaveParameterMap"
+        ]["value"]
+    except (KeyError, TypeError):
+        return []
+    return character_map if isinstance(character_map, list) else []
+
+
+def _extract_owned_pal_ids(document: dict[str, Any]) -> dict[str, set[str]]:
+    owned: dict[str, set[str]] = {}
+    for entry in _character_map(document):
+        if not isinstance(entry, dict):
+            continue
+        try:
+            key = entry["key"]
+            instance_id = _normal_guid(_property_value(key["InstanceId"]))
+            save_parameter = entry["value"]["RawData"]["value"]["object"][
+                "SaveParameter"
+            ]["value"]
+        except (KeyError, TypeError, PlayerMigrationError):
+            continue
+        if not isinstance(save_parameter, dict):
+            continue
+        if _property_value(save_parameter.get("IsPlayer")) is True:
+            continue
+        try:
+            owner = _normal_guid(
+                _property_value(save_parameter["OwnerPlayerUId"])
+            )
+        except (KeyError, PlayerMigrationError):
+            continue
+        if owner == "0" * 32:
+            continue
+        owned.setdefault(owner, set()).add(instance_id)
+    return owned
+
+
+def _extract_dps_pal_ids(document: dict[str, Any]) -> set[str]:
+    try:
+        slots = document["properties"]["SaveParameterArray"]["value"]["values"]
+    except (KeyError, TypeError):
+        return set()
+    if not isinstance(slots, list):
+        return set()
+    pal_ids: set[str] = set()
+    for slot in slots:
+        if not isinstance(slot, dict):
+            continue
+        try:
+            instance_id = _normal_guid(
+                slot["InstanceId"]["value"]["InstanceId"]["value"]
+            )
+            save_parameter = slot["SaveParameter"]["value"]
+        except (KeyError, TypeError, PlayerMigrationError):
+            continue
+        if not isinstance(save_parameter, dict):
+            continue
+        character_id = _property_value(save_parameter.get("CharacterID"))
+        if character_id in (None, "", "None"):
+            continue
+        pal_ids.add(instance_id)
+    return pal_ids
+
+
+def _collect_player_details(
+    world: Path,
+    level_document: dict[str, Any],
+    codec: _PalSavCodec | _JsonTestCodec,
+    *,
+    progress: Optional[ProgressCallback] = None,
+    decoded_dps: Optional[Mapping[str, _SaveDocument]] = None,
+) -> tuple[dict[str, PlayerMigrationDetails], dict[str, _SaveDocument]]:
+    names = _extract_player_names(level_document)
+    owned_pal_ids = _extract_owned_pal_ids(level_document)
+    player_guids = {_guid_from_player_file(path) for path in list_player_files(world)}
+    players_path = world / "Players"
+    dps_documents = dict(decoded_dps or {})
+    details: dict[str, PlayerMigrationDetails] = {}
+    for player_guid in names.keys() | owned_pal_ids.keys() | player_guids:
+        pal_ids = set(owned_pal_ids.get(player_guid, set()))
+        sidecar = (
+            _find_sidecar(players_path, player_guid)
+            if players_path.is_dir() and not players_path.is_symlink()
+            else None
+        )
+        if sidecar is not None:
+            dps_document = dps_documents.get(player_guid)
+            if dps_document is None:
+                if progress is not None:
+                    progress("unpack", sidecar.name)
+                dps_document = codec.read(sidecar)
+                dps_documents[player_guid] = dps_document
+            pal_ids.update(_extract_dps_pal_ids(dps_document.document))
+        details[player_guid] = PlayerMigrationDetails(
+            names.get(player_guid),
+            len(pal_ids),
+        )
+    return details, dps_documents
+
+
+def _player_details_bytes(
+    details: Mapping[str, PlayerMigrationDetails],
+) -> bytes:
+    return json.dumps(
+        {
+            guid: {
+                "name": value.name,
+                "owned_pal_count": value.owned_pal_count,
+            }
+            for guid, value in details.items()
+        },
+        ensure_ascii=False,
+        indent=2,
+        sort_keys=True,
+    ).encode("utf-8")
+
+
+def _write_player_details_cache(
+    world: Path,
+    details: Mapping[str, PlayerMigrationDetails],
+) -> PlayerNameCacheResult:
+    cache_path = player_name_cache_path(world)
+    temporary = cache_path.with_name(f".{cache_path.name}.{uuid.uuid4().hex}.tmp")
+    try:
+        temporary.write_bytes(_player_details_bytes(details))
+        temporary.replace(cache_path)
+    except OSError as exc:
+        raise PlayerNameCacheError(
+            f"Could not write player name cache {cache_path.name}: {exc}"
+        ) from exc
+    finally:
+        temporary.unlink(missing_ok=True)
+    return PlayerNameCacheResult(
+        world,
+        cache_path,
+        sum(value.name is not None for value in details.values()),
+    )
+
+
 def invalidate_player_name_cache(world_path: str | Path) -> None:
     path = player_name_cache_path(world_path)
     if path.is_file() and not path.is_symlink():
@@ -354,23 +536,14 @@ def build_player_name_cache(
     report("unpack", "Level.sav")
     level = codec.read(world / "Level.sav")
     report("extract")
-    names = _extract_player_names(level.document)
-    cache_path = player_name_cache_path(world)
-    report("write", cache_path.name)
-    temporary = cache_path.with_name(f".{cache_path.name}.{uuid.uuid4().hex}.tmp")
-    try:
-        temporary.write_text(
-            json.dumps(names, ensure_ascii=False, indent=2, sort_keys=True),
-            encoding="utf-8",
-        )
-        temporary.replace(cache_path)
-    except OSError as exc:
-        raise PlayerNameCacheError(
-            f"Could not write player name cache {cache_path.name}: {exc}"
-        ) from exc
-    finally:
-        temporary.unlink(missing_ok=True)
-    return PlayerNameCacheResult(world, cache_path, len(names))
+    details, _ = _collect_player_details(
+        world,
+        level.document,
+        codec,
+        progress=progress,
+    )
+    report("write", PLAYER_NAME_CACHE_FILENAME)
+    return _write_player_details_cache(world, details)
 
 
 def migrate_player_ids(
@@ -384,6 +557,7 @@ def migrate_player_ids(
     progress: Optional[ProgressCallback] = None,
     expected_names: Mapping[str, str] | None = None,
     confirm_name_mismatch: Optional[NameMismatchConfirmation] = None,
+    confirm_destination_pal_count: Optional[PalCountConfirmation] = None,
 ) -> PlayerMigrationResult:
     if is_server_active():
         raise PlayerMigrationError("Stop the server before migrating player IDs")
@@ -413,6 +587,17 @@ def migrate_player_ids(
     new_doc = codec.read(new_path)
     report("unpack", "Level.sav")
     level = codec.read(world / "Level.sav")
+
+    players_path = world / "Players"
+    details, decoded_dps = _collect_player_details(
+        world,
+        level.document,
+        codec,
+        progress=progress,
+    )
+    report("cache")
+    _write_player_details_cache(world, details)
+
     if _normal_guid(_player_uid(old_doc.document)) != old_guid:
         raise PlayerMigrationError(
             f"{old_path.name} does not contain its filename GUID"
@@ -428,6 +613,9 @@ def migrate_player_ids(
             f"Level.sav does not reference {new_path.name}; have the player join "
             "once and create the new character first"
         )
+
+    old_dps_doc = decoded_dps.get(old_guid)
+    new_dps_doc = decoded_dps.get(new_guid)
 
     level_names = _extract_player_names(level.document)
     expected = {
@@ -457,19 +645,27 @@ def migrate_player_ids(
     ):
         raise PlayerMigrationError("Player names do not match Level.sav; migration cancelled")
 
+    source_pal_count = details[old_guid].owned_pal_count or 0
+    destination_pal_count = details[new_guid].owned_pal_count or 0
+    if destination_pal_count > source_pal_count and (
+        confirm_destination_pal_count is None
+        or not confirm_destination_pal_count(
+            source_pal_count,
+            destination_pal_count,
+        )
+    ):
+        raise PlayerMigrationError(
+            "Destination player owns more Pals than source; migration cancelled"
+        )
+
     _swap_guids(level.document, old_guid, new_guid)
     _swap_guids(old_doc.document, old_guid, new_guid)
     _swap_guids(new_doc.document, old_guid, new_guid)
 
-    players_path = world / "Players"
-    old_dps = _find_sidecar(players_path, old_guid)
-    new_dps = _find_sidecar(players_path, new_guid)
     old_storage = _player_storage_uid(old_doc.document)
     new_storage = _player_storage_uid(new_doc.document)
-    dps_documents: dict[Path, _SaveDocument] = {}
-    if old_dps is not None:
-        report("unpack", old_dps.name)
-        old_dps_doc = codec.read(old_dps)
+    staged_dps_documents: dict[Path, _SaveDocument] = {}
+    if old_dps_doc is not None:
         _swap_guids(old_dps_doc.document, old_guid, new_guid)
         if old_storage is not None and new_storage is not None:
             _replace_guid(
@@ -477,10 +673,10 @@ def migrate_player_ids(
                 _normal_guid(old_storage),
                 _normal_guid(new_storage),
             )
-        dps_documents[players_path / f"{new_guid.upper()}_dps.sav"] = old_dps_doc
-    if new_dps is not None:
-        report("unpack", new_dps.name)
-        new_dps_doc = codec.read(new_dps)
+        staged_dps_documents[
+            players_path / f"{new_guid.upper()}_dps.sav"
+        ] = old_dps_doc
+    if new_dps_doc is not None:
         _swap_guids(new_dps_doc.document, old_guid, new_guid)
         if old_storage is not None and new_storage is not None:
             _replace_guid(
@@ -488,7 +684,9 @@ def migrate_player_ids(
                 _normal_guid(new_storage),
                 _normal_guid(old_storage),
             )
-        dps_documents[players_path / f"{old_guid.upper()}_dps.sav"] = new_dps_doc
+        staged_dps_documents[
+            players_path / f"{old_guid.upper()}_dps.sav"
+        ] = new_dps_doc
 
     report("update")
     staged: dict[Path, bytes] = {}
@@ -498,9 +696,13 @@ def migrate_player_ids(
     staged[old_path] = codec.encode(new_doc)
     report("repack", new_path.name)
     staged[new_path] = codec.encode(old_doc)
-    for target, document in dps_documents.items():
+    for target, document in staged_dps_documents.items():
         report("repack", target.name)
         staged[target] = codec.encode(document)
+    migrated_details = dict(details)
+    migrated_details[old_guid] = details[new_guid]
+    migrated_details[new_guid] = details[old_guid]
+    staged[player_name_cache_path(world)] = _player_details_bytes(migrated_details)
     original = {
         path: path.read_bytes() if path.exists() else None
         for path in staged
@@ -526,8 +728,6 @@ def migrate_player_ids(
     finally:
         shutil.rmtree(transaction, ignore_errors=True)
 
-    invalidate_player_name_cache(world)
-
     return PlayerMigrationResult(world, old_path, new_path, safety.path)
 
 
@@ -535,12 +735,14 @@ __all__ = [
     "PlayerMigrationError",
     "PlayerMigrationResult",
     "PlayerMigrationUnavailable",
+    "PlayerMigrationDetails",
     "PlayerNameCacheError",
     "PlayerNameCacheResult",
     "PLAYER_NAME_CACHE_FILENAME",
     "build_player_name_cache",
     "invalidate_player_name_cache",
     "list_player_files",
+    "load_player_details_cache",
     "load_player_name_cache",
     "migrate_player_ids",
     "player_name_cache_path",
