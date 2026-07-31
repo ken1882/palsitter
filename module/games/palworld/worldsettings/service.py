@@ -108,7 +108,12 @@ def migrate_world_option_sav_to_ini(profile: PalworldProfile) -> Optional[Path]:
         return None
 
     codec = WorldOptionSavCodec()
-    values = _fill_defaults(extract_option_values(codec.read(sav_path)))
+    try:
+        values = _fill_defaults(extract_option_values(codec.read(sav_path)))
+    except Exception:
+        # WorldOption is optional; unusable settings must not block the world import.
+        sav_path.unlink()
+        return None
     values["PublicPort"] = profile.game_port
     values["RESTAPIPort"] = profile.rest_port
     if profile.rest_password:

@@ -194,7 +194,10 @@ def test_load_world_settings_ignores_legacy_sav_when_present(tmp_path):
     assert loaded.values["ServerName"] == "INI settings"
 
 
-def test_migrate_world_option_sav_to_ini_removes_sav_and_uses_profile_ports(tmp_path):
+@pytest.mark.parametrize("save_type", [0x31, 0x32], ids=["oodle", "zlib"])
+def test_migrate_world_option_sav_to_ini_removes_sav_and_uses_profile_ports(
+    tmp_path, save_type
+):
     profile = _make_profile(tmp_path)
     profile.game_port = 9123
     profile.rest_port = 9124
@@ -208,6 +211,7 @@ def test_migrate_world_option_sav_to_ini_removes_sav_and_uses_profile_ports(tmp_
             codec.load_template(),
             {"ServerName": "Imported world", "PublicPort": 7000, "RESTAPIPort": 7001},
         ),
+        save_type=save_type,
     )
 
     migrated = migrate_world_option_sav_to_ini(profile)
@@ -219,6 +223,30 @@ def test_migrate_world_option_sav_to_ini_removes_sav_and_uses_profile_ports(tmp_
     assert values["PublicPort"] == 9123
     assert values["RESTAPIPort"] == 9124
     assert values["AdminPassword"] == "profile-secret"
+
+
+@pytest.mark.parametrize(
+    "sav_bytes",
+    [
+        bytes(8) + b"BAD" + bytes([0x31]) + b"payload",
+        bytes(8) + b"PlM" + bytes([0x31]) + b"corrupt",
+        bytes(8) + b"PlZ" + bytes([0x32]) + b"corrupt",
+        bytes(8) + b"CNK" + bytes([0x30]) + b"corrupt",
+    ],
+    ids=["unsupported", "corrupt-oodle", "corrupt-zlib", "corrupt-chunk"],
+)
+def test_migrate_world_option_sav_skips_any_undecodable_format(
+    tmp_path, sav_bytes
+):
+    profile = _make_profile(tmp_path)
+    save_dir = Path(profile.backup_source) / profile.dedicated_server_name
+    save_dir.mkdir()
+    sav_path = save_dir / "WorldOption.sav"
+    sav_path.write_bytes(sav_bytes)
+
+    assert migrate_world_option_sav_to_ini(profile) is None
+    assert not sav_path.exists()
+    assert not resolve_ini_path(profile).exists()
 
 
 def test_save_world_settings_ini_never_backs_up(tmp_path):

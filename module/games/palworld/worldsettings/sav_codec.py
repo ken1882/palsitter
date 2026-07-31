@@ -7,16 +7,22 @@ import json
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
-from palworld_save_tools.gvas import GvasFile
-from palworld_save_tools.palsav import compress_gvas_to_sav, decompress_sav_to_gvas
-from palworld_save_tools.paltypes import PALWORLD_CUSTOM_PROPERTIES, PALWORLD_TYPE_HINTS
+from palsav.core import compress_gvas_to_sav, decompress_sav_to_gvas
+from palsav.gvas import GvasFile
+from palsav.paltypes import PALWORLD_CUSTOM_PROPERTIES, PALWORLD_TYPE_HINTS
 
 from .schema import WORLD_OPTION_FIELDS_BY_KEY
 
 
 TEMPLATE_PATH = Path(__file__).with_name("template") / "world_option_template.json"
+SUPPORTED_MAGIC_BYTES = frozenset((b"PlM", b"PlZ", b"CNK"))
 
-# GVAS scalar property shapes, as produced by palworld_save_tools.archive.FArchiveReader.property():
+
+class UnsupportedWorldOptionSaveFormat(ValueError):
+    """The save header does not identify a supported Palworld compression format."""
+
+
+# GVAS scalar property shapes, as produced by palsav.archive.FArchiveReader.property():
 #   BoolProperty:          {"value": bool, "id": ..., "type": "BoolProperty"}
 #   Int/Float/Str/Name...: {"id": ..., "value": <native>, "type": "<TypeName>"}
 #   EnumProperty/ByteProp: {"id": ..., "value": {"type": "<EnumTypeName>", "value": "<Enum::Choice>"}, "type": "EnumProperty"}
@@ -155,6 +161,11 @@ class WorldOptionSavCodec:
 
     def read(self, path: Path) -> Dict[str, Any]:
         raw_bytes = path.read_bytes()
+        magic_bytes = raw_bytes[8:11] if len(raw_bytes) >= 12 else b""
+        if magic_bytes not in SUPPORTED_MAGIC_BYTES:
+            raise UnsupportedWorldOptionSaveFormat(
+                f"unsupported WorldOption.sav format: {magic_bytes!r}"
+            )
         raw_gvas, save_type = self.decompress(raw_bytes)
         gvas_file = self.gvas_read(raw_gvas, self.type_hints, self.custom_properties)
         self._save_type_by_path[path] = save_type

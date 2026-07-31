@@ -42,6 +42,9 @@ its Overview.
 - A sibling `WorldOption.sav` is decoded into the new profile's
   `PalWorldSettings.ini`, then removed from the managed copy. Newly allocated network
   ports and the REST secret replace imported values.
+- If `WorldOption.sav` cannot be decoded or parsed, it is removed only from the managed
+  copy and import continues with the companion server INI or template settings. The
+  source save remains unchanged.
 - When no `WorldOption.sav` exists, the companion WindowsServer or LinuxServer
   `PalWorldSettings.ini` is imported when present. Otherwise template settings remain.
 - Nested `backup` folders are excluded. Satisfactory exposes no import fields.

@@ -6,8 +6,9 @@ A plain HTML file input cannot return an absolute server-side path, so browsing 
 against the filesystem of the machine running `gui.py` instead.
 
 - Clicking `Browse` opens a popup listing the current directory's subdirectories (and, for
-  file fields, files) in a server-backed datatable. Folders sort before files, and names
-  sort case-insensitively.
+  file fields, files) in a server-backed datatable. Its pinned AG Grid Community runtime is
+  served locally rather than downloaded from a third-party CDN. Folders sort before files,
+  and names sort case-insensitively.
 - The popup starts at the field's current value: its containing directory if the value is a
   file, the directory itself if it's a directory, otherwise the working directory `gui.py`
   was launched from.
