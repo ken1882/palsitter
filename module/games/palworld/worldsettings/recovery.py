@@ -19,7 +19,7 @@ from .ini_codec import (
 )
 from .sav_codec import WorldOptionSavCodec
 from .schema import WORLD_OPTION_FIELDS
-from .service import find_world_sav_path, resolve_ini_path
+from .service import disable_world_option_sav, find_world_sav_path, resolve_ini_path
 
 
 @dataclass(frozen=True)
@@ -147,6 +147,7 @@ def recover_malformed_ini(
     try:
         write_ini_option_settings(temporary, values)
         os.replace(temporary, path)
+        disable_world_option_sav(profile)
     except Exception:
         try:
             temporary.unlink()

@@ -12,6 +12,7 @@ from .sav_codec import WorldOptionSavCodec, extract_option_values, merge_option_
 from .schema import WORLD_OPTION_FIELDS, WORLD_OPTION_FIELDS_BY_KEY
 
 SAV_FILENAME = "WorldOption.sav"
+DISABLED_SAV_FILENAME = f"{SAV_FILENAME}.disabled"
 
 
 def preferred_ini_path(profile: PalworldProfile) -> Path:
@@ -43,6 +44,21 @@ def dedicated_world_dir(profile: PalworldProfile) -> Path:
 def find_world_sav_path(profile: PalworldProfile) -> Optional[Path]:
     path = dedicated_world_dir(profile) / SAV_FILENAME
     return path if path.exists() else None
+
+
+def disable_world_option_sav(profile: PalworldProfile) -> Optional[Path]:
+    """Disable the active SAV override after its replacement INI is written."""
+    path = find_world_sav_path(profile)
+    if path is None:
+        return None
+    disabled = path.with_name(DISABLED_SAV_FILENAME)
+    if disabled.exists():
+        index = 1
+        while disabled.with_name(f"{DISABLED_SAV_FILENAME}.{index}").exists():
+            index += 1
+        disabled.replace(disabled.with_name(f"{DISABLED_SAV_FILENAME}.{index}"))
+    path.replace(disabled)
+    return disabled
 
 
 def _fill_defaults(values: Dict[str, Any]) -> Dict[str, Any]:
@@ -88,6 +104,7 @@ def ensure_world_settings(profile: PalworldProfile) -> Path:
     """Create the platform-specific INI once when a server has no world config."""
     path = preferred_ini_path(profile)
     if path.exists():
+        disable_world_option_sav(profile)
         return path
     provided = dict(profile.world_settings or {})
     values = _fill_defaults(provided)
@@ -98,6 +115,7 @@ def ensure_world_settings(profile: PalworldProfile) -> Path:
     if "AdminPassword" not in provided:
         values["AdminPassword"] = profile.rest_password
     write_ini_option_settings(path, values)
+    disable_world_option_sav(profile)
     return path
 
 
@@ -120,7 +138,7 @@ def migrate_world_option_sav_to_ini(profile: PalworldProfile) -> Optional[Path]:
     if profile.rest_password:
         values["AdminPassword"] = profile.rest_password
     write_ini_option_settings(resolve_ini_path(profile), values)
-    sav_path.unlink()
+    disable_world_option_sav(profile)
     profile.world_settings = values
     profile._sync_world_network_settings()
     return sav_path
@@ -162,6 +180,7 @@ def save_world_settings(
         codec.write(target, merge_option_values(base_dump, _sav_values(normalized)))
     elif fmt == "ini":
         write_ini_option_settings(resolve_ini_path(profile), normalized)
+        disable_world_option_sav(profile)
     else:
         raise ValueError(f"Unknown world settings format: {fmt}")
     profile.world_settings = normalized

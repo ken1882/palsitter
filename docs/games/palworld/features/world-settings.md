@@ -39,16 +39,23 @@ each field.
   parses and rewrites only the single
   `OptionSettings=(...)` line, preserving every other line and the file's existing
   newline style untouched. This is the only format exposed by the World Settings page
-  and the only format written for an active managed world.
+  and the only format written for an active managed world. After successfully creating
+  or updating this INI, Palsitter renames an active `WorldOption.sav` to
+  `WorldOption.sav.disabled` so PalServer cannot let the legacy SAV override the INI.
+  The same check runs before every managed server start, including when the INI already
+  exists. An older disabled copy is retained with a numeric suffix.
 
 ## Imported save migration
 
 When importing a world containing `WorldOption.sav`, Palsitter decodes its option values
 into the new profile's `PalWorldSettings.ini`, replaces `PublicPort`, `RESTAPIPort`, and
 the REST admin password with the newly allocated profile values, forces
-`RESTAPIEnabled=True`, and removes the active SAV override. A companion
+`RESTAPIEnabled=True`, and renames the active SAV override to
+`WorldOption.sav.disabled`. A companion
 `PalWorldSettings.ini` import also forces REST API access on while preserving its other
-settings. If the SAV cannot be decoded or parsed for any reason, it is removed only from
+settings. Its existing non-empty admin password is retained and synchronized to the
+profile; a missing or empty password is replaced with the new profile's random admin
+password. If the SAV cannot be decoded or parsed for any reason, it is removed only from
 the managed copy and the import continues with the companion server INI or the new
 profile's template settings. The source remains unchanged. If no SAV or companion
 server INI is present, the new profile's template settings remain in effect as the

@@ -39,6 +39,9 @@ def test_diagnose_and_recover_malformed_ini_with_timestamped_copy(tmp_path):
         "OptionSettings=(PublicPort=not-a-number,ServerName=broken\r\n"
     )
     path.write_text(malformed, encoding="utf-8", newline="")
+    sav_path = Path(profile.backup_source) / WORLD_ID / "WorldOption.sav"
+    sav_path.parent.mkdir(parents=True)
+    sav_path.write_bytes(b"legacy override")
 
     assert "parentheses" in diagnose_ini(path)
     result = recover_malformed_ini(
@@ -58,6 +61,10 @@ def test_diagnose_and_recover_malformed_ini_with_timestamped_copy(tmp_path):
     assert values["RESTAPIPort"] == 9124
     assert values["AdminPassword"] == "secret12"
     assert profile.world_settings["PublicPort"] == 9123
+    assert not sav_path.exists()
+    assert sav_path.with_name("WorldOption.sav.disabled").read_bytes() == (
+        b"legacy override"
+    )
 
 
 def test_recover_ini_requires_stopped_server_and_malformed_file(tmp_path):

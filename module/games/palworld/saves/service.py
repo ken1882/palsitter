@@ -12,6 +12,7 @@ from module.games.palworld.backup import BackupResult, BackupService
 from module.games.palworld.config import (
     DEDICATED_SERVER_NAME_RE,
     PalworldProfile,
+    generate_admin_password,
     server_config_dir_name,
     save_profile,
 )
@@ -225,11 +226,31 @@ def import_world_settings_ini(profile: PalworldProfile, source: str | Path) -> O
     target.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(source_path, target)
     from module.games.palworld.worldsettings.ini_codec import (
+        read_ini_option_settings,
         write_ini_option_settings,
     )
 
-    write_ini_option_settings(target, {"RESTAPIEnabled": True})
-    profile.world_settings["RESTAPIEnabled"] = True
+    imported_values = read_ini_option_settings(target)
+    imported_password = str(imported_values.get("AdminPassword") or "").strip()
+    profile.rest_password = (
+        imported_password or profile.rest_password or generate_admin_password()
+    )
+    write_ini_option_settings(
+        target,
+        {
+            "AdminPassword": profile.rest_password,
+            "RESTAPIEnabled": True,
+        },
+    )
+    from module.games.palworld.worldsettings.service import disable_world_option_sav
+
+    disable_world_option_sav(profile)
+    profile.world_settings.update(
+        {
+            "AdminPassword": profile.rest_password,
+            "RESTAPIEnabled": True,
+        }
+    )
     return target
 
 

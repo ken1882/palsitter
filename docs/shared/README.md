@@ -21,6 +21,7 @@ These rules belong to the multi-game application rather than one game integratio
 ## Features
 
 - [Game Modules](./features/game-modules.md)
+- [SteamCMD-Managed Games Without an API](./features/steamcmd-managed-games.md)
 - [Language / i18n](./features/i18n.md)
 - [File Browser](./features/file-browser.md)
 - [Pagination Table](./features/pagination-table.md)

@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 
 from module.config import Profile
+from module.games.palworld.config import ADMIN_PASSWORD_RE
 from module.worldsettings.ini_codec import (
     read_ini_option_settings,
     write_ini_option_settings,
@@ -114,8 +115,13 @@ def test_import_world_uses_staging_preserves_source_and_activates(tmp_path):
     assert list(Path(profile.backup_source).glob(".import-*.tmp")) == []
 
 
+@pytest.mark.parametrize(
+    "source_admin_password",
+    [None, "existing-secret"],
+    ids=["missing-password", "existing-password"],
+)
 def test_import_world_settings_ini_uses_windows_or_linux_server_relative_path(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, source_admin_password
 ):
     server_root = tmp_path / "source-server"
     level = server_root / "Pal" / "Saved" / "SaveGames" / "0" / WORLD_B / "Level.sav"
@@ -123,10 +129,10 @@ def test_import_world_settings_ini_uses_windows_or_linux_server_relative_path(
     level.write_bytes(b"level")
     linux_ini = server_root / "Pal" / "Saved" / "Config" / "LinuxServer" / "PalWorldSettings.ini"
     linux_ini.parent.mkdir(parents=True)
-    write_ini_option_settings(
-        linux_ini,
-        {"ServerName": "Imported server", "RESTAPIEnabled": False},
-    )
+    source_values = {"ServerName": "Imported server", "RESTAPIEnabled": False}
+    if source_admin_password is not None:
+        source_values["AdminPassword"] = source_admin_password
+    write_ini_option_settings(linux_ini, source_values)
     profile = _profile(tmp_path)
 
     monkeypatch.setattr("module.games.palworld.config.WINDOWS", False)
@@ -144,9 +150,17 @@ def test_import_world_settings_ini_uses_windows_or_linux_server_relative_path(
     )
     imported_values = read_ini_option_settings(target)
     assert imported_values["ServerName"] == "Imported server"
+    assert imported_values["AdminPassword"] == profile.rest_password
     assert imported_values["RESTAPIEnabled"] is True
+    if source_admin_password is None:
+        assert ADMIN_PASSWORD_RE.fullmatch(profile.rest_password)
+    else:
+        assert profile.rest_password == source_admin_password
+    assert profile.world_settings["AdminPassword"] == profile.rest_password
     assert profile.world_settings["RESTAPIEnabled"] is True
-    assert read_ini_option_settings(linux_ini)["RESTAPIEnabled"] is False
+    source_values = read_ini_option_settings(linux_ini)
+    assert source_values["RESTAPIEnabled"] is False
+    assert source_values.get("AdminPassword") == source_admin_password
 
 
 def test_import_world_settings_ini_keeps_profile_template_when_source_has_no_ini(

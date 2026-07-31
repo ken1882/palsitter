@@ -34,6 +34,7 @@ remain implementation specifications for development and testing.
 ## Index
 
 - [Shared specifications](./shared/README.md)
+- [SteamCMD-managed games without an API](./shared/features/steamcmd-managed-games.md)
 - [Palworld specifications](./games/palworld/README.md)
 - [Satisfactory specifications](./games/satisfactory/README.md)
 - [Windows Electron release](./shared/features/windows-electron-release.md)
