@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 from module.debug_log import debug_log_path, log_command_result
 from module.firewall import FirewallService
-from module.webui.auth import WebAuth
+from module.webui.auth import DESKTOP_SESSION_COOKIE, WebAuth
 from module.webui.global_audit import GlobalAuditEvent, GlobalAuditStore
 from module.webui.settings import (
     DEFAULT_BIND_ADDRESS,
@@ -117,6 +117,21 @@ def test_web_auth_audits_basic_success_and_failure(tmp_path, monkeypatch):
     events = GlobalAuditStore().load()
     assert [event.type for event in events] == ["web_login_failure", "web_login_success"]
     assert all(event.source_ip == "192.168.1.20" for event in events)
+
+
+def test_web_auth_accepts_valid_desktop_session_cookie_with_basic_auth_enabled():
+    token = "desktop-session-token"
+    auth = WebAuth(WebUISettings(auth_enabled=True), token)
+    request = SimpleNamespace(
+        remote_ip="192.168.1.20",
+        headers={},
+        cookies={DESKTOP_SESSION_COOKIE: SimpleNamespace(value=token)},
+    )
+
+    result = auth.authorize(request)
+
+    assert result.allowed is True
+    assert result.method == "desktop_token"
 
 
 def test_global_audit_is_monthly_and_deduplicated(tmp_path, monkeypatch):

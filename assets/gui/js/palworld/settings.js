@@ -107,7 +107,7 @@
     element.dataset.worldCategory = category;
     element.dataset.worldSearch = String(search || "").toLocaleLowerCase();
   };
-  world.configureNumeric = function ({ floatNames, intNames }) {
+  world.configureNumeric = function ({ floatNames, intNames, zeroMinNames }) {
     for (const name of floatNames || []) {
       const input = document.querySelector(`input[name="${CSS.escape(name)}"]`);
       if (input) { input.type = "number"; input.step = "0.1"; }
@@ -115,6 +115,10 @@
     for (const name of intNames || []) {
       const input = document.querySelector(`input[name="${CSS.escape(name)}"]`);
       if (input) input.step = "1";
+    }
+    for (const name of zeroMinNames || []) {
+      const input = document.querySelector(`input[name="${CSS.escape(name)}"]`);
+      if (input) input.min = "0";
     }
   };
   world.mount = function ({

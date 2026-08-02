@@ -194,4 +194,52 @@ WORLD_OPTION_FIELDS: list[WorldOptionField] = [
     _f("LogFormatType", "logging", "enum", "Text", "log_format_type", ("Text", "Json")),
 ]
 
+# These numeric options accept zero as a meaningful lower bound.  The set is
+# kept separate from the field definitions because it describes UI input
+# constraints, not the value's storage type or default.
+WORLD_OPTION_ZERO_MIN_KEYS = frozenset({
+    "DayTimeSpeedRate",
+    "NightTimeSpeedRate",
+    "ExpRate",
+    "PalCaptureRate",
+    "PalSpawnNumRate",
+    "WorkSpeedRate",
+    "PalDamageRateAttack",
+    "PalDamageRateDefense",
+    "PlayerDamageRateAttack",
+    "PlayerDamageRateDefense",
+    "BuildObjectDamageRate",
+    "BuildObjectDeteriorationDamageRate",
+    "PalStomachDecreaceRate",
+    "PalStaminaDecreaceRate",
+    "PalAutoHPRegeneRate",
+    "PalAutoHpRegeneRateInSleep",
+    "PlayerStomachDecreaceRate",
+    "PlayerStaminaDecreaceRate",
+    "PlayerAutoHPRegeneRate",
+    "PlayerAutoHpRegeneRateInSleep",
+    "BuildObjectHpRate",
+    "MaxBuildingLimitNum",
+    "CollectionDropRate",
+    "EnemyDropItemRate",
+    "CollectionObjectHpRate",
+    "CollectionObjectRespawnSpeedRate",
+    "DropItemMaxNum",
+    "DropItemAliveMaxHours",
+    "DropItemMaxNum_UNKO",
+    "EquipmentDurabilityDamageRate",
+    "ItemCorruptionMultiplier",
+    "ItemWeightRate",
+    "AdditionalDropItemNumWhenPlayerKillingInPvPMode",
+    "RespawnPenaltyDurationThreshold",
+    "RespawnPenaltyTimeScale",
+    "BlockRespawnTime",
+    "BaseCampMaxNum",
+    "BaseCampWorkerMaxNum",
+    "BaseCampMaxNumInGuild",
+    "GuildRejoinCooldownMinutes",
+    "PalEggDefaultHatchingTime",
+    "ChatPostLimitPerMinute",
+})
+
 WORLD_OPTION_FIELDS_BY_KEY: dict[str, WorldOptionField] = {f.key: f for f in WORLD_OPTION_FIELDS}

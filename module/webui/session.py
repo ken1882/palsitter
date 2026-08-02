@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import hmac
+import os
 import threading
 from collections.abc import Callable
 from contextlib import contextmanager
 from typing import Any
 
 from pywebio.session import info, local
+
+from module.webui.auth import DESKTOP_SESSION_COOKIE
 
 
 @dataclass
@@ -59,6 +63,17 @@ def page_context() -> PageContext | None:
 
 
 def is_local_browser_session() -> bool:
+    desktop_token = os.getenv("PALSITTER_DESKTOP_TOKEN", "")
+    request = getattr(info, "request", None)
+    headers = getattr(request, "headers", {})
+    supplied_token = str(headers.get("X-Palsitter-Desktop-Token", "") or "")
+    if not supplied_token:
+        cookies = getattr(request, "cookies", {})
+        cookie = cookies.get(DESKTOP_SESSION_COOKIE)
+        supplied_token = str(getattr(cookie, "value", cookie) or "")
+    if desktop_token and hmac.compare_digest(supplied_token, desktop_token):
+        return True
+
     host = str(getattr(info, "server_host", "") or "").strip().casefold()
     if host.startswith("["):
         host = host[1:].split("]", 1)[0]

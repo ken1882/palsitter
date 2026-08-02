@@ -595,11 +595,83 @@
   margin: .25rem 0 .5rem;
 }
 
+#pywebio-scope-mods_upload_controls .custom-file-label {
+  color: #d3d3d3;
+  background-color: #25282d;
+  border-color: #6c757d;
+}
+
+#pywebio-scope-mods_upload_controls .custom-file-label::after {
+  color: #d3d3d3;
+  background-color: #36393f;
+  border-left-color: #6c757d;
+}
+
+#pywebio-scope-mods_upload_controls .custom-file-input:focus ~ .custom-file-label {
+  color: #fff;
+  background-color: #2f3136;
+  border-color: #7a77bb;
+  box-shadow: 0 0 0 .2rem rgba(122, 119, 187, .25);
+}
+
+body.light-palsitter #pywebio-scope-mods_upload_controls .custom-file-label {
+  color: #2c2c2c;
+  background-color: #fff;
+  border-color: #adb5bd;
+}
+
+body.light-palsitter #pywebio-scope-mods_upload_controls .custom-file-label::after {
+  color: #2c2c2c;
+  background-color: #e9ecef;
+  border-left-color: #adb5bd;
+}
+
+#pywebio-scope-mods_upload_dialog table {
+  width: 100%;
+  margin: 0;
+  table-layout: auto;
+  color: #d3d3d3;
+  background: #202225;
+}
+
+#pywebio-scope-mods_upload_dialog table th {
+  padding: .55rem .7rem;
+  color: #d3d3d3;
+  background: #202225;
+  border-color: #495057;
+}
+
+#pywebio-scope-mods_upload_dialog table td {
+  padding: .5rem .7rem;
+  color: #d3d3d3;
+  background: #2f3136;
+  border-color: #495057;
+  vertical-align: middle;
+}
+
+body.light-palsitter #pywebio-scope-mods_upload_dialog table {
+  color: #2c2c2c;
+  background: #fff;
+}
+
+body.light-palsitter #pywebio-scope-mods_upload_dialog table th {
+  color: #2c2c2c;
+  background: #f1f3f5;
+  border-color: #ced4da;
+}
+
+body.light-palsitter #pywebio-scope-mods_upload_dialog table td {
+  color: #2c2c2c;
+  background: #fff;
+  border-color: #ced4da;
+}
+
 #pywebio-scope-backup_files,
 #pywebio-scope-builtin_backup_files,
 #pywebio-scope-managed_worlds,
 #pywebio-scope-lua_mods,
-#pywebio-scope-pak_mods {
+#pywebio-scope-pak_mods,
+#pywebio-scope-palschema_mods_content {
   width: 100%;
   max-width: 58rem;
   padding: 8px;
@@ -609,7 +681,8 @@
 #pywebio-scope-builtin_backup_files table,
 #pywebio-scope-managed_worlds table,
 #pywebio-scope-lua_mods table,
-#pywebio-scope-pak_mods table {
+#pywebio-scope-pak_mods table,
+#pywebio-scope-palschema_mods_content table {
   width: 100%;
   margin: 0;
   table-layout: auto;
@@ -637,7 +710,8 @@
 #pywebio-scope-builtin_backup_files table th,
 #pywebio-scope-managed_worlds table th,
 #pywebio-scope-lua_mods table th,
-#pywebio-scope-pak_mods table th {
+#pywebio-scope-pak_mods table th,
+#pywebio-scope-palschema_mods_content table th {
   padding: .55rem .7rem;
   color: #d3d3d3;
   background: #202225;
@@ -648,7 +722,8 @@
 #pywebio-scope-builtin_backup_files table td,
 #pywebio-scope-managed_worlds table td,
 #pywebio-scope-lua_mods table td,
-#pywebio-scope-pak_mods table td {
+#pywebio-scope-pak_mods table td,
+#pywebio-scope-palschema_mods_content table td {
   padding: .5rem .7rem;
   color: #d3d3d3;
   background: #2f3136;

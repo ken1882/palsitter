@@ -88,6 +88,19 @@ def test_pull_update_fetches_then_resets_to_fetched_revision(monkeypatch):
     ]
 
 
+def test_check_repository_skips_updates_outside_main(monkeypatch):
+    calls = []
+
+    def run_git(*args, **kwargs):
+        calls.append((args, kwargs))
+        return SimpleNamespace(returncode=0, stdout="feature/test\n")
+
+    monkeypatch.setattr(updater, "_run_git", run_git)
+
+    assert updater._check_repository() == (False, None)
+    assert calls == [(("branch", "--show-current"), {})]
+
+
 def test_pull_update_failure_does_not_report_success(monkeypatch):
     diagnostics = []
     monkeypatch.setattr(

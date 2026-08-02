@@ -8,7 +8,7 @@ from module.webui.i18n import t
 from module.webui.section_layout import SectionSpec, put_section_layout
 from module.webui.session import page_context, register_page_cleanup
 from module.webui.assets import client_call, put_asset_icon, put_asset_widget
-from module.games.palworld.worldsettings import WORLD_OPTION_CATEGORIES, WORLD_OPTION_FIELDS, diagnose_ini, load_world_settings, recover_malformed_ini, resolve_ini_path, save_world_settings
+from module.games.palworld.worldsettings import WORLD_OPTION_CATEGORIES, WORLD_OPTION_FIELDS, WORLD_OPTION_ZERO_MIN_KEYS, diagnose_ini, load_world_settings, recover_malformed_ini, resolve_ini_path, save_world_settings
 from module.games.palworld.worldsettings.ini_codec import coerce_integer
 
 def _clear_dirty_form_state(*args, **kwargs):
@@ -115,6 +115,7 @@ def render(name: str) -> None:
             "palworld.worldSettings.configureNumeric",
             floatNames=[_world_pin(field_.key) for field_ in WORLD_OPTION_FIELDS if field_.ftype == "float"],
             intNames=[_world_pin(field_.key) for field_ in WORLD_OPTION_FIELDS if field_.ftype == "int"],
+            zeroMinNames=[_world_pin(key) for key in WORLD_OPTION_ZERO_MIN_KEYS],
         )
         context = page_context()
         client_call(
@@ -400,12 +401,18 @@ def _validate_world_settings_form(values: dict) -> bool:
         if field_.ftype == "int":
             try:
                 values[field_.key] = coerce_integer(values.get(field_.key))
+                if field_.key in WORLD_OPTION_ZERO_MIN_KEYS and values[field_.key] < 0:
+                    _show_field_error(_world_pin(field_.key), t("validation.nonnegative_integer"))
+                    valid = False
             except (TypeError, ValueError):
                 _show_field_error(_world_pin(field_.key), t("validation.integer_required"))
                 valid = False
         elif field_.ftype == "float":
             try:
-                float(values.get(field_.key))
+                value = float(values.get(field_.key))
+                if field_.key in WORLD_OPTION_ZERO_MIN_KEYS and value < 0:
+                    _show_field_error(_world_pin(field_.key), t("validation.nonnegative_number"))
+                    valid = False
             except (TypeError, ValueError):
                 _show_field_error(_world_pin(field_.key), t("validation.number_required"))
                 valid = False

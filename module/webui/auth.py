@@ -11,6 +11,9 @@ from module.webui.global_audit import GlobalAuditEvent, GlobalAuditStore
 from module.webui.settings import WebUISettings, verify_password
 
 
+DESKTOP_SESSION_COOKIE = "palsitter_desktop_session"
+
+
 @dataclass(frozen=True)
 class AuthResult:
     allowed: bool
@@ -46,13 +49,16 @@ class WebAuth:
             pass
 
     def authorize(self, request: Any) -> AuthResult:
-        if not self.settings.auth_enabled:
-            return AuthResult(True, method="none")
         supplied_token = str(request.headers.get("X-Palsitter-Desktop-Token", ""))
+        if not supplied_token:
+            cookie = getattr(request, "cookies", {}).get(DESKTOP_SESSION_COOKIE)
+            supplied_token = str(getattr(cookie, "value", cookie) or "")
         if self.desktop_token and hmac.compare_digest(supplied_token, self.desktop_token):
             result = AuthResult(True, "desktop", "desktop_token")
             self._audit(request, result)
             return result
+        if not self.settings.auth_enabled:
+            return AuthResult(True, method="none")
 
         header = str(request.headers.get("Authorization", ""))
         username = ""
@@ -74,4 +80,4 @@ class WebAuth:
         return result
 
 
-__all__ = ["AuthResult", "WebAuth"]
+__all__ = ["AuthResult", "DESKTOP_SESSION_COOKIE", "WebAuth"]

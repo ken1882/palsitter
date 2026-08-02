@@ -10,8 +10,9 @@
 - Failed checks or updates display a red grow indicator and a Retry action.
 - A successful update displays a green grow indicator and `Update finished`, then opens
   the same restart confirmation popup used by Utils → Force restart.
-- Check Update configures `origin` as `https://github.com/ken1882/palsitter.git`, fetches
-  `origin/main`, and compares it with `HEAD`.
+- On the `main` branch, Check Update configures `origin` as
+  `https://github.com/ken1882/palsitter.git`, fetches `origin/main`, and compares it
+  with `HEAD`. Update checks and automatic update popups are skipped on other branches.
 - Updater Git operations read the public upstream without using inherited credential
   helpers or opening an interactive GitHub login prompt.
 - Failed fetch and pull operations display Git's stderr diagnostic in the updater.

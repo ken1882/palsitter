@@ -213,6 +213,46 @@ def test_status_lists_mods_and_manual_install_has_unknown_version(tmp_path, monk
     ]
 
 
+def test_status_lists_and_deletes_palschema_mods(tmp_path, monkeypatch):
+    profile = _installed_profile(tmp_path, monkeypatch)
+    win64 = fixed_palserver_dir("default") / "Pal" / "Binaries" / "Win64"
+    mods = win64 / "ue4ss" / "Mods"
+    (win64 / "ue4ss").mkdir(parents=True, exist_ok=True)
+    (win64 / "ue4ss" / "UE4SS.dll").write_bytes(b"ue4ss")
+    (mods / "PalSchema" / "dlls" / "main.dll").parent.mkdir(parents=True)
+    (mods / "PalSchema" / "dlls" / "main.dll").write_bytes(b"palschema")
+    schema_mod = mods / "PalSchema" / "mods" / "SchemaMod"
+    (schema_mod / "raw").mkdir(parents=True)
+    (schema_mod / "raw" / "schema.json").write_text("{}", encoding="utf-8")
+    service = UE4SSService(profile, platform_supported=True)
+
+    status = service.status()
+
+    assert status.palschema_dir == mods / "PalSchema" / "mods"
+    assert [(mod.name, mod.enabled) for mod in status.palschema_mods] == [
+        ("SchemaMod", True)
+    ]
+
+    disabled = service.set_palschema_enabled("SchemaMod", False)
+
+    assert (disabled.name, disabled.enabled) == ("SchemaMod", False)
+    assert not schema_mod.exists()
+    assert (
+        mods / "PalSchema" / "disabled-mods" / "SchemaMod" / "raw" / "schema.json"
+    ).is_file()
+    assert service.status().palschema_mods[0].enabled is False
+
+    enabled = service.set_palschema_enabled("SchemaMod", True)
+
+    assert (enabled.name, enabled.enabled) == ("SchemaMod", True)
+    assert schema_mod.is_dir()
+
+    service.delete_palschema("SchemaMod")
+
+    assert not schema_mod.exists()
+    assert service.status().palschema_mods == ()
+
+
 def test_lua_state_prefers_enabled_marker_and_toggle_updates_configs(tmp_path, monkeypatch):
     profile = _installed_profile(tmp_path, monkeypatch)
     win64 = fixed_palserver_dir("default") / "Pal" / "Binaries" / "Win64"
@@ -267,7 +307,7 @@ def test_lua_delete_protects_default_ue4ss_mods(tmp_path, monkeypatch):
 
     listed = {mod.name: mod for mod in service.status().lua_mods}
     assert listed["UserMod"].deletable is True
-    assert listed["Keybinds"].deletable is False
+    assert "Keybinds" not in listed
     with pytest.raises(PermissionError):
         service.delete_lua("Keybinds")
     service.delete_lua("UserMod")

@@ -43,6 +43,7 @@ from module.games.palworld.saves import (
 )
 from module.games.palworld.server.agent import agent_server_is_running, stop_idle_agent
 from module.webui.assets import client_call, put_asset_widget
+from module.webui.operation_progress import open_operation_progress, render_operation_progress
 from module.webui.i18n import t
 from module.webui.section_layout import SectionSpec, put_section_layout
 from module.webui.session import page_context, run_if_current
@@ -755,37 +756,9 @@ def _migration_progress_label(phase: str, filename: str | None) -> str:
 def _render_migration_progress(
     events: list[tuple[str, str | None]], *, complete: bool = False
 ) -> None:
-    _render_operation_progress(
+    render_operation_progress(
         "tools_migration_progress", events, _migration_progress_label, complete=complete
     )
-
-
-def _render_operation_progress(
-    scope: str,
-    events: list[tuple[str, str | None]],
-    label,
-    *,
-    complete: bool = False,
-) -> None:
-    with use_scope(scope, clear=True):
-        for index, (phase, filename) in enumerate(events):
-            finished = complete or index < len(events) - 1
-            put_row(
-                [
-                    put_text("✓" if finished else ""),
-                    put_loading(shape="border", color="primary") if not finished else None,
-                    put_text(label(phase, filename)),
-                ],
-                size="auto auto 1fr",
-            )
-
-
-def _open_operation_progress(title: str, scope: str, starting: str) -> None:
-    with popup(title, closable=False, implicit_close=False):
-        put_scope(
-            scope,
-            [put_text(starting)],
-        )
 
 
 def _open_migration_progress() -> None:
@@ -921,7 +894,7 @@ def _name_cache_progress_label(phase: str, filename: str | None) -> str:
 def _build_name_cache(name: str) -> None:
     context = page_context()
     close_popup()
-    _open_operation_progress(
+    open_operation_progress(
         t("tools.name_cache_progress_title"),
         "tools_name_cache_progress",
         t("tools.name_cache_progress_starting"),
@@ -932,7 +905,7 @@ def _build_name_cache(name: str) -> None:
         progress_events.append((phase, filename))
         run_if_current(
             context,
-            lambda: _render_operation_progress(
+            lambda: render_operation_progress(
                 "tools_name_cache_progress",
                 progress_events,
                 _name_cache_progress_label,

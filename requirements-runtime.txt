@@ -2,6 +2,7 @@
 palooz @ git+https://github.com/deafdudecomputers/PalworldSaveTools.git@v2.1.9#subdirectory=src/palsav/palooz
 palsav-flex @ git+https://github.com/deafdudecomputers/PalworldSaveTools.git@v2.1.9#subdirectory=src/palsav
 psutil==7.2.2
+py7zr==1.1.3
 pywebio==1.8.4
 pywinpty>=2.0; sys_platform == "win32"
 requests==2.34.2

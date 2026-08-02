@@ -11,7 +11,7 @@ from pywebio.platform.tornado import page, set_ioloop, webio_handler
 from pywebio.session import Session
 from pywebio.utils import STATIC_PATH, parse_file_size
 
-from module.webui.auth import WebAuth
+from module.webui.auth import DESKTOP_SESSION_COOKIE, WebAuth
 from module.webui.settings import DEFAULT_BIND_ADDRESS
 
 
@@ -33,7 +33,15 @@ def run_server(
 
     class AuthenticatedWebIOHandler(base_handler):
         def prepare(self) -> None:
-            if owner.authorize(self.request).allowed:
+            result = owner.authorize(self.request)
+            if result.method == "desktop_token":
+                self.set_cookie(
+                    DESKTOP_SESSION_COOKIE,
+                    owner.desktop_token,
+                    httponly=True,
+                    samesite="Strict",
+                )
+            if result.allowed:
                 return
             self.set_status(401)
             self.set_header("WWW-Authenticate", 'Basic realm="Palsitter"')
