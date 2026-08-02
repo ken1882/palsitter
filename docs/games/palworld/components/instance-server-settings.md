@@ -37,8 +37,8 @@ embeds the profile form directly in the content area (no modal).
 - The SteamCMD row is not an editable path. It checks
   `profile/<name>/steamcmd/steamcmd.exe` on Windows and
   `profile/<name>/steamcmd/steamcmd` on Linux. If present, `Show` opens its folder with
-  the OS file explorer when the browser is connected through localhost; otherwise the
-  `Show` action is hidden. Installation, update, and
+  the OS file explorer when the browser is connected through localhost or the trusted
+  desktop executable session; otherwise the `Show` action is hidden. Installation, update, and
   Validate/Repair actions live in Overview's Operations card and follow
   [Installation & Updates](../features/installation-and-updates.md).
 - Every field label has a small circular `[i]` help icon (`.field-help`). Hovering or

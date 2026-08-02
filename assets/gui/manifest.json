@@ -21,6 +21,7 @@
     "gui/js/palworld/settings.js",
     "gui/js/palworld/overview.js",
     "gui/js/palworld/players.js",
+    "gui/js/palworld/mods_upload.js",
     "gui/js/palworld/map.js"
   ],
   "modules": {

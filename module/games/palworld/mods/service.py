@@ -113,8 +113,10 @@ class ModsStatus:
     ue4ss_layout: str | None
     lua_mods: tuple[InstalledMod, ...]
     pak_mods: tuple[InstalledMod, ...]
+    palschema_mods: tuple[InstalledMod, ...]
     lua_dir: Path | None
     pak_dir: Path | None
+    palschema_dir: Path | None
 
 
 class UE4SSService:
@@ -157,6 +159,7 @@ class UE4SSService:
         installed = layout is not None
         lua_dir = self._mods_dir(layout) if installed else None
         pak_dir = self.root / "Pal" / "Content" / "Paks" if server_installed else None
+        palschema_dir = lua_dir / "PalSchema" / "mods" if lua_dir is not None else None
         supported = self.platform_supported and server_installed
         reason = None
         reason_key = None
@@ -180,8 +183,10 @@ class UE4SSService:
             ue4ss_layout=layout,
             lua_mods=self._list_lua_mods(lua_dir),
             pak_mods=self._list_pak_mods(pak_dir),
+            palschema_mods=self._list_palschema_mods(palschema_dir),
             lua_dir=lua_dir,
             pak_dir=pak_dir,
+            palschema_dir=palschema_dir,
         )
 
     def log_path(self) -> Path | None:
@@ -254,6 +259,28 @@ class UE4SSService:
 
     def delete_pak(self, name: str) -> None:
         self._resolve_pak_path(name).unlink()
+
+    def delete_palschema(self, name: str) -> None:
+        target = self._resolve_palschema_path(name)
+        shutil.rmtree(target)
+
+    def set_palschema_enabled(self, name: str, enabled: bool) -> InstalledMod:
+        layout = self._detect_layout(self._read_marker().get("layout"))
+        if layout is None:
+            raise RuntimeError("UE4SS is not installed")
+        normalized = self._validate_palschema_name(name)
+        schema_root = self._mods_dir(layout) / "PalSchema"
+        active = schema_root / "mods" / normalized
+        disabled = schema_root / "disabled-mods" / normalized
+        source = disabled if enabled else active
+        destination = active if enabled else disabled
+        if not source.is_dir() or source.is_symlink():
+            raise FileNotFoundError(f"PalSchema mod not found: {normalized}")
+        if destination.exists():
+            raise FileExistsError(f"PalSchema mod already exists: {normalized}")
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(source), str(destination))
+        return InstalledMod(normalized, bool(enabled))
 
     def set_lua_enabled(self, name: str, enabled: bool) -> InstalledMod:
         self._ensure_manageable()
@@ -399,10 +426,14 @@ class UE4SSService:
                 entry.name,
                 enabled=(entry / "enabled.txt").exists()
                 or flags.get(entry.name.casefold(), False),
-                deletable=not self._is_default_lua_mod(entry.name),
             )
             for entry in directory.iterdir()
-            if entry.is_dir() and not entry.is_symlink() and entry.name.casefold() != "shared"
+            if (
+                entry.is_dir()
+                and not entry.is_symlink()
+                and entry.name.casefold() != "shared"
+                and not self._is_default_lua_mod(entry.name)
+            )
         ]
         return tuple(sorted(mods, key=lambda item: item.name.casefold()))
 
@@ -524,6 +555,43 @@ class UE4SSService:
                         )
                     )
         return tuple(sorted(mods, key=lambda item: item.name.casefold()))
+
+    def _list_palschema_mods(self, directory: Path | None) -> tuple[InstalledMod, ...]:
+        if directory is None or not directory.is_dir():
+            return ()
+        mods = [
+            InstalledMod(entry.name)
+            for entry in directory.iterdir()
+            if entry.is_dir() and not entry.is_symlink()
+        ]
+        disabled = directory.parent / "disabled-mods"
+        if disabled.is_dir():
+            mods.extend(
+                InstalledMod(entry.name, enabled=False)
+                for entry in disabled.iterdir()
+                if entry.is_dir() and not entry.is_symlink()
+            )
+        return tuple(sorted(mods, key=lambda item: item.name.casefold()))
+
+    def _resolve_palschema_path(self, name: str) -> Path:
+        layout = self._detect_layout(self._read_marker().get("layout"))
+        if layout is None:
+            raise RuntimeError("UE4SS is not installed")
+        normalized = self._validate_palschema_name(name)
+        schema_root = self._mods_dir(layout) / "PalSchema"
+        target = schema_root / "mods" / normalized
+        if not target.is_dir() or target.is_symlink():
+            target = schema_root / "disabled-mods" / normalized
+        if not target.is_dir() or target.is_symlink():
+            raise FileNotFoundError(f"PalSchema mod not found: {normalized}")
+        return target
+
+    @staticmethod
+    def _validate_palschema_name(name: str) -> str:
+        normalized = str(name).replace("\\", "/").strip("/")
+        if not normalized or "/" in normalized or normalized in (".", ".."):
+            raise ValueError(f"Invalid PalSchema mod path: {name}")
+        return normalized
 
     def _resolve_pak_path(self, name: str) -> Path:
         pak_dir = self.root / "Pal" / "Content" / "Paks"

@@ -394,6 +394,7 @@ def _gui_page(
     seed_profile=True,
     bind_host="127.0.0.1",
     connect_host="127.0.0.1",
+    extra_http_headers=None,
 ):
     pytest.importorskip("playwright.sync_api")
     from playwright.sync_api import sync_playwright
@@ -441,6 +442,7 @@ def _gui_page(
             page = browser.new_page(
                 viewport={"width": 1400, "height": 900},
                 locale=browser_locale,
+                extra_http_headers=extra_http_headers,
             )
             page_errors = []
             failed_assets = []
@@ -632,6 +634,34 @@ def test_folder_actions_are_hidden_for_remote_browser_sessions(tmp_path, monkeyp
         backups.wait_for(timeout=5000)
         assert backups.get_by_role("button", name="Open built-in backup folder", exact=True).count() == 0
         assert backups.get_by_role("button", name="Open backup folder", exact=True).count() == 0
+
+
+@pytest.mark.playwright
+def test_folder_actions_are_available_for_desktop_session_on_nonlocalhost_address(
+    tmp_path, monkeypatch
+):
+    token = "desktop-session-token"
+    with _gui_page(
+        tmp_path,
+        monkeypatch,
+        bind_host="127.0.0.2",
+        connect_host="127.0.0.2",
+        extra_env={
+            "PALSITTER_DESKTOP_TOKEN": token,
+            "PALSITTER_FAKE_OPEN_FOLDER_LOG": str(tmp_path / "opened-folder.txt"),
+        },
+        extra_http_headers={"X-Palsitter-Desktop-Token": token},
+    ) as (page, _):
+        page.locator("#pywebio-scope-aside").get_by_text("default", exact=True).click()
+        scheduler = page.locator("#pywebio-scope-scheduler_panel")
+        open_folder = scheduler.get_by_role(
+            "button", name="Open PalServer folder", exact=True
+        )
+        open_folder.wait_for(timeout=5000)
+        open_folder.click()
+        page.get_by_text("Please start and install the server once", exact=True).wait_for(
+            timeout=5000
+        )
 
 
 @pytest.mark.playwright
@@ -849,6 +879,9 @@ def test_updater_page_checks_for_updates(tmp_path, monkeypatch):
         "\n".join(
             [
                 f'@echo %* >> "{git_calls}"',
+                '@echo %* | %SystemRoot%\\System32\\findstr.exe /c:"branch --show-current" > nul',
+                '@if not errorlevel 1 @echo main',
+                '@if not errorlevel 1 @exit /b 0',
                 '@if "%1"=="log" @echo abc1234---Tester---2026-07-09 12:00:00 +0800---test commit',
                 '@if "%1"=="log" @exit /b 0',
                 '@if "%1"=="fetch" @ping 127.0.0.1 -n 2 > nul',
@@ -900,6 +933,9 @@ def test_automatic_update_check_shows_clickable_toast(tmp_path, monkeypatch):
         "\n".join(
             [
                 f'@echo %* >> "{git_calls}"',
+                '@echo %* | %SystemRoot%\\System32\\findstr.exe /c:"branch --show-current" > nul',
+                '@if not errorlevel 1 @echo main',
+                '@if not errorlevel 1 @exit /b 0',
                 '@echo 1',
                 '@exit /b 0',
             ]
@@ -923,6 +959,45 @@ def test_automatic_update_check_shows_clickable_toast(tmp_path, monkeypatch):
         notice.wait_for(timeout=10000)
         page.locator(".toastify").click()
         page.get_by_text("New version available", exact=True).wait_for(timeout=10000)
+
+
+@pytest.mark.playwright
+def test_automatic_update_check_skips_popup_outside_main(tmp_path, monkeypatch):
+    settings_dir = tmp_path / "config" / "webui"
+    settings_dir.mkdir(parents=True)
+    (settings_dir / "settings.json").write_text(
+        json.dumps({"auto_update": True}), encoding="utf-8"
+    )
+    mock_git = tmp_path / "git-mock.cmd"
+    git_calls = tmp_path / "git-calls.txt"
+    mock_git.write_text(
+        "\n".join(
+            [
+                f'@echo %* >> "{git_calls}"',
+                '@echo feature/test',
+                '@exit /b 0',
+            ]
+        ),
+        encoding="ascii",
+    )
+
+    with _gui_page(
+        tmp_path,
+        monkeypatch,
+        preferred_language=None,
+        extra_env={"PALSITTER_GIT": str(mock_git)},
+    ) as (page, _):
+        page.locator("#pywebio-scope-menu").get_by_text("Home").wait_for(timeout=5000)
+        deadline = time.time() + 10
+        while not git_calls.exists() and time.time() < deadline:
+            time.sleep(0.1)
+        assert git_calls.exists()
+        page.wait_for_timeout(500)
+
+        calls = git_calls.read_text(encoding="ascii")
+        assert "branch --show-current" in calls
+        assert "fetch origin main" not in calls
+        assert page.locator(".toastify").count() == 0
 
 
 @pytest.mark.playwright
@@ -4898,6 +4973,7 @@ def test_world_settings_numeric_fields_have_working_spinner_step(tmp_path, monke
         day_rate = page.locator('input[name="world_DayTimeSpeedRate"]')
         assert day_rate.get_attribute("type") == "number"
         assert day_rate.get_attribute("step") == "0.1"
+        assert day_rate.get_attribute("min") == "0"
         day_rate.click()
         day_rate.press("ArrowUp")
         assert day_rate.input_value() == "1.1"
@@ -4905,9 +4981,16 @@ def test_world_settings_numeric_fields_have_working_spinner_step(tmp_path, monke
         base_camp = page.locator('input[name="world_BaseCampMaxNum"]')
         assert base_camp.get_attribute("type") == "number"
         assert base_camp.get_attribute("step") == "1"
+        assert base_camp.get_attribute("min") == "0"
         base_camp.click()
         base_camp.press("ArrowUp")
         assert base_camp.input_value() == "129"
+
+        cull_distance = page.locator('input[name="world_ServerReplicatePawnCullDistance"]')
+        assert cull_distance.get_attribute("min") is None
+
+        chat_limit = page.locator('input[name="world_ChatPostLimitPerMinute"]')
+        assert chat_limit.get_attribute("min") == "0"
 
         page.locator('input[name="world_RESTAPIPort"]').fill("9124")
         page.locator('input[name="world_AdminPassword"]').fill("new-secret")
@@ -4975,6 +5058,12 @@ def test_world_settings_validation_and_unsaved_save_leave(tmp_path, monkeypatch)
         page.get_by_text("Fix the highlighted fields first.", exact=True).wait_for(timeout=5000)
         page.get_by_text("Enter a valid number.", exact=True).wait_for(timeout=5000)
         assert "field-invalid" in day_rate.get_attribute("class")
+
+        day_rate.fill("-1")
+        page.locator("#pywebio-scope-world_settings_actions").get_by_role(
+            "button", name="Save", exact=True
+        ).click()
+        page.get_by_text("Enter zero or a positive number.", exact=True).wait_for(timeout=5000)
 
         day_rate.fill("1.7")
         page.locator('input[name="world_AdminPassword"]').fill("initial-secret")
@@ -5896,7 +5985,12 @@ def test_mods_page_hides_ue4ss_components_on_linux(tmp_path, monkeypatch):
         assert panel.get_by_text("Lua mods (UE4SS)", exact=True).count() == 0
         assert panel.locator(
             ".section-layout-navigation-button"
-        ).all_inner_texts() == ["UE4SS mod loader", "Pak mods"]
+        ).all_inner_texts() == [
+            "Upload mod",
+            "UE4SS mod loader",
+            "Pak mods",
+            "PalSchema mods",
+        ]
         page.locator("#pywebio-scope-pak_mods").get_by_text(
             "Pak mods", exact=True
         ).wait_for(timeout=5000)
@@ -5942,9 +6036,11 @@ def test_mods_page_installs_lists_opens_folders_and_removes_ue4ss(tmp_path, monk
             assert panel.locator(
                 ".section-layout-navigation-button"
             ).all_inner_texts() == [
+                "Upload mod",
                 "UE4SS mod loader",
                 "Lua mods (UE4SS)",
                 "Pak mods",
+                "PalSchema mods",
             ]
 
             assert release_select.locator("option").count() == 1
@@ -5952,7 +6048,7 @@ def test_mods_page_installs_lists_opens_folders_and_removes_ue4ss(tmp_path, monk
                 "experimental-palworld"
             )
             assert panel.get_by_text("PalDefender", exact=False).count() == 0
-            assert panel.get_by_text(re.compile("upload", re.IGNORECASE)).count() == 0
+            assert panel.get_by_text("Upload mod", exact=True).count() >= 1
             panel.get_by_text("Not installed", exact=True).wait_for(timeout=5000)
             assert panel.get_by_text("ExamplePak.pak", exact=True).count() == 1
             assert panel.get_by_text("LogicMods/ExampleBlueprint.pak", exact=True).count() == 1
@@ -6043,14 +6139,7 @@ def test_mods_page_installs_lists_opens_folders_and_removes_ue4ss(tmp_path, monk
             while enabled_marker.exists() and time.time() < deadline:
                 time.sleep(0.05)
             assert not enabled_marker.exists()
-            protected_delete = panel.get_by_role(
-                "button", name="Delete Keybinds", exact=True
-            )
-            assert protected_delete.is_disabled()
-            assert protected_delete.inner_text() == "×"
-            assert protected_delete.get_attribute("title") == (
-                "Built-in UE4SS mods cannot be deleted."
-            )
+            assert panel.get_by_text("Keybinds", exact=True).count() == 0
             panel.get_by_role("button", name="Delete ExampleLua", exact=True).click()
             delete_modal = page.locator(".modal.show")
             delete_modal.get_by_text(
@@ -6109,6 +6198,249 @@ def test_mods_page_installs_lists_opens_folders_and_removes_ue4ss(tmp_path, monk
             assert pak_file.exists()
 
     assert calls == ["/download/UE4SS-Palworld.zip"]
+
+
+@pytest.mark.playwright
+def test_mods_page_lists_toggles_and_deletes_palschema_mods(tmp_path, monkeypatch):
+    _prepare_fixed_palserver_python(tmp_path)
+    root = _fixed_palserver_dir(tmp_path)
+    win64 = root / "Pal" / "Binaries" / "Win64"
+    ue4ss_dir = win64 / "ue4ss"
+    mods_dir = ue4ss_dir / "Mods"
+    (ue4ss_dir / "UE4SS.dll").parent.mkdir(parents=True, exist_ok=True)
+    (ue4ss_dir / "UE4SS.dll").write_bytes(b"ue4ss")
+    schema_mod = mods_dir / "PalSchema" / "mods" / "SchemaMod"
+    (schema_mod / "raw").mkdir(parents=True)
+    (schema_mod / "raw" / "schema.json").write_text("{}", encoding="utf-8")
+
+    with _gui_page(tmp_path, monkeypatch) as (page, _):
+        page.locator("#pywebio-scope-aside").get_by_text("default", exact=True).click()
+        page.locator("#pywebio-scope-menu").get_by_text("Mods", exact=True).click()
+        panel = page.locator("#pywebio-scope-mods_panel")
+        panel.locator(".section-layout-navigation-button").last.wait_for(timeout=5000)
+        assert panel.locator(".section-layout-navigation-button").all_inner_texts() == [
+            "Upload mod",
+            "UE4SS mod loader",
+            "Lua mods (UE4SS)",
+            "Pak mods",
+            "PalSchema mods",
+        ]
+        schema_panel = page.locator("#pywebio-scope-palschema_mods_content")
+        schema_panel.get_by_text("SchemaMod", exact=True).wait_for(timeout=5000)
+        checkbox = schema_panel.get_by_role(
+            "checkbox", name="Enabled SchemaMod", exact=True
+        )
+        assert checkbox.is_checked()
+
+        checkbox.click()
+        schema_panel.get_by_text("SchemaMod", exact=True).wait_for(timeout=5000)
+        assert not checkbox.is_checked()
+        assert not schema_mod.exists()
+        assert (mods_dir / "PalSchema" / "disabled-mods" / "SchemaMod").is_dir()
+
+        schema_panel.get_by_role(
+            "checkbox", name="Enabled SchemaMod", exact=True
+        ).click()
+        deadline = time.time() + 5
+        while not schema_mod.is_dir() and time.time() < deadline:
+            time.sleep(0.05)
+        assert schema_mod.is_dir()
+
+        schema_panel.get_by_role("button", name="Delete SchemaMod", exact=True).click()
+        delete_modal = page.locator(".modal.show")
+        delete_modal.get_by_text(
+            "Delete SchemaMod? This cannot be undone.", exact=True
+        ).wait_for(timeout=5000)
+        delete_modal.get_by_role("button", name="Delete", exact=True).click()
+        schema_panel.get_by_text("SchemaMod", exact=True).wait_for(
+            state="detached", timeout=5000
+        )
+        assert not schema_mod.exists()
+
+
+@pytest.mark.playwright
+def test_mod_upload_processes_files_and_folder_with_choices_conflicts_and_cancel(
+    tmp_path, monkeypatch
+):
+    _prepare_fixed_palserver_python(tmp_path)
+    root = _fixed_palserver_dir(tmp_path)
+    folder = tmp_path / "FolderSelection"
+    folder.mkdir()
+    (folder / "FolderPak.pak").write_bytes(b"folder-pak")
+
+    with _gui_page(tmp_path, monkeypatch) as (page, _):
+        page.locator("#pywebio-scope-aside").get_by_text("default", exact=True).click()
+        page.locator("#pywebio-scope-menu").get_by_text("Mods", exact=True).click()
+        upload = page.locator("#pywebio-scope-mods_upload")
+        upload.get_by_text("Upload mod", exact=True).wait_for(timeout=5000)
+        assert page.locator("#pywebio-scope-mods_panel_header .alert-warning").count() == 0
+        file_input = upload.locator('input[name="mods_upload_files"]')
+        folder_input = upload.locator('input[name="mods_upload_folder"]')
+        file_input.wait_for(timeout=5000)
+        page.wait_for_function(
+            "document.querySelector('input[name=mods_upload_folder]')?.hasAttribute('webkitdirectory')"
+        )
+        file_input.set_input_files(
+            [
+                {
+                    "name": "Unsupported.rar",
+                    "mimeType": "application/octet-stream",
+                    "buffer": b"unsupported",
+                },
+                {
+                    "name": "BrowserPak.pak",
+                    "mimeType": "application/octet-stream",
+                    "buffer": b"browser-pak",
+                },
+            ]
+        )
+        folder_input.set_input_files(str(folder))
+        upload.get_by_role("button", name="Upload", exact=True).click()
+
+        modal = page.locator(".modal.show")
+        modal.get_by_text("Upload mod", exact=True).wait_for(timeout=5000)
+        page.keyboard.press("Escape")
+        assert modal.is_visible()
+        assert modal.locator("button.close").count() == 0
+
+        modal.get_by_text("Choose where to install Pak mod BrowserPak.", exact=True).wait_for(
+            timeout=10000
+        )
+        modal.get_by_role("button", name="LogicMods", exact=True).click()
+        modal.get_by_text("Choose where to install Pak mod FolderPak.", exact=True).wait_for(
+            timeout=10000
+        )
+        modal.get_by_role("button", name="~mods", exact=True).click()
+        modal.get_by_text(
+            "Upload finished. Restart the server for installed mods to take effect.",
+            exact=True,
+        ).wait_for(timeout=10000)
+        result_table = modal.locator("#pywebio-scope-mods_upload_dialog table")
+        result_table.wait_for(timeout=5000)
+        assert result_table.evaluate(
+            "element => getComputedStyle(element.querySelector('td')).backgroundColor"
+        ) == "rgb(47, 49, 54)"
+        assert modal.get_by_text("Unsupported format", exact=False).count() == 1
+        assert (root / "Pal" / "Content" / "Paks" / "LogicMods" / "BrowserPak.pak").read_bytes() == b"browser-pak"
+        assert (root / "Pal" / "Content" / "Paks" / "~mods" / "FolderPak.pak").read_bytes() == b"folder-pak"
+        assert file_input.input_value() == ""
+        assert folder_input.input_value() == ""
+        modal.get_by_role("button", name="Close", exact=True).click()
+        modal.wait_for(state="detached", timeout=5000)
+
+        file_input.set_input_files(
+            {
+                "name": "BrowserPak.pak",
+                "mimeType": "application/octet-stream",
+                "buffer": b"replacement",
+            }
+        )
+        upload.get_by_role("button", name="Upload", exact=True).click()
+        modal = page.locator(".modal.show")
+        modal.wait_for(timeout=5000)
+        modal.get_by_text("Choose where to install Pak mod BrowserPak.", exact=True).wait_for(
+            timeout=10000
+        )
+        modal.get_by_role("button", name="LogicMods", exact=True).click()
+        modal.get_by_text(
+            "Mod with an existing name was detected and will be overwritten. Back up "
+            "your configuration elsewhere first, if any.",
+            exact=True,
+        ).wait_for(timeout=10000)
+        modal.get_by_role("button", name="Continue and overwrite", exact=True).click()
+        modal.get_by_text(
+            "Upload finished. Restart the server for installed mods to take effect.",
+            exact=True,
+        ).wait_for(timeout=10000)
+        assert (root / "Pal" / "Content" / "Paks" / "LogicMods" / "BrowserPak.pak").read_bytes() == b"replacement"
+        modal.get_by_role("button", name="Close", exact=True).click()
+        modal.wait_for(state="detached", timeout=5000)
+
+        file_input.set_input_files(
+            {
+                "name": "CancelPak.pak",
+                "mimeType": "application/octet-stream",
+                "buffer": b"cancelled",
+            }
+        )
+        upload.get_by_role("button", name="Upload", exact=True).click()
+        modal = page.locator(".modal.show")
+        modal.get_by_text("Choose where to install Pak mod CancelPak.", exact=True).wait_for(
+            timeout=10000
+        )
+        modal.get_by_role("button", name="Cancel", exact=True).click()
+        modal.get_by_text("Skipped", exact=True).wait_for(timeout=10000)
+        assert not (root / "Pal" / "Content" / "Paks" / "CancelPak.pak").exists()
+
+
+@pytest.mark.playwright
+def test_mod_upload_cancels_and_cleans_up_after_navigation(tmp_path, monkeypatch):
+    _prepare_fixed_palserver_python(tmp_path)
+    root = _fixed_palserver_dir(tmp_path)
+
+    with _gui_page(
+        tmp_path,
+        monkeypatch,
+        extra_env={"PALSITTER_TEST_MOD_UPLOAD_DELAY": "2"},
+    ) as (page, _):
+        page.locator("#pywebio-scope-aside").get_by_text("default", exact=True).click()
+        menu = page.locator("#pywebio-scope-menu")
+        menu.get_by_text("Mods", exact=True).click()
+        upload = page.locator("#pywebio-scope-mods_upload")
+        upload.locator('input[name="mods_upload_files"]').set_input_files(
+            {
+                "name": "DelayedPak.pak",
+                "mimeType": "application/octet-stream",
+                "buffer": b"delayed",
+            }
+        )
+        upload.get_by_role("button", name="Upload", exact=True).click()
+        page.locator(".modal.show").get_by_text("Inspecting 1/1 DelayedPak.pak", exact=True).wait_for(
+            timeout=5000
+        )
+
+        menu.get_by_text("Overview", exact=True).evaluate("element => element.click()")
+
+        page.locator("#pywebio-scope-overview").wait_for(timeout=5000)
+        page.wait_for_timeout(2500)
+        assert page.locator(".modal.show").count() == 0
+        assert page.get_by_text("DelayedPak.pak", exact=True).count() == 0
+        assert not (root / "Pal" / "Content" / "Paks" / "DelayedPak.pak").exists()
+        assert list(root.glob(".palsitter-upload-*")) == []
+
+
+@pytest.mark.playwright
+def test_mod_upload_warns_when_palschema_is_not_installed(tmp_path, monkeypatch):
+    _prepare_fixed_palserver_python(tmp_path)
+    root = _fixed_palserver_dir(tmp_path)
+    ue4ss_dir = root / "Pal" / "Binaries" / "Win64" / "ue4ss"
+    ue4ss_dir.mkdir(parents=True)
+    (ue4ss_dir / "UE4SS.dll").write_bytes(b"loader")
+    archive_buffer = io.BytesIO()
+    with zipfile.ZipFile(archive_buffer, "w") as archive:
+        archive.writestr("SchemaMod/raw/schema.json", b"{}")
+
+    with _gui_page(tmp_path, monkeypatch) as (page, _):
+        page.locator("#pywebio-scope-aside").get_by_text("default", exact=True).click()
+        page.locator("#pywebio-scope-menu").get_by_text("Mods", exact=True).click()
+        upload = page.locator("#pywebio-scope-mods_upload")
+        upload.locator('input[name="mods_upload_files"]').set_input_files(
+            {
+                "name": "SchemaMod.zip",
+                "mimeType": "application/zip",
+                "buffer": archive_buffer.getvalue(),
+            }
+        )
+        upload.get_by_role("button", name="Upload", exact=True).click()
+        modal = page.locator(".modal.show")
+        modal.get_by_role("alert").get_by_text(
+            "PalSchema is not installed. Install PalSchema before uploading PalSchema mods.",
+            exact=True,
+        ).wait_for(timeout=10000)
+        modal.get_by_text("Failed", exact=True).wait_for(timeout=10000)
+        assert not (
+            ue4ss_dir / "Mods" / "PalSchema" / "mods" / "SchemaMod"
+        ).exists()
 
 
 @pytest.mark.playwright

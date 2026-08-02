@@ -120,6 +120,15 @@ def _run_git(*args: str, timeout: float = 10) -> subprocess.CompletedProcess:
 def _git_diagnostic(result: subprocess.CompletedProcess) -> str:
     return (result.stderr or "").strip() or f"Git exited with status {result.returncode}"
 
+def _on_updater_branch() -> tuple[bool, str | None]:
+    try:
+        result = _run_git("branch", "--show-current")
+    except (OSError, subprocess.SubprocessError) as exc:
+        return False, str(exc)
+    if result.returncode != 0:
+        return False, _git_diagnostic(result)
+    return (result.stdout or "").strip() == UPDATER_BRANCH, None
+
 def _render_updater_tables() -> None:
     with use_scope("updater_info", clear=True):
         put_table(
@@ -196,6 +205,9 @@ def _render_updater_state(state, *, error: str | None = None) -> None:
 
 def _check_repository() -> tuple[bool, str | None]:
     try:
+        on_updater_branch, diagnostic = _on_updater_branch()
+        if not on_updater_branch:
+            return False, diagnostic
         configured = _run_git("remote", "set-url", "origin", UPDATER_REMOTE)
         if configured.returncode != 0:
             return False, _git_diagnostic(configured)

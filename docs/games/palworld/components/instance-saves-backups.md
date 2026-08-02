@@ -34,8 +34,8 @@ work.
   are fixed by the active-world view.
 - The built-in backup heading has a folder icon that opens the active world's
   `backup/world` folder, matching the managed-backup folder shortcut, when the browser
-  is connected through localhost. These folder icons are hidden for remote browser
-  sessions.
+  is connected through localhost or the trusted desktop executable session. These folder
+  icons are hidden for remote browser sessions.
 - Backup now first invokes REST Save when REST is available. If flushing fails, Palsitter
   warns that disk state may be older and requires `Create anyway` before archiving; it
   never silently reports the archive as fully flushed.
